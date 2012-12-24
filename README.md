@@ -11,7 +11,8 @@ Flight Stabilizer Firmware for RX3S (V1, V2 later) and Arduino-based microcontro
 ##SETUP TO BUILD RX3S FIRMWARE (Optional, can use precompiled hex file)
 1. install arduino v1.0x (http://arduino.cc/en/Main/Software)
 2. download i2cdevlib (http://www.i2cdevlib.com/usage)
-3. place i2cdev directories in "C:\users\<user>\My Documents\Arduino\Libraries\"
+3. place i2cdev directories in "C:\users\\\<user>\My Documents\Arduino\Libraries\"
+
 ```
 for example:
 C:\users\<user>\My Documents\Arduino\Libraries\_Stub
@@ -23,7 +24,7 @@ C:\users\<user>\My Documents\Arduino\Libraries\ITG3200
 5. load FlightStab.ino
 6. uncomment "#define RX3S_V1" for RX3S V1 and check all other devices are commented out.
 7. verify/compile the program.
-8. locate the generated hex file at "C:\users\<user>\AppData\Temp\build<numbers>.tmp\FlightStab.cpp.hex"
+8. locate the generated hex file at "C:\users\\\<user>\AppData\Temp\build\<numbers>.tmp\FlightStab.cpp.hex"
 9. verify the timestamp of FlightStab.cpp.hex matches current time.
  
 ##SETUP TO FLASH FIRMWARE (using eXtreme Burner - AVR as the USBASP programmer)
