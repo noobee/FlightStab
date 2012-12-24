@@ -58,6 +58,7 @@ C:\users\<user>\My Documents\Arduino\Libraries\ITG3200
 5. select "Read All". the program should recognize the chip and proceed to read the flash, eeprom and fuse/lock bits
 6. the flash and eeprom will be read back as 0xff (since the lock bits LB1/2 are set). that is correct.
 7. the fuse/lock bits should read:
+
     lo=0xf7
     hi=0xdf
     ext=0xf9
