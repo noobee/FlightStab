@@ -79,7 +79,7 @@ FROM THIS POINT ONWARDS, YOU WILL ERASE THE CHIP AND REFLASH WITH NEW FIRMWARE. 
 
 USING THE RX3S V1
 =================
-1. connect RX AIL/ELE/RUD to AIL/ELE/RUD (standard). connect RX AUX to AIL-L (used to be output, is now input).
+1. connect RX AIL/ELE/RUD to AIL/ELE/RUD (standard). connect RX AUX to AIL-R (used to be output, is now input).
 2. set RUD switch to "rev" (to the left) to enable DELTA WING mode. In DELTA WING mode, the AIL and ELE output connect to the wing servos, the RUD output is unchanged from NORMAL mode.
 3. set ELE switch to "rev" (to the left) to enable VTAIL mode. In VTAIL mode, the ELE and RUD output connect to the vtail servos, the AIL output is unchanged from NORMAL mode.
 
