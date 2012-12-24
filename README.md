@@ -1,9 +1,5 @@
 #FlightStab
-
-
 Flight Stabilizer Firmware for RX3S (V1, V2 later) and Arduino-based microcontrollers.
-
-
 
 ##DEVICE SUPPORT
 * NANO_MPU6050 (my development platform: Arduino Nano 328p 5V 16Mhz and MPU6050 sensor)
@@ -89,3 +85,18 @@ FROM THIS POINT ONWARDS, YOU WILL ERASE THE CHIP AND REFLASH WITH NEW FIRMWARE. 
    * center position = max gain
    * extreme position = zero gain
    * in between = linear between max and zero.
+
+##OTHER NOTES
+* the FlightStabGUI is still incomplete and is likely to be supported by ATMega328-based devices (instead of the ATMega168-based ones) in the future.
+* RX3S V2 support NOT DONE YET, but will be next.
+
+##FIGHTSTAB FEATURES
+* AUX master gain. RX aux channel controls the master gain linearly (1100us-1900us PWM)
+* VRs controls both servo gain and direction. pot position at 12 oclock = zero gain, 7 oclock / 5 oclock = max gain in opposite directions.
+* stick proportional master gain. channel gain reduces as stick position goes away from center position, which prevents the stabilizer from overcorrecting or "fighting" the control stick during manoeuvres.
+* support DELTA_WING and VTAIL modes.
+* oscillation detection (NOT DONE YET). detects oscillation with no stick input and reduces channel gain if needed.
+* stick controlled rotation "fly by wire" (NOT DONE YET). stick controls the stabilizer PID input so it will try to rotate at the commanded rate (instead of simple stabilization, which tries to correct any detected rate of rotation to zero). 
+* looking for other suggestions, please send message.
+
+
