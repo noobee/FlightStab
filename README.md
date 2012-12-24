@@ -1,6 +1,8 @@
 #FlightStab
 Flight Stabilizer Firmware for RX3S (V1, V2 later) and Arduino-based microcontrollers.
 
+###*USE AT YOUR OWN RISK  USE AT YOUR OWN RISK  USE AT YOUR OWN RISK  USE AT YOUR OWN RISK  USE AT YOUR OWN RISK  USE AT YOUR OWN RISK  USE AT YOUR OWN RISK*
+
 ##DEVICE SUPPORT
 * NANO_MPU6050 (my development platform: Arduino Nano 328p 5V 16Mhz and MPU6050 sensor)
 * RX3S V1 (http://www.hobbyking.com/hobbyking/store/uh_viewitem.asp?idproduct=25448)
