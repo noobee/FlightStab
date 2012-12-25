@@ -24,14 +24,14 @@ C:\users\<user>\My Documents\Arduino\Libraries\ITG3200
 5. load FlightStab.ino
 6. uncomment `#define RX3S_V1` for RX3S V1 and check all other devices are commented out.
 7. verify/compile the program.
-8. locate the generated hex file at `C:\users\\\<user>\AppData\Temp\build\<numbers>.tmp\FlightStab.cpp.hex`
+8. locate the generated hex file at `C:\users\<user>\AppData\Temp\build<numbers>.tmp\FlightStab.cpp.hex`. sort the directory by modified-date to help find the most recent `build<numbers>.tmp` entry.
 9. verify the timestamp of `FlightStab.cpp.hex` matches current time.
  
 ##SETUP TO FLASH FIRMWARE (using eXtreme Burner - AVR as the USBASP programmer)
 1. install eXtreme Burner - AVR (http://extremeelectronics.co.in/category/software/)
 2. edit the properties of `C:\Program Files\eXtreme Burner - AVR\Data` to allow the user full control over the directory. otherwise, the contents are read-only.
-3. edit the file `C:\Program Files\eXtreme Burner - AVR\Data\chips.xml` to add support for the new ATMega168PA chip type.
-4. add the following XML section just after the ATMega168 section
+3. edit the file `C:\Program Files\eXtreme Burner - AVR\Data\chips.xml` to add support for the new **ATmega168PA** chip type.
+4. add the following XML section just after the ATmega168 section
 
 ```xml
 	<CHIP>
@@ -53,7 +53,7 @@ C:\users\<user>\My Documents\Arduino\Libraries\ITG3200
 ##FLASHING THE FIRMWARE (using eXtreme Burner - AVR)
 1. use a USBSAP programmer capable of operating at 3.3v 
 2. i think it is possible to use a 5V programmer, but you have to disconnect the ISP Vcc line and also self power the RX3S. i have not verified this.
-3. run eXtreme Burner and select Chip type as ATMega168PA
+3. run eXtreme Burner and select Chip type as ATmega168PA
 4. connect the ISP connector to the RX3S
 5. select `"Read All"`. the program should recognize the chip and proceed to read the flash, eeprom and fuse/lock bits
 6. the flash and eeprom will be read back as 0xff (since the lock bits LB1/2 are set). that is correct.
@@ -80,7 +80,7 @@ FROM THIS POINT ONWARDS, YOU WILL ERASE THE CHIP AND REFLASH WITH NEW FIRMWARE. 
 
 ##USING THE RX3S V1
 1. connect RX AIL/ELE/RUD to AIL/ELE/RUD (standard). connect RX AUX to AIL-R (used to be output, is now input).
-2. set RUD switch to "rev" (to the left) to enable DELTA WING mode. In DELTA WING mode, the AIL and ELE output connect to the wing servos, the RUD output is unchanged from NORMAL mode.
+2. set RUD switch to "rev" (to the left) to enable DELTA wing mode. In DELTA wing mode, the AIL and ELE output connect to the wing servos, the RUD output is unchanged from NORMAL mode.
 3. set ELE switch to "rev" (to the left) to enable VTAIL mode. In VTAIL mode, the ELE and RUD output connect to the vtail servos, the AIL output is unchanged from NORMAL mode.
 4. the VRs control the individual AIL/ELE/RUD gain (linearly) AND direction of correction.
    * 12 o'clock = zero gain
@@ -93,14 +93,14 @@ FROM THIS POINT ONWARDS, YOU WILL ERASE THE CHIP AND REFLASH WITH NEW FIRMWARE. 
    * in between = linear between max and zero.
 
 ##OTHER NOTES
-* the FlightStabGUI is still incomplete and is likely to be supported by ATMega328-based devices (instead of the ATMega168-based ones) in the future.
+* the FlightStabGUI is still incomplete and is likely to be supported by ATmega328-based devices (instead of the ATmega168-based ones) in the future.
 * RX3S V2 support NOT DONE YET, but will be next.
 
 ##FIGHTSTAB FEATURES
 * AUX master gain. RX aux channel controls the master gain linearly (1100us-1900us PWM)
 * VRs controls both servo gain and direction. pot position at 12 oclock = zero gain, 7 oclock / 5 oclock = max gain in opposite directions.
 * stick proportional master gain. channel gain reduces as stick position goes away from center position, which prevents the stabilizer from overcorrecting or "fighting" the control stick during manoeuvres.
-* support DELTA_WING and VTAIL modes.
+* support DELTA wing and VTAIL modes.
 * oscillation detection (NOT DONE YET). detects oscillation with no stick input and reduces channel gain if needed.
 * stick controlled rotation "fly by wire" (NOT DONE YET). stick controls the stabilizer PID input so it will try to rotate at the commanded rate (instead of simple stabilization, which tries to correct any detected rate of rotation to zero). 
 * looking for other suggestions, please send message.
