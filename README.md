@@ -21,7 +21,7 @@ C:\users\<user>\My Documents\Arduino\Libraries\ITG3200
 ...
 ```
 4. run Arduino.exe and select Board as `Arduino Pro or Pro Mini (5V, 16MHz) w/ ATmega 168`
-5. load FlightStab.ino
+5. load `FlightStab.ino`
 6. uncomment `#define RX3S_V1` for RX3S V1 and check all other devices are commented out.
 7. verify/compile the program.
 8. locate the generated hex file at `C:\users\<user>\AppData\Temp\build<numbers>.tmp\FlightStab.cpp.hex`. sort the directory by modified-date to help find the most recent `build<numbers>.tmp` entry.
