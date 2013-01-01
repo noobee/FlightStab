@@ -407,38 +407,41 @@ int8_t last_ch;
 ISR(TIMER0_COMPA_vect)
 {
   static long frame_start;
-  static int8_t state = 0;
-  static int8_t ch;
-  static int8_t prev_ch = -1;
+  static int8_t ch_fall = -1;
+  static int8_t ch_rise = 0;
+  static int16_t ch_wait;
   static uint8_t wait;
+  static int8_t ch = ch_rise;
   
-  if (state & 1 == 0) {
-    if (state == 0) {
+  if (ch_fall >= 0) {
+    digitalWrite(pwm_out_pin[ch_fall], LOW);
+    ch_fall = -1;
+  }
+  if (ch_rise >= 0) {
+    digitalWrite(pwm_out_pin[ch_rise], HIGH);
+    if (ch_rise == 0)
       frame_start = micros();
-      ch = 0;
-    }
-    if (prev_ch >= 0)
-      digitalWrite(pwm_out_pin[prev_ch], LOW);
-    if (ch >= 0) {
-      digitalWrite(pwm_out_pin[ch], HIGH);
-      wait = (*pwm_out_var[ch]+4)/2/4;
-    } else { 
-      wait = 250; // 1000us duration
-    }
-  } else {   
-    prev_ch = ch;
-    if (ch >= 0 && pwm_out_var[++ch] == NULL) {
+    ch_wait = (*pwm_out_var[ch_rise] + 2) >> 2;
+    ch_rise = -1;
+  }
+  
+  if (ch_wait > 250) {
+    wait = 250; // 250 == 1000us
+  } else {
+    wait = ch_wait;
+    ch_fall = ch;
+    if (pwm_out_var[++ch] == NULL) {
       ch = -1;
+      ch_wait = 32767;
     }
   }
+  ch_wait -= wait;
 
-  if (prev_ch < 0 && micros() - frame_start > servo_frame_period) {
-    state = 0; 
-    return;
+  if (ch < 0 && micros() - frame_start > servo_frame_period) {
+    ch = ch_rise = 0;
   }
-
+  
   OCR0A += wait;
-  state++;
 }
 
 void init_digital_out()
@@ -698,6 +701,24 @@ void calibrate()
   ailr_in_mid = tot[3]/count;
 
   set_led(LED_OFF);
+}
+
+
+/***************************************************************************************************************
+ * STICK CONFIGURATION
+ ***************************************************************************************************************/
+
+void stick_config()
+{
+    int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
+
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      ail_in2 = ail_in;
+      ailr_in2 = ailr_in;
+      ele_in2 = ele_in;
+      rud_in2 = rud_in;
+      aux_in2 = aux_in;
+    }
 }
 
 
@@ -992,24 +1013,19 @@ void setup()
   // init digital in for dip switches and read config settings
   init_digital_in_sw(); // sw
   read_switches();
-  switch((ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)) {
-  case 0:
-    set_led_msg(0, 1, LED_LONG);
-    break; 
-  case 1:
+  int8_t mode = (ele_sw ? 2 : 0) | (rud_sw ? 1 : 0);
+  switch(mode) {
+  case 1: // ele norm, rud rev
     mix_mode = MIX_DELTA;
-    set_led_msg(0, 2, LED_LONG);
     break; 
-  case 2:
+  case 2: // ele rev, rud norm
     mix_mode = MIX_VTAIL;
-    set_led_msg(0, 3, LED_LONG);
     break; 
-  case 3:
-    // dual ailerons (flapperon)
+  case 3: // ele rev, rud rev
     ail_mode = AIL_DUAL;
-    set_led_msg(0, 4, LED_LONG);
     break; 
   }
+  set_led_msg(0, mode + 1, LED_LONG);
 
   // device-specific pin changes based on config
 
@@ -1152,6 +1168,7 @@ void loop()
     master_gain = constrain(aux_in2 - 1100, 0, MASTER_GAIN_MAX); 
     
     for (i=0; i<3; i++) {
+      // vr_gain/128, stick_gain/256, master_gain/512
       output[i] = ((((int32_t)output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
     }
 
