@@ -8,7 +8,8 @@
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 //#define NANO_MPU6050
-#define RX3S_V1
+//#define RX3S_V1
+#define RX3S_V2
 
 /* NANO_MPU6050 / RX3S_V1 *********************************************************************************/
 #if defined(NANO_MPU6050) || defined(RX3S_V1)
@@ -20,16 +21,16 @@
  PB3 11 (MOSI) (PWM)      PC3 A3 PAD            PD3 3 RUD_SW (PWM)
  PB4 12 (MISO)            PC4 A4 (SDA)          PD4 4 AILL_OUT
  PB5 13 LED (SCK)         PC5 A5 (SCL)          PD5 5 ELE_OUT (PWM)
- PB6 14 (XTAL1)           PC6 A6 PAD (RESET)    PD6 6 RUD_OUT (PWM)
- PB7 15 (XTAL2)           PC7 A7 PAD            PD7 7 AILR_OUT/
+ PB6 14 (XTAL1)           PC6 (RESET) PAD       PD6 6 RUD_OUT (PWM)
+ PB7 15 (XTAL2)                                 PD7 7 AILR_OUT
  
- SINGLE_AIL mode (DEFAULT SETTING)
+ AIL_SINGLE mode (DEFAULT SETTING)
  PD7 7 AUX_IN instead of AILR_OUT
  
- DUAL_AIL mode (when ail_mode == AIL_DUAL)
+ AIL_DUAL mode
  PB3 11 AUX_IN instead of MOSI
  PB4 12 AILR_IN instead of MISO
- PD7 7 AILR_OUT instead of AUX_IN
+ PD7 7 AILR_OUT instead of AUX_IN (restore orginal)
 */
 
 // <VR>
@@ -44,6 +45,7 @@
 // portd_pwm_in[7] = null (remove aux_in)
 
 // <SWITCH>
+#define PORTB_DIN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define PORTD_DIN {NULL, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, NULL, NULL}
@@ -53,13 +55,10 @@
 // pwm_out_pin[3] = AILR_OUT_PIN
 
 // <SERVO>
-#define AIL_OUT_PIN 4 // port D
+#define AIL_OUT_PIN 4
 #define ELE_OUT_PIN 5
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
-
-// <LED>
-#define LED_PIN 13
 
 #if defined(NANO_MPU6050)
 #define USE_MPU6050
@@ -76,6 +75,73 @@
 #endif 
 /* NANO_MPU6050 / RX3S_V1 *********************************************************************************/
 
+
+
+/* RX3S_V2 ************************************************************************************************/
+#if defined(RX3S_V2)
+/*
+ OrangeRx Stabilizer RX3S V2
+ PB0  8 AIL_IN            PC0 A0 DELTA_SW       PD0 0 AUX_SW (RXD)
+ PB1  9 ELE_IN (PWM)      PC1 A1 AIL_GAIN       PD1 1 AIL_SW (TXD)
+ PB2 10 RUD_IN (PWM)      PC2 A2 ELE_GAIN       PD2 2 ELE_SW
+ PB3 11 AUX_IN (MOSI/PWM) PC3 A3 RUD_GAIN       PD3 3 RUD_SW (PWM)
+ PB4 12 VTAIL_SW (MISO)   PC4 A4 (SDA)          PD4 4 AILL_OUT
+ PB5 13 LED (SCK)         PC5 A5 (SCL)          PD5 5 ELE_OUT (PWM)
+ PB6 14 (XTAL1)           PC6 (RESET) PAD       PD6 6 RUD_OUT (PWM)
+ PB7 15 (XTAL2)                                 PD7 7 AILR_OUT
+ 
+ SINGLE_AIL mode (DEFAULT SETTING)
+ (no change)
+ 
+ AIL_DUAL mode A
+ PB3 11 AILR_IN instead of AUX_IN (no remote gain)
+
+ AIL_DUAL mode B
+ PB4 12 AILR_IN instead of VTAIL_SW
+
+*/
+
+// <VR>
+#define PORTC_AIN {&delta_sw_vr, &ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL, NULL}
+
+// <RX> (must in PORT B/D due to ISR)
+#define PORTB_PWM_IN {&ail_in, &ele_in, &rud_in, NULL, NULL, NULL, NULL, NULL}
+#define PORTD_PWM_IN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, &aux_in}
+// for dual ailerons:
+// portb_pwm_in[3] = aux_in
+// portb_pwm_in[4] = ailr_in
+// portd_pwm_in[7] = null (remove aux_in)
+
+// <SWITCH>
+#define PORTB_DIN {NULL, NULL, NULL, NULL, &vtail_sw, NULL, NULL, NULL}
+#define PORTD_DIN {&aux_sw, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
+
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, -1, -1}
+// for dual ailerons:
+// pwm_out_var[3] = &ailr_out
+// pwm_out_pin[3] = AILR_OUT_PIN
+
+// <SERVO>
+#define AIL_OUT_PIN 4
+#define ELE_OUT_PIN 5
+#define RUD_OUT_PIN 6
+#define AILR_OUT_PIN 7 // dual aileron mode only
+
+#define USE_ITG3200
+#define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
+//#define USE_SERIAL
+
+volatile uint8_t delta_sw_vr = 128; // RX3S V2
+int8_t vtail_sw = 0;
+int8_t delta_sw = 0;
+int8_t aux_sw = 0;
+
+/* RX3S_V2 ************************************************************************************************/
+#endif
+
+
+
 #if defined(USE_MPU6050)
   #include "Wire.h"
   #include "I2Cdev.h"
@@ -89,6 +155,8 @@
 #endif
 
 //#define EEPROM_CFG_VER 1
+
+#define LED_PIN 13 // standard on all devices (SCK)
 
 // LED set
 #define LED_ON 1
@@ -251,10 +319,19 @@ void init_analog_in()
  * DIGITAL IN (DIP SW)
  ***************************************************************************************************************/
 
+int8_t *din_portb[] = PORTB_DIN;
 int8_t *din_portd[] = PORTD_DIN;
 
 void init_digital_in_sw()
 {
+  // PORTB DIN
+  for (int8_t i=0; i<8; i++) {
+    if (din_portb[i]) {
+      pinMode(8 + i, INPUT);
+      digitalWrite(8 + i, HIGH);
+    }
+  }    
+
   // PORTD DIN
   for (int8_t i=0; i<8; i++) {
     if (din_portd[i]) {
@@ -266,6 +343,11 @@ void init_digital_in_sw()
 
 void read_switches()
 {
+  for (int8_t i=0; i<8; i++) {
+    if (din_portb[i])
+     *din_portb[i] = digitalRead(8 + i);
+  } 
+
   for (int8_t i=0; i<8; i++) {
     if (din_portd[i])
      *din_portd[i] = digitalRead(0 + i);
@@ -411,7 +493,7 @@ ISR(TIMER0_COMPA_vect)
   static int8_t ch_rise = 0;
   static int16_t ch_wait;
   static uint8_t wait;
-  static int8_t ch = ch_rise;
+  static int8_t ch = 0;
   
   if (ch_fall >= 0) {
     digitalWrite(pwm_out_pin[ch_fall], LOW);
@@ -708,10 +790,27 @@ void calibrate()
  * STICK CONFIGURATION
  ***************************************************************************************************************/
 
+int8_t zone(int16_t pwm)
+{
+  return pwm < 1200 ? 0 : pwm < 1800 ? 1 : 2;
+}
+
+
 void stick_config()
 {
-    int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
+  int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
+  int8_t z0, z1, z2=-1;
+  long z0_time;
+  int8_t x, y=0;
+  int8_t param[5];
+  
+  // param[0] 0=
+  // param[1]
+  // param[2]
+  // param[3]
+  // param[4]
 
+  while (1) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       ail_in2 = ail_in;
       ailr_in2 = ailr_in;
@@ -719,6 +818,33 @@ void stick_config()
       rud_in2 = rud_in;
       aux_in2 = aux_in;
     }
+    
+    // stick zone code
+    // 1 2 3
+    // 4 5 6
+    // 7 8 9
+    z0 = zone(ele_in2) * 3 + zone(ail_in2) + 1;
+    if (z0 != z1) {
+      z1 = z0;
+      z0_time = micros();
+    } else {
+      if (micros() - z0_time > 50000) {
+        if (z0 != z2) {
+          // stick moved from z2 -> z0
+          int8_t z2z = z2 * 10 + z1;
+          switch(z2z) {
+            case 52: // zone 5 to zone 2
+              y = y > 0 ? y-1 : y;
+              break;
+            case 58: // zone 5 to zone 8
+              y = y < 4 ? y+1 : y;
+              break;
+          }
+          z2 = z0;
+        }
+      }
+    } 
+  }    
 }
 
 
@@ -933,6 +1059,7 @@ void serial_rx()
 }
 
 #endif
+
 /***************************************************************************************************************
  * DUMP SENSORS
  ***************************************************************************************************************/
@@ -1003,6 +1130,7 @@ void dump_sensors()
 void setup() 
 {
   int8_t i;
+  int8_t mode;
 
 #if defined(USE_SERIAL)
   Serial.begin(115200);
@@ -1013,7 +1141,11 @@ void setup()
   // init digital in for dip switches and read config settings
   init_digital_in_sw(); // sw
   read_switches();
-  int8_t mode = (ele_sw ? 2 : 0) | (rud_sw ? 1 : 0);
+  
+  // device-specific pin changes based on config
+
+#if defined(NANO_MPU6050) || defined(RX3S_V1)
+  mode = (ele_sw ? 2 : 0) | (rud_sw ? 1 : 0);
   switch(mode) {
   case 1: // ele norm, rud rev
     mix_mode = MIX_DELTA;
@@ -1025,12 +1157,8 @@ void setup()
     ail_mode = AIL_DUAL;
     break; 
   }
-  set_led_msg(0, mode + 1, LED_LONG);
 
-  // device-specific pin changes based on config
-
-#if defined(NANO_MPU6050) || defined(RX3S_V1)
-  switch (ail_mode) {
+  if (ail_mode == AIL_DUAL) {
   case AIL_DUAL:
     // PB3 11 AUX_IN instead of MOSI
     // PB4 12 AILR_IN instead of MISO
@@ -1039,9 +1167,33 @@ void setup()
     rx_portb[4] = &ailr_in;
     pwm_out_var[3] = &ailr_out;
     pwm_out_pin[3] = AILR_OUT_PIN;    
-  break;
+    break;
   }
 #endif
+
+#if defined(RX3S_V1)
+
+  if (vtail_sw)
+    mode = MIX_VTAIL;
+  else if (delta_sw)
+    mode = MIX_DELTA;
+  else if (aux_sw)
+  
+  if (ail_mode == AIL_DUAL) {
+    if (ail_sw) {
+      // AIL_DUAL mode A
+      // PB3 11 AILR_IN instead of AUX_IN
+      rx_portb[3] = &aux_in;
+    } else {
+      // AIL_DUAL mode B
+      // PB3 12 AILR_IN instead of VTAIL_SW
+      din_portb[4] = NULL;
+      rx_portb[4] = &ailr_in;
+    }
+  }
+#endif
+
+  set_led_msg(0, mode + 1, LED_LONG);
 
   init_analog_in(); // vr
   init_digital_in_rx(); // rx
@@ -1076,6 +1228,7 @@ void setup()
   delay(500);
   calibrate();
   
+  stick_config();
 }
 
 /***************************************************************************************************************
