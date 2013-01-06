@@ -16,14 +16,14 @@
 #if defined(RX3S_V1)
 /*
  OrangeRx Stabilizer RX3S V1
- PB0  8 AIL_IN            PC0 A0 AIL_GAIN       PD0 0 (RXD)
- PB1  9 ELE_IN (PWM)      PC1 A1 ELE_GAIN       PD1 1 AIL_SW (TXD)
- PB2 10 RUD_IN (PWM)      PC2 A2 RUD_GAIN       PD2 2 ELE_SW
- PB3 11 (MOSI) (PWM)      PC3 A3 PAD            PD3 3 RUD_SW (PWM)
- PB4 12 (MISO)            PC4 A4 (SDA)          PD4 4 AILL_OUT
- PB5 13 LED (SCK)         PC5 A5 (SCL)          PD5 5 ELE_OUT (PWM)
- PB6 14 (XTAL1)           PC6 (RESET)           PD6 6 RUD_OUT (PWM)
- PB7 15 (XTAL2)                                 PD7 7 AILR_OUT
+ PB0  8 AIL_IN            PC0 14/A0 AIL_GAIN       PD0 0 (RXD)
+ PB1  9 ELE_IN (PWM)      PC1 15/A1 ELE_GAIN       PD1 1 AIL_SW (TXD)
+ PB2 10 RUD_IN (PWM)      PC2 16/A2 RUD_GAIN       PD2 2 ELE_SW
+ PB3 11 (MOSI) (PWM)      PC3 17/A3 PAD            PD3 3 RUD_SW (PWM)
+ PB4 12 (MISO)            PC4 18/A4 (SDA)          PD4 4 AILL_OUT
+ PB5 13 LED (SCK)         PC5 19/A5 (SCL)          PD5 5 ELE_OUT (PWM)
+ PB6 14 (XTAL1)           PC6 (RESET)              PD6 6 RUD_OUT (PWM)
+ PB7 15 (XTAL2)                                    PD7 7 AILR_OUT
  
  AIL_SINGLE mode (DEFAULT SETTING)
  PD7 7 AUX_IN instead of AILR_OUT
@@ -31,7 +31,6 @@
  AIL_DUAL mode
  PB3 11 AUX_IN instead of MOSI
  PB4 12 AILR_IN instead of MISO
- PD7 7 AILR_OUT instead of AUX_IN (restore orginal)
 */
 
 // <VR>
@@ -39,21 +38,15 @@
 
 // <RX> (must in PORT B/D due to ISR)
 #define PORTB_PWM_IN {&ail_in, &ele_in, &rud_in, NULL, NULL, NULL, NULL, NULL}
-#define PORTD_PWM_IN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, &aux_in}
-// for dual ailerons:
-// portb_pwm_in[3] = aux_in
-// portb_pwm_in[4] = ailr_in
-// portd_pwm_in[7] = null (remove aux_in)
+#define PORTD_PWM_IN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SWITCH>
 #define PORTB_DIN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define PORTC_DIN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define PORTD_DIN {NULL, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, -1, -1}
-// for dual ailerons:
-// pwm_out_var[3] = &ailr_out
-// pwm_out_pin[3] = AILR_OUT_PIN
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1}
 
 // <SERVO>
 #define AIL_OUT_PIN 4
@@ -71,14 +64,14 @@
 #if defined(RX3S_V2)
 /*
  OrangeRx Stabilizer RX3S V2
- PB0  8 AIL_IN            PC0 A0 DELTA_SW       PD0 0 AUX_SW (RXD)
- PB1  9 ELE_IN (PWM)      PC1 A1 AIL_GAIN       PD1 1 AIL_SW (TXD)
- PB2 10 RUD_IN (PWM)      PC2 A2 ELE_GAIN       PD2 2 ELE_SW
- PB3 11 AUX_IN (MOSI/PWM) PC3 A3 RUD_GAIN       PD3 3 RUD_SW (PWM)
- PB4 12 VTAIL_SW (MISO)   PC4 A4 (SDA)          PD4 4 AILL_OUT
- PB5 13 LED (SCK)         PC5 A5 (SCL)          PD5 5 ELE_OUT (PWM)
- PB6 14 (XTAL1)           PC6 (RESET)           PD6 6 RUD_OUT (PWM)
- PB7 15 (XTAL2)                                 PD7 7 AILR_OUT
+ PB0  8 AIL_IN            PC0 14/A0 DELTA_SW       PD0 0 AUX_SW (RXD)
+ PB1  9 ELE_IN (PWM)      PC1 15/A1 AIL_GAIN       PD1 1 AIL_SW (TXD)
+ PB2 10 RUD_IN (PWM)      PC2 16/A2 ELE_GAIN       PD2 2 ELE_SW
+ PB3 11 AUX_IN (MOSI/PWM) PC3 17/A3 RUD_GAIN       PD3 3 RUD_SW (PWM)
+ PB4 12 VTAIL_SW (MISO)   PC4 18/A4 (SDA)          PD4 4 AILL_OUT
+ PB5 13 LED (SCK)         PC5 19/A5 (SCL)          PD5 5 ELE_OUT (PWM)
+ PB6 14 (XTAL1)           PC6 (RESET)              PD6 6 RUD_OUT (PWM)
+ PB7 15 (XTAL2)                                    PD7 7 AILR_OUT
  
  AIL_SINGLE mode (DEFAULT SETTING)
  (no change)
@@ -87,12 +80,12 @@
  PB3 11 AILR_IN instead of AUX_IN (no remote gain)
 
  AIL_DUAL mode B
- PB4 12 AILR_IN instead of VTAIL_SW
+ PD2 2 AILR_IN instead of ELE_SW
 
 */
 
 // <VR>
-#define PORTC_AIN {&delta_sw_vr, &ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL, NULL}
+#define PORTC_AIN {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL, NULL}
 
 // <RX> (must in PORT B/D due to ISR)
 #define PORTB_PWM_IN {&ail_in, &ele_in, &rud_in, NULL, NULL, NULL, NULL, NULL}
@@ -104,6 +97,7 @@
 
 // <SWITCH>
 #define PORTB_DIN {NULL, NULL, NULL, NULL, &vtail_sw, NULL, NULL, NULL}
+#define PORTC_DIN {&delta_sw, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define PORTD_DIN {&aux_sw, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, NULL, NULL}
@@ -163,7 +157,6 @@
 volatile uint8_t ail_vr = 128;
 volatile uint8_t ele_vr = 128;
 volatile uint8_t rud_vr = 128;
-volatile uint8_t delta_sw_vr = 128; // RX3S V2
 
 // rx
 #define RX_WIDTH_MIN 900
@@ -315,25 +308,24 @@ void init_analog_in()
  ***************************************************************************************************************/
 
 int8_t *din_portb[] = PORTB_DIN;
+int8_t *din_portc[] = PORTC_DIN;
 int8_t *din_portd[] = PORTD_DIN;
+
+void init_digital_in_port_list(int8_t **pport_list, int8_t pin_base)
+{
+  for (int8_t i=0; i<8; i++) {
+    if (pport_list[i]) {
+      pinMode(pin_base + i, INPUT);
+      digitalWrite(pin_base + i, HIGH);
+    }
+  }    
+}
 
 void init_digital_in_sw()
 {
-  // PORTB DIN
-  for (int8_t i=0; i<8; i++) {
-    if (din_portb[i]) {
-      pinMode(8 + i, INPUT);
-      digitalWrite(8 + i, HIGH);
-    }
-  }    
-
-  // PORTD DIN
-  for (int8_t i=0; i<8; i++) {
-    if (din_portd[i]) {
-      pinMode(0 + i, INPUT);
-      digitalWrite(0 + i, HIGH);
-    }
-  }    
+  init_digital_in_port_list(din_portb, 8);
+  init_digital_in_port_list(din_portc, 14);
+  init_digital_in_port_list(din_portd, 0);
 }
 
 void read_switches()
@@ -341,9 +333,8 @@ void read_switches()
   for (int8_t i=0; i<8; i++) {
     if (din_portb[i])
      *din_portb[i] = digitalRead(8 + i);
-  } 
-
-  for (int8_t i=0; i<8; i++) {
+    if (din_portc[i])
+     *din_portc[i] = digitalRead(14 + i);
     if (din_portd[i])
      *din_portd[i] = digitalRead(0 + i);
   } 
@@ -1078,19 +1069,17 @@ void dump_sensors()
     Serial.print(rud_in2); Serial.print('\t');
     Serial.print(aux_in2); Serial.print('\t');
   
-    uint8_t ail_vr2, ele_vr2, rud_vr2, delta_sw_vr2;
+    uint8_t ail_vr2, ele_vr2, rud_vr2;
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       ail_vr2 = ail_vr;
       ele_vr2 = ele_vr;
       rud_vr2 = rud_vr;
-      delta_sw_vr2 = delta_sw_vr;
     }
     start_next_adc(0);
     Serial.print("VR "); 
     Serial.print(ail_vr2); Serial.print('\t');
     Serial.print(ele_vr2); Serial.print('\t');
     Serial.print(rud_vr2); Serial.print('\t');
-    Serial.print(delta_sw_vr2); Serial.print('\t');
     
     int8_t ail_sw2, ele_sw2, rud_sw2, vtail_sw2, delta_sw2, aux_sw2;
     read_switches();
@@ -1142,7 +1131,7 @@ void setup()
 
   pinMode(LED_PIN, OUTPUT);
 
-  // init digital in for dip switches and read config settings
+  // init digital in for dip switches to read config settings
   init_digital_in_sw(); // sw
   read_switches();
   
@@ -1163,14 +1152,17 @@ void setup()
     break; 
   }
 
+  if (ail_mode == AIL_SINGLE) {
+    pwm_out_var[3] = NULL; // disable ailr_out
+    pwm_out_pin[3] = -1; //
+    rx_portd[7] = &aux_in; // enableaux_in
+  }
+
   if (ail_mode == AIL_DUAL) {
     // PB3 11 AUX_IN instead of MOSI
     // PB4 12 AILR_IN instead of MISO
-    // PD7 7 AILR_OUT instead of AUX_IN
-    rx_portb[3] = &aux_in;
-    rx_portb[4] = &ailr_in;
-    pwm_out_var[3] = &ailr_out;
-    pwm_out_pin[3] = AILR_OUT_PIN;    
+    rx_portb[3] = &aux_in; // enable new aux_in
+    rx_portb[4] = &ailr_in; // enable ailr_in
   }
 #endif
 
@@ -1194,9 +1186,9 @@ void setup()
       rx_portb[3] = &aux_in;
     } else {
       // AIL_DUAL mode B
-      // PB3 12 AILR_IN instead of VTAIL_SW
-      din_portb[4] = NULL;
-      rx_portb[4] = &ailr_in;
+      // PD2 2 AILR_IN instead of ELE_SW
+      din_portd[2] = NULL; // disable ele_sw
+      rx_portd[2] = &ailr_in; // enable ailr_in
     }
   }
 #endif
