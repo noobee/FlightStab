@@ -170,10 +170,10 @@ volatile int16_t ail_in = RX_WIDTH_MID;
 volatile int16_t ailr_in = RX_WIDTH_MID;
 volatile int16_t ele_in = RX_WIDTH_MID;
 volatile int16_t rud_in = RX_WIDTH_MID;
-volatile int16_t aux_in = RX_WIDTH_HIGH;
+volatile int16_t aux_in = RX_WIDTH_HIGH; // assume max gain if no aux_in
 
 int16_t ail_in_mid = RX_WIDTH_MID; // calibration sets stick-neutral-position offsets
-int16_t ailr_in_mid = RX_WIDTH_MID;
+int16_t ailr_in_mid = RX_WIDTH_MID; //
 int16_t ele_in_mid = RX_WIDTH_MID; //
 int16_t rud_in_mid = RX_WIDTH_MID; //
 
@@ -746,6 +746,9 @@ void calibrate()
         sample[3] = rud_in;
       }
 
+      if (ail_mode == AIL_SINGLE)
+        ailr_in = ail_in;
+
       calibrate_update_stat(low, high, tot, sample, 4);  
       if (count++ % 50 == 0)
         set_led(LED_INVERT);
@@ -1200,7 +1203,7 @@ void setup()
     if (ail_sw) {
       // AIL_DUAL mode A
       // PB3 11 AILR_IN instead of AUX_IN
-      rx_portb[3] = &aux_in;
+      rx_portb[3] = &ailr_in; // replace aux_in
     } else {
       // AIL_DUAL mode B
       // PD2 2 AILR_IN instead of ELE_SW
@@ -1307,6 +1310,9 @@ void loop()
       aux_in2 = aux_in;
     }
 
+    if (ail_mode == AIL_SINGLE)
+      ailr_in = ail_in;
+
     // commanded rate of rotation (could be from ail/ele/rud _in, note direction/sign)
     setpoint[0] = 0;
     setpoint[1] = 0;
@@ -1325,12 +1331,8 @@ void loop()
     compute_pid();
 
     // stick_gain[] [1100, <ail*|ele|rud>_in_mid, 1900] => [0%, 100%, 0%] = [0, STICK_GAIN_MAX, 0]
-    if (ail_mode == AIL_SINGLE) {
-      stick_gain[0] = STICK_GAIN_MAX - constrain(abs(ail_in2 - ail_in_mid), 0, STICK_GAIN_MAX);
-    } else {
-      int16_t stick_pos = abs(((ail_in2 - ail_in_mid) + (ailr_in2 - ailr_in_mid)) >> 1);
-      stick_gain[0] = STICK_GAIN_MAX - constrain(stick_pos, 0, STICK_GAIN_MAX);
-    }     
+    int16_t ail_stick_pos = abs(((ail_in2 - ail_in_mid) + (ailr_in2 - ailr_in_mid)) >> 1);
+    stick_gain[0] = STICK_GAIN_MAX - constrain(ail_stick_pos, 0, STICK_GAIN_MAX);
     stick_gain[1] = STICK_GAIN_MAX - constrain(abs(ele_in2 - ele_in_mid), 0, STICK_GAIN_MAX);
     stick_gain[2] = STICK_GAIN_MAX - constrain(abs(rud_in2 - rud_in_mid), 0, STICK_GAIN_MAX);
 
@@ -1373,10 +1375,6 @@ void loop()
     ailr_out2 = constrain(ailr_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
     ele_out2 = constrain(ele_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
     rud_out2 = constrain(rud_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-
-    if (ail_mode == AIL_SINGLE) {
-      ailr_out2 = ail_out2;
-    }
 
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       ail_out = ail_out2;
