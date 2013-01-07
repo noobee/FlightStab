@@ -477,9 +477,9 @@ ISR(TIMER0_COMPA_vect)
   static long frame_start;
   static int8_t ch_fall = -1;
   static int8_t ch_rise = 0;
+  static int8_t ch = ch_rise;
   static int16_t ch_wait;
-  static uint8_t wait;
-  static int8_t ch = 0;
+  uint8_t wait;
   
   if (ch_fall >= 0) {
     digitalWrite(pwm_out_pin[ch_fall], LOW);
@@ -492,13 +492,15 @@ ISR(TIMER0_COMPA_vect)
     ch_wait = (*pwm_out_var[ch_rise] + 2) >> 2;
     ch_rise = -1;
   }
-  
+
   if (ch_wait > 250) {
     wait = 250; // 250 == 1000us
   } else {
     wait = ch_wait;
     ch_fall = ch;
-    if (pwm_out_var[++ch] == NULL) {
+    if (pwm_out_var[++ch]) {
+      ch_rise = ch;
+    } else {
       ch = -1;
       ch_wait = 32767;
     }
@@ -516,7 +518,7 @@ void init_digital_out()
 {
   int8_t i = 0;
   while (pwm_out_pin[i] >= 0) {
-    pinMode(i, OUTPUT);
+    pinMode(pwm_out_pin[i], OUTPUT);
     i++;
   }
  
@@ -675,23 +677,23 @@ void calibrate_init_stat(int16_t *plow, int16_t *phigh, int32_t *ptot)
   }
 }
 
-void calibrate_update_stat(int16_t *plow, int16_t *phigh, int32_t *ptot, int16_t *psample) 
+void calibrate_update_stat(int16_t *plow, int16_t *phigh, int32_t *ptot, int16_t *psample, int8_t entries) 
 {
-  for (int8_t i=0; i<4; i++) {
+  for (int8_t i=0; i<entries; i++) {
     plow[i] = min(plow[i], psample[i]);
     phigh[i] = max(phigh[i], psample[i]);
     ptot[i] += psample[i];
   }
 } 
 
-bool calibrate_check_stat(int16_t *plow, int16_t *phigh, int16_t range)
+bool calibrate_check_stat(int16_t *plow, int16_t *phigh, int16_t range, int8_t entries)
 {
   int8_t good = 0;
-  for (int8_t i=0; i<4; i++) {
+  for (int8_t i=0; i<entries; i++) {
     if (phigh[i] - plow[i] < range)
       good++;
   }
-  return (good == 4);
+  return (good == entries);
 }
 
 void calibrate()
@@ -710,8 +712,7 @@ void calibrate()
       sample[0] = gRoll;
       sample[1] = gPitch;
       sample[2] = gYaw;
-      sample[3] = 0;
-      calibrate_update_stat(low, high, tot, sample);  
+      calibrate_update_stat(low, high, tot, sample, 3);  
       if (count++ % 100 == 0)
         set_led(LED_INVERT);
     }
@@ -719,14 +720,14 @@ void calibrate()
 #if defined(USE_SERIAL)
     Serial.println("GY");
     Serial.println(count);
-    for (int8_t i=0; i<4; i++) {  
+    for (int8_t i=0; i<3; i++) {  
       Serial.print(low[i]); Serial.print('\t');
       Serial.print(high[i]); Serial.print('\t');
       Serial.println(tot[i]/count);
     }
 #endif
 
-  } while (!calibrate_check_stat(low, high, 50));
+  } while (!calibrate_check_stat(low, high, 50, 3));
 
   gRoll0 = tot[0]/count;
   gPitch0 = tot[1]/count;
@@ -740,12 +741,12 @@ void calibrate()
 
       ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
         sample[0] = ail_in;
-        sample[1] = ele_in;
-        sample[2] = rud_in;
-        sample[3] = ailr_in;
+        sample[1] = ailr_in;
+        sample[2] = ele_in;
+        sample[3] = rud_in;
       }
 
-      calibrate_update_stat(low, high, tot, sample);  
+      calibrate_update_stat(low, high, tot, sample, 4);  
       if (count++ % 50 == 0)
         set_led(LED_INVERT);
       delayMicroseconds(1000);
@@ -761,12 +762,12 @@ void calibrate()
     }
 #endif
 
-  } while (!calibrate_check_stat(low, high, 20));
+  } while (!calibrate_check_stat(low, high, 20, 4));
 
   ail_in_mid = tot[0]/count;
-  ele_in_mid = tot[1]/count;
-  rud_in_mid = tot[2]/count;
-  ailr_in_mid = tot[3]/count;
+  ailr_in_mid = tot[1]/count;
+  ele_in_mid = tot[2]/count;
+  rud_in_mid = tot[3]/count;
 
   set_led(LED_OFF);
 }
@@ -1053,6 +1054,9 @@ void serial_rx()
 void dump_sensors()
 {
 #if defined(USE_SERIAL)  
+  int16_t servo_out = 1500;
+  int8_t servo_dir = 50;
+
   while (true) {
     int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
@@ -1062,11 +1066,12 @@ void dump_sensors()
       rud_in2 = rud_in;
       aux_in2 = aux_in;
     }  
+
     Serial.print("RX "); 
-    Serial.print(ail_in2); Serial.print('\t');
-    Serial.print(ailr_in2); Serial.print('\t');
-    Serial.print(ele_in2); Serial.print('\t');
-    Serial.print(rud_in2); Serial.print('\t');
+    Serial.print(ail_in2); Serial.print(' ');
+    Serial.print(ailr_in2); Serial.print(' ');
+    Serial.print(ele_in2); Serial.print(' ');
+    Serial.print(rud_in2); Serial.print(' ');
     Serial.print(aux_in2); Serial.print('\t');
   
     uint8_t ail_vr2, ele_vr2, rud_vr2;
@@ -1076,6 +1081,7 @@ void dump_sensors()
       rud_vr2 = rud_vr;
     }
     start_next_adc(0);
+
     Serial.print("VR "); 
     Serial.print(ail_vr2); Serial.print('\t');
     Serial.print(ele_vr2); Serial.print('\t');
@@ -1089,26 +1095,36 @@ void dump_sensors()
     vtail_sw2 = vtail_sw;
     delta_sw2 = delta_sw;
     aux_sw2 = aux_sw;
-  
+
     Serial.print("SW "); 
     Serial.print(ail_sw2); Serial.print(' ');
     Serial.print(ele_sw2); Serial.print(' ');
     Serial.print(rud_sw2); Serial.print(' ');
     Serial.print(vtail_sw2); Serial.print(' ');
     Serial.print(delta_sw2); Serial.print(' ');
-    Serial.print(aux_sw2); Serial.print(' ');
+    Serial.print(aux_sw2); Serial.print('\t');
   
-    int16_t groll, gpitch, gyaw;
     read_imu();
-    groll = gRoll;
-    gpitch = gPitch;
-    gyaw = gYaw;
-  
     Serial.print("GY "); 
-    Serial.print(groll); Serial.print('\t');
-    Serial.print(gpitch); Serial.print('\t');
-    Serial.print(gyaw); Serial.print('\t');
-    
+    Serial.print(gRoll); Serial.print('\t');
+    Serial.print(gPitch); Serial.print('\t');
+    Serial.print(gYaw); Serial.print('\t');
+
+    servo_out += servo_dir;
+    if (servo_out < 1000 || servo_out > 2000) {
+      servo_out = constrain(servo_out, 1000, 2000);
+      servo_dir = -servo_dir;
+    } 
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+      ail_out = ele_out = rud_out = ailr_out = servo_out;      
+    }
+
+    Serial.print("MISC "); 
+    Serial.print(servo_out); Serial.print(' ');
+    Serial.print(mix_mode); Serial.print(' ');
+    Serial.print(ail_mode); Serial.print(' ');
+    Serial.print(freeRam()); Serial.print(' ');
+
     Serial.println();
 
     set_led(LED_INVERT);
@@ -1153,15 +1169,16 @@ void setup()
   }
 
   if (ail_mode == AIL_SINGLE) {
+    // PD7 7 AUX_IN instead of AILR_OUT
     pwm_out_var[3] = NULL; // disable ailr_out
     pwm_out_pin[3] = -1; //
-    rx_portd[7] = &aux_in; // enableaux_in
+    rx_portd[7] = &aux_in; // enable aux_in
   }
 
   if (ail_mode == AIL_DUAL) {
     // PB3 11 AUX_IN instead of MOSI
     // PB4 12 AILR_IN instead of MISO
-    rx_portb[3] = &aux_in; // enable new aux_in
+    rx_portb[3] = &aux_in; // enable aux_in
     rx_portb[4] = &ailr_in; // enable ailr_in
   }
 #endif
@@ -1351,10 +1368,15 @@ void loop()
       break;
     }
 
+    // clamp output
     ail_out2 = constrain(ail_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
     ailr_out2 = constrain(ailr_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
     ele_out2 = constrain(ele_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
     rud_out2 = constrain(rud_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
+
+    if (ail_mode == AIL_SINGLE) {
+      ailr_out2 = ail_out2;
+    }
 
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       ail_out = ail_out2;
