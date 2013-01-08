@@ -88,23 +88,16 @@
 #define PORTC_AIN {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL, NULL}
 
 // <RX> (must in PORT B/D due to ISR)
-#define PORTB_PWM_IN {&ail_in, &ele_in, &rud_in, NULL, NULL, NULL, NULL, NULL}
-#define PORTD_PWM_IN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, &aux_in}
-// for dual ailerons:
-// portb_pwm_in[3] = aux_in
-// portb_pwm_in[4] = ailr_in
-// portd_pwm_in[7] = null (remove aux_in)
+#define PORTB_PWM_IN {&ail_in, &ele_in, &rud_in, &aux_in, NULL, NULL, NULL, NULL}
+#define PORTD_PWM_IN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SWITCH>
 #define PORTB_DIN {NULL, NULL, NULL, NULL, &vtail_sw, NULL, NULL, NULL}
 #define PORTC_DIN {&delta_sw, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define PORTD_DIN {&aux_sw, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, -1, -1}
-// for dual ailerons:
-// pwm_out_var[3] = &ailr_out
-// pwm_out_pin[3] = AILR_OUT_PIN
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1}
 
 // <SERVO>
 #define AIL_OUT_PIN 4
