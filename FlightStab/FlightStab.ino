@@ -7,8 +7,8 @@
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
-#define RX3S_V1
-//#define RX3S_V2
+//#define RX3S_V1
+#define RX3S_V2
 //#define NANO_MPU6050
 //#define USE_SERIAL
 
@@ -37,13 +37,13 @@
 #define PORTC_AIN {&ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL, NULL, NULL}
 
 // <RX> (must in PORT B/D due to ISR)
-#define PORTB_PWM_IN {&ail_in, &ele_in, &rud_in, NULL, NULL, NULL, NULL, NULL}
-#define PORTD_PWM_IN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define RX_PORTB {&ail_in, &ele_in, &rud_in, NULL, NULL, NULL, NULL, NULL}
+#define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SWITCH>
-#define PORTB_DIN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
-#define PORTC_DIN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
-#define PORTD_DIN {NULL, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
+#define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTD {NULL, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL}
 #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1}
@@ -81,20 +81,19 @@
 
  AIL_DUAL mode B
  PD2 2 AILR_IN instead of ELE_SW
-
 */
 
 // <VR>
 #define PORTC_AIN {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL, NULL}
 
 // <RX> (must in PORT B/D due to ISR)
-#define PORTB_PWM_IN {&ail_in, &ele_in, &rud_in, &aux_in, NULL, NULL, NULL, NULL}
-#define PORTD_PWM_IN {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define RX_PORTB {&ail_in, &ele_in, &rud_in, &aux_in, NULL, NULL, NULL, NULL}
+#define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SWITCH>
-#define PORTB_DIN {NULL, NULL, NULL, NULL, &vtail_sw, NULL, NULL, NULL}
-#define PORTC_DIN {&delta_sw, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
-#define PORTD_DIN {&aux_sw, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
+#define DIN_PORTB {NULL, NULL, NULL, NULL, &vtail_sw, NULL, NULL, NULL}
+#define DIN_PORTC {&delta_sw, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTD {&aux_sw, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL}
 #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1}
@@ -131,6 +130,7 @@
 #endif
 
 //#define EEPROM_CFG_VER 1
+//#define CPPM_PIN 8 // must be in PORT B
 
 #define LED_PIN 13 // standard on all devices (SCK)
 
@@ -155,7 +155,6 @@ volatile uint8_t rud_vr = 128;
 #define RX_WIDTH_MID 1500
 #define RX_WIDTH_HIGH 2000
 #define RX_WIDTH_MAX 2100
-//#define CPPM
 
 volatile int16_t ail_in = RX_WIDTH_MID;
 volatile int16_t ailr_in = RX_WIDTH_MID;
@@ -308,9 +307,9 @@ void init_analog_in()
  * DIGITAL IN (DIP SW)
  ***************************************************************************************************************/
 
-int8_t *din_portb[] = PORTB_DIN;
-int8_t *din_portc[] = PORTC_DIN;
-int8_t *din_portd[] = PORTD_DIN;
+int8_t *din_portb[] = DIN_PORTB;
+int8_t *din_portc[] = DIN_PORTC;
+int8_t *din_portd[] = DIN_PORTD;
 
 void init_digital_in_port_list(int8_t **pport_list, int8_t pin_base)
 {
@@ -346,8 +345,8 @@ void read_switches()
  * DIGITAL IN (RX)
  ***************************************************************************************************************/
 
-#if defined(CPPM)
-volatile int16_t *rx_chan[] = {&rud_in, &ele_in, NULL, &ail_in, &aux_in, NULL, NULL, NULL}; // open9x RETA12 
+#if defined(CPPM_PIN)
+volatile int16_t *rx_chan[] = {&rud_in, &ele_in, NULL, &ail_in, &aux_in, &ailr_in, NULL, NULL}; // open9x RETA1a
 
 ISR(PCINT0_vect)
 {
@@ -363,11 +362,11 @@ ISR(PCINT0_vect)
   rise = pinb & ~last_pinb;
   last_pinb = pinb;
 
-  // cppm on arduino pin 8 (PORT B) 
-  if (rise & (1 << (8 - 8))) {
+  // cppm on arduino CPPM_PIN (in PORT B) 
+  if (rise & (1 << (CPPM_PIN - 8))) {
     long width = now - last_time;
     last_time = now;
-    if (width > 5000 || ch > 7)) {
+    if (width > 5000 || ch > 7) {
       ch = 0;
     } else if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
       *rx_chan[ch] = width;
@@ -378,7 +377,7 @@ ISR(PCINT0_vect)
 
 #else
 
-volatile int16_t *rx_portb[] = PORTB_PWM_IN;
+volatile int16_t *rx_portb[] = RX_PORTB;
 
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect)
@@ -409,7 +408,7 @@ ISR(PCINT0_vect)
   }
 }
 
-volatile int16_t *rx_portd[] = PORTD_PWM_IN;
+volatile int16_t *rx_portd[] = RX_PORTD;
 
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
@@ -444,6 +443,13 @@ ISR(PCINT2_vect)
 
 void init_digital_in_rx()
 {
+#if defined(CPPM_PIN)  
+  // CPPM_PIN (in PORT B)
+  PCICR |= (1 << PCIE0);
+  PCMSK0 |= 1 << (CPPM_PIN - 8);
+  pinMode(CPPM_PIN, INPUT);
+  digitalWrite(CPPM_PIN, HIGH);
+#else
   // PORTB RX
   PCICR |= (1 << PCIE0);
   for (int8_t i=0; i<8; i++) {
@@ -453,7 +459,6 @@ void init_digital_in_rx()
       digitalWrite(8 + i, HIGH);
     }
   }
-
   // PORTD RX
   PCICR |= (1 << PCIE2);
   for (int8_t i=0; i<8; i++) {
@@ -463,6 +468,7 @@ void init_digital_in_rx()
       digitalWrite(0 + i, HIGH);
     }
   }
+#endif
 }
 
 /***************************************************************************************************************
