@@ -10,7 +10,7 @@
 #define RX3S_V1
 //#define RX3S_V2
 //#define NANO_MPU6050
-#define USE_SERIAL
+//#define USE_SERIAL
 
 /* RX3S_V1 ************************************************************************************************/
 #if defined(RX3S_V1)
