@@ -9,7 +9,7 @@
 
 #define RX3S_V1
 //#define RX3S_V2
-#define NANO_MPU6050
+//#define NANO_MPU6050
 #define USE_SERIAL
 
 /* RX3S_V1 ************************************************************************************************/
@@ -115,17 +115,15 @@
 #define USE_ITG3200
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
 
-/* RX3S_V2 ************************************************************************************************/
 #endif
+/* RX3S_V2 ************************************************************************************************/
 
 
 #if defined(NANO_MPU6050)
 #undef USE_ITG3200
 #define USE_MPU6050
 #define GYRO_ORIENTATION(x, y, z) {gRoll = -(x); gPitch = (y); gYaw = (z);}
-//#define USE_SERIAL
 #endif
-
 
 #if defined(USE_MPU6050)
   #include "Wire.h"
@@ -218,6 +216,16 @@ enum AIL_MODE ail_mode = AIL_SINGLE;
 
 #define STICK_GAIN_MAX 400
 #define MASTER_GAIN_MAX 800
+
+/***************************************************************************************************************
+ * 
+ ***************************************************************************************************************/
+
+int freeRam() {
+  extern int __heap_start, *__brkval; 
+  int v; 
+  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+}
 
 /***************************************************************************************************************
  * LED
@@ -1058,7 +1066,7 @@ void dump_sensors()
 {
 #if defined(USE_SERIAL)  
   int16_t servo_out = 1500;
-  int8_t servo_dir = 50;
+  int8_t servo_dir = 20;
 
   while (true) {
     int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
@@ -1160,14 +1168,14 @@ void setup()
 
 #if defined(RX3S_V1)
   switch ((ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)) {
-  case 1: // ele norm, rud rev
-    mix_mode = MIX_DELTA;
+  case 0: // ele rev/0, rud rev/0
+    ail_mode = AIL_DUAL;
     break; 
-  case 2: // ele rev, rud norm
+  case 1: // ele rev/0, rud norm/1
     mix_mode = MIX_VTAIL;
     break; 
-  case 3: // ele rev, rud rev
-    ail_mode = AIL_DUAL;
+  case 2: // ele norm/1, rud rev/0
+    mix_mode = MIX_DELTA;
     break; 
   }
 
@@ -1188,14 +1196,14 @@ void setup()
 
 #if defined(RX3S_V2)
   switch ((vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)) {
-  case 1: // vtail off, delta on
-    mix_mode = MIX_DELTA;
+  case 0: // vtail on/0, delta on/0
+    ail_mode = AIL_DUAL;
     break; 
-  case 2: // vtail on, delta off
+  case 1: // vtail on/0, delta off/1
     mix_mode = MIX_VTAIL;
     break; 
-  case 3: // vtail on, delta on
-    ail_mode = AIL_DUAL;
+  case 2: // vtail off/1, delta on/0
+    mix_mode = MIX_DELTA;
     break; 
   }
 
@@ -1220,7 +1228,7 @@ void setup()
   init_digital_out(); // servo
   init_imu(); // gyro/accelgyro
 
-  dump_sensors();
+  //dump_sensors();
 
 #if defined(EEPROM_CFG_VER)
   struct eeprom_cfg cfg;
@@ -1348,23 +1356,23 @@ void loop()
     int16_t tmp0, tmp1, tmp2;
     switch (mix_mode) {
     case MIX_NORMAL:
-      ail_out2 = ail_in + output[0];
-      ailr_out2 = ailr_in + output[0];
-      ele_out2 = ele_in + output[1];
-      rud_out2 = rud_in + output[2];
+      ail_out2 = ail_in2 + output[0];
+      ailr_out2 = ailr_in2 + output[0];
+      ele_out2 = ele_in2 + output[1];
+      rud_out2 = rud_in2 + output[2];
       break;
     case MIX_DELTA:
-      tmp0 =  ail_in + output[0];
-      tmp1 =  ele_in + output[1];
+      tmp0 =  ail_in2 + output[0];
+      tmp1 =  ele_in2 + output[1];
       ail_out2 = (tmp0 + tmp1) >> 1;
       ele_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
-      rud_out2 = rud_in + output[2];
+      rud_out2 = rud_in2 + output[2];
       break;
     case MIX_VTAIL:
-      ail_out2 = ail_in + output[0];
-      ailr_out2 = ailr_in + output[0];
-      tmp1 =  ele_in + output[1];
-      tmp2 =  rud_in + output[2];
+      ail_out2 = ail_in2 + output[0];
+      ailr_out2 = ailr_in2 + output[0];
+      tmp1 =  ele_in2 + output[1];
+      tmp2 =  rud_in2 + output[2];
       ele_out2 = (tmp2 + tmp1) >> 1;
       rud_out2 = ((tmp2 - tmp1) >> 1) + RX_WIDTH_MID;
       break;
@@ -1397,9 +1405,4 @@ void loop()
   }
 }
 
-int freeRam() {
-  extern int __heap_start, *__brkval; 
-  int v; 
-  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
-}
 
