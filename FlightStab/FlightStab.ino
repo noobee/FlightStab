@@ -242,7 +242,7 @@ void update_led(long now)
   static int8_t step;
   static long next_time;
   
-  if (now < next_time)
+  if (next_time - now > 0)
     return;
 
   if (step == 0) {
@@ -254,7 +254,7 @@ void update_led(long now)
 
   step--;
   set_led(step & 0x1 ? LED_ON : LED_OFF);
-  next_time = now + (long)led_pulse_msec[slot] << 10;
+  next_time = now + ((long)led_pulse_msec[slot] << 10);
 }
 
 void terminal_led()
