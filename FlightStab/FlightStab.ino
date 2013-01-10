@@ -180,9 +180,9 @@ int8_t aux_sw = 0;
 int16_t servo_frame_period = SERVO_FRAME_PERIOD_DEFAULT;
 
 int16_t ail_out = RX_WIDTH_MID;
+int16_t ailr_out = RX_WIDTH_MID;
 int16_t ele_out = RX_WIDTH_MID;
 int16_t rud_out = RX_WIDTH_MID;
-int16_t ailr_out = RX_WIDTH_MID;
 
 // imu
 int16_t gRoll0=0, gPitch0=0, gYaw0=0; // calibration sets zero-movement-measurement offsets
@@ -499,6 +499,7 @@ ISR(TIMER0_COMPA_vect)
     ch_wait = (*pwm_out_var[ch_rise] + 2) >> 2;
     ch_rise = -1;
   }
+  sei(); // no longer time critical from this point
 
   if (ch_wait > 250) {
     wait = 250; // 250 == 1000us
@@ -752,9 +753,8 @@ void calibrate()
         sample[2] = ele_in;
         sample[3] = rud_in;
       }
-
       if (ail_mode == AIL_SINGLE)
-        ailr_in = ail_in;
+        sample[1] = sample[0];
 
       calibrate_update_stat(low, high, tot, sample, 4);  
       if (count++ % 50 == 0)
@@ -829,7 +829,7 @@ void stick_config()
         if (z0 != z2) {
           // stick moved from z2 -> z0
           int8_t z2z = z2 * 10 + z1;
-          switch(z2z) {
+          switch (z2z) {
             case 52: // zone 5 to zone 2
               y = y > 0 ? y-1 : y;
               break;
@@ -1018,7 +1018,7 @@ void serial_rx()
 
   while (Serial.available() > 0) { 
     ch = Serial.read();
-    switch(state) {
+    switch (state) {
     case IDLE:
       if (ch == '$') state = HEADER;
       break;
@@ -1085,11 +1085,9 @@ void dump_sensors()
     Serial.print(aux_in2); Serial.print('\t');
   
     uint8_t ail_vr2, ele_vr2, rud_vr2;
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-      ail_vr2 = ail_vr;
-      ele_vr2 = ele_vr;
-      rud_vr2 = rud_vr;
-    }
+    ail_vr2 = ail_vr;
+    ele_vr2 = ele_vr;
+    rud_vr2 = rud_vr;
     start_next_adc(0);
 
     Serial.print("VR "); 
@@ -1126,7 +1124,7 @@ void dump_sensors()
       servo_dir = -servo_dir;
     } 
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-      ail_out = ele_out = rud_out = ailr_out = servo_out;      
+      ail_out = ailr_out = ele_out = rud_out = servo_out;      
     }
 
     Serial.print("MISC "); 
@@ -1218,6 +1216,11 @@ void setup()
       rx_portd[2] = &ailr_in; // enable ailr_in
     }
   }
+
+  if (!rud_sw) {
+    // 10ms servo update rate
+    servo_frame_period = 10000;
+  }
 #endif
 
   set_led_msg(0, mix_mode + 1, LED_LONG);
@@ -1227,7 +1230,7 @@ void setup()
   init_digital_out(); // servo
   init_imu(); // gyro/accelgyro
 
-  //dump_sensors();
+  dump_sensors();
 
 #if defined(EEPROM_CFG_VER)
   struct eeprom_cfg cfg;
@@ -1252,9 +1255,29 @@ void setup()
   }
 #endif
 
+#if 0
+  while (1) {
+    long t = micros();
+    long last_servo_time;
+    int16_t ail_out2, ailr_out2, ele_out2, rud_out2;    
+
+    update_led(t);
+    if (t - last_servo_time > servo_frame_period) {
+      ail_out2 = ailr_out2 = ele_out2 = rud_out2 = 1500;
+      ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+        ail_out = ail_out2;
+        ailr_out = ailr_out2;
+        ele_out = ele_out2;
+        rud_out = rud_out2;
+      }
+      last_servo_time = t;
+    }
+  }
+#endif
+
   delay(500);
   calibrate();
-
+  
 //  stick_config();
 }
 
@@ -1269,10 +1292,14 @@ void loop()
 
   static long last_vr_time;
   static long last_pid_time;
+  static long last_servo_time;
 
   static int16_t vr_gain[3];
   static int16_t stick_gain[3] = {STICK_GAIN_MAX, STICK_GAIN_MAX, STICK_GAIN_MAX};
   static int16_t master_gain;
+
+  static int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
+  static int16_t ail_out2, ailr_out2, ele_out2, rud_out2;
 
   int8_t i;
 
@@ -1288,12 +1315,9 @@ void loop()
   if (t - last_vr_time > 100123) {
     // sample all adc channels
     uint8_t ail_vr2, ele_vr2, rud_vr2;
-
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-      ail_vr2 = ail_vr;
-      ele_vr2 = ele_vr;
-      rud_vr2 = rud_vr;
-    }
+    ail_vr2 = ail_vr;
+    ele_vr2 = ele_vr;
+    rud_vr2 = rud_vr;
 
     // vr_gain[] [-128, 0, 127] => [-100%, 0%, 100%] = [-128, 0, 127]
     vr_gain[0] = (int16_t)ail_vr2 - 128;
@@ -1304,11 +1328,7 @@ void loop()
     last_vr_time = t;
   }
 
-  if (t - last_pid_time > PID_PERIOD) {
-    int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
-    int16_t ail_out2, ailr_out2, ele_out2, rud_out2;
-
-    long t1 = micros();
+  if (t - last_servo_time > servo_frame_period) {
     ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
       ail_in2 = ail_in;
       ailr_in2 = ailr_in;
@@ -1316,10 +1336,13 @@ void loop()
       rud_in2 = rud_in;
       aux_in2 = aux_in;
     }
-
     if (ail_mode == AIL_SINGLE)
-      ailr_in = ail_in;
+      ailr_in2 = ail_in2;
+  }
 
+#if 0 // DEBUG
+  if (t - last_pid_time > PID_PERIOD) {
+    long t1 = micros();
     // commanded rate of rotation (could be from ail/ele/rud _in, note direction/sign)
     setpoint[0] = 0;
     setpoint[1] = 0;
@@ -1351,6 +1374,22 @@ void loop()
       output[i] = ((((int32_t)output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
     }
 
+    t1 = micros() - t1;
+    
+#if defined(USE_SERIAL) && 0
+    Serial.print(t1); Serial.print('\t');
+    Serial.print(kp[0]); Serial.print('\t'); 
+    Serial.print(input[0]); Serial.print('\t');
+    Serial.print(sum_iterm[0]); Serial.print('\t');
+    Serial.print(output[0]); Serial.print('\t');
+    Serial.print(output[1]); Serial.print('\t');
+    Serial.print(output[2]); Serial.println('\t');
+#endif
+    last_pid_time = t;
+  }
+#endif
+
+  if (t - last_servo_time > servo_frame_period) {
     // mixer
     int16_t tmp0, tmp1, tmp2;
     switch (mix_mode) {
@@ -1376,7 +1415,7 @@ void loop()
       rud_out2 = ((tmp2 - tmp1) >> 1) + RX_WIDTH_MID;
       break;
     }
-
+  
     // clamp output
     ail_out2 = constrain(ail_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
     ailr_out2 = constrain(ailr_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
@@ -1389,19 +1428,8 @@ void loop()
       ele_out = ele_out2;
       rud_out = rud_out2;
     }
-    t1 = micros() - t1;
     
-#if defined(USE_SERIAL) && 0
-    Serial.print(t1); Serial.print('\t');
-    Serial.print(kp[0]); Serial.print('\t'); 
-    Serial.print(input[0]); Serial.print('\t');
-    Serial.print(sum_iterm[0]); Serial.print('\t');
-    Serial.print(output[0]); Serial.print('\t');
-    Serial.print(output[1]); Serial.print('\t');
-    Serial.print(output[2]); Serial.println('\t');
-#endif
-    last_pid_time = t;
+    last_servo_time = t;
   }
 }
-
 
