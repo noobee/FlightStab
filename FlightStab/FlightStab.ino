@@ -9,8 +9,9 @@
 
 //#define RX3S_V1
 #define RX3S_V2
-//#define NANO_MPU6050
+#define NANO_MPU6050
 //#define USE_SERIAL
+//#define USE_I2C
 
 /* RX3S_V1 ************************************************************************************************/
 #if defined(RX3S_V1)
@@ -213,7 +214,8 @@ enum AIL_MODE ail_mode = AIL_SINGLE;
  * 
  ***************************************************************************************************************/
 
-int freeRam() {
+int freeRam() 
+{
   extern int __heap_start, *__brkval; 
   int v; 
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
@@ -350,13 +352,13 @@ volatile int16_t *rx_chan[] = {&rud_in, &ele_in, NULL, &ail_in, &aux_in, &ailr_i
 
 ISR(PCINT0_vect)
 {
-  static long last_time;
+  static int16_t last_time;
   static uint8_t last_pinb;
   static uint8_t ch;
-  long now;
+  int16_t now;
   uint8_t pinb, rise;
 
-  now = micros();
+  now = TCNT1; // in 0.5us units
   pinb = PINB;
   sei();
   rise = pinb & ~last_pinb;
@@ -364,7 +366,7 @@ ISR(PCINT0_vect)
 
   // cppm on arduino CPPM_PIN (in PORT B) 
   if (rise & (1 << (CPPM_PIN - 8))) {
-    long width = now - last_time;
+    int16_t width = (now - last_time) >> 1;
     last_time = now;
     if (width > 5000 || ch > 7) {
       ch = 0;
@@ -382,12 +384,12 @@ volatile int16_t *rx_portb[] = RX_PORTB;
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect)
 {
-  static long rise_time[8];
+  static int16_t rise_time[8];
   static uint8_t last_pinb;
-  long now;
+  int16_t now;
   uint8_t pinb, diff, rise;
 
-  now = micros();
+  now = TCNT1; // in 0.5us units
   pinb = PINB;
   sei();
   diff = pinb ^ last_pinb;
@@ -399,7 +401,7 @@ ISR(PCINT0_vect)
       if (rise & (1 << i)) {
         rise_time[i] = now;
       } else {
-        int16_t width = now - rise_time[i];
+        int16_t width = (now - rise_time[i]) >> 1;
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portb[i] = width;
         }
@@ -413,12 +415,12 @@ volatile int16_t *rx_portd[] = RX_PORTD;
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
-  static long rise_time[8];
+  static int16_t rise_time[8];
   static uint8_t last_pind;
-  long now;
+  int16_t now;
   uint8_t pind, diff, rise;
 
-  now = micros();
+  now = TCNT1; // in 0.5us units
   pind = PIND;
   sei();
   diff = pind ^ last_pind;
@@ -430,7 +432,7 @@ ISR(PCINT2_vect)
       if (rise & (1 << i)) {
         rise_time[i] = now;
       } else {
-        int16_t width = now - rise_time[i];
+        int16_t width = (now - rise_time[i]) >> 1;
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portd[i] = width;
         }
@@ -477,49 +479,32 @@ void init_digital_in_rx()
 
 volatile int16_t *pwm_out_var[] = PWM_OUT_VAR;
 volatile int8_t pwm_out_pin[] = PWM_OUT_PIN;
-int8_t last_ch;
 
-ISR(TIMER0_COMPA_vect)
+ISR(TIMER1_COMPA_vect)
 {
-  static long frame_start;
-  static int8_t ch_fall = -1;
-  static int8_t ch_rise = 0;
-  static int8_t ch = ch_rise;
-  static int16_t ch_wait;
-  uint8_t wait;
+  static int8_t fall_ch = 0;
+  static int8_t rise_ch = 0;
+  static int16_t frame_time = 0;
+  static int16_t frame_wait;
+  int16_t wait;
   
-  if (ch_fall >= 0) {
-    digitalWrite(pwm_out_pin[ch_fall], LOW);
-    ch_fall = -1;
-  }
-  if (ch_rise >= 0) {
-    digitalWrite(pwm_out_pin[ch_rise], HIGH);
-    if (ch_rise == 0)
-      frame_start = micros();
-    ch_wait = (*pwm_out_var[ch_rise] + 2) >> 2;
-    ch_rise = -1;
-  }
-  sei(); // no longer time critical from this point
+  digitalWrite(pwm_out_pin[fall_ch], LOW);
+  if (rise_ch >= 0) {
+    digitalWrite(pwm_out_pin[rise_ch], HIGH);
+    wait = *pwm_out_var[rise_ch] << 1;
+    frame_time += wait;
+    fall_ch = rise_ch;
 
-  if (ch_wait > 250) {
-    wait = 250; // 250 == 1000us
-  } else {
-    wait = ch_wait;
-    ch_fall = ch;
-    if (pwm_out_var[++ch]) {
-      ch_rise = ch;
-    } else {
-      ch = -1;
-      ch_wait = 32767;
+    if (!pwm_out_var[++rise_ch]) {
+      frame_wait = (servo_frame_period << 1) - frame_time;
+      rise_ch = -1;
     }
+  } else {
+    wait = frame_wait;
+    rise_ch = frame_time = 0;
   }
-  ch_wait -= wait;
 
-  if (ch < 0 && micros() - frame_start > servo_frame_period) {
-    ch = ch_rise = 0;
-  }
-  
-  OCR0A += wait;
+  OCR1A += wait;
 }
 
 void init_digital_out()
@@ -529,9 +514,6 @@ void init_digital_out()
     pinMode(pwm_out_pin[i], OUTPUT);
     i++;
   }
- 
-  TCCR0A = 0; // normal counting mode
-  TIMSK0 |= (1 << OCIE0A); // Enable CTC interrupt
 } 
 
 /***************************************************************************************************************
@@ -629,6 +611,10 @@ int8_t read_eeprom(struct eeprom_cfg *pcfg, uint8_t expect_ver)
 
 void read_imu()
 {
+#if not defined(USE_I2C)
+  return;
+#endif
+  
   int16_t gx, gy, gz;
 #if defined(USE_MPU6050)
   //accelgyro.getMotion6(&aRoll, &aPitch, &aYaw, &gRoll, &gPitch, &gYaw);
@@ -643,6 +629,10 @@ void read_imu()
 }
 
 void init_imu() {
+#if not defined(USE_I2C)
+  return;
+#endif
+
 #if defined(USE_MPU6050) or defined(USE_ITG3200)
   Wire.begin();
 #endif
@@ -759,7 +749,7 @@ void calibrate()
       calibrate_update_stat(low, high, tot, sample, 4);  
       if (count++ % 50 == 0)
         set_led(LED_INVERT);
-      delayMicroseconds(1000);
+      delay(1);
     }
 
 #if defined(USE_SERIAL)
@@ -1144,7 +1134,7 @@ void dump_sensors()
 /***************************************************************************************************************
  * SETUP
  ***************************************************************************************************************/
- 
+
 void setup() 
 {
   int8_t i;
@@ -1224,6 +1214,11 @@ void setup()
 #endif
 
   set_led_msg(0, mix_mode + 1, LED_LONG);
+
+  // init TIMER1
+  TCCR1A = 0; // normal counting mode
+  TCCR1B = (1 << CS11); // clkio/8 = 2MHz
+  TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
 
   init_analog_in(); // vr
   init_digital_in_rx(); // rx
