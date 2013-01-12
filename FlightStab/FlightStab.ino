@@ -6,7 +6,7 @@
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
-#define RX3S_V1
+//#define RX3S_V1
 #define RX3S_V2
 //#define NANO_MPU6050
 //#define USE_SERIAL
