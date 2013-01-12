@@ -3,7 +3,6 @@
 #include <util/atomic.h>
 
 // check bit width math
-// faster device libs 
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
@@ -11,7 +10,13 @@
 #define RX3S_V2
 #define NANO_MPU6050
 //#define USE_SERIAL
-//#define USE_I2C
+
+//#define USE_I2CDEVLIB
+#define USE_I2CLIGHT
+
+#if defined(USE_I2CDEVLIB) && defined(USE_I2CLIGHT)
+#error Cannot define both USE_I2CDEVLIB and USE_I2CLIGHT
+#endif
 
 /* RX3S_V1 ************************************************************************************************/
 #if defined(RX3S_V1)
@@ -221,6 +226,127 @@ int freeRam()
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
 }
 
+
+/***************************************************************************************************************
+ * I2CLIGHT / MPU6050
+ ***************************************************************************************************************/
+
+uint16_t i2c_errors = 0;
+
+void i2c_init(int8_t pullup, long freq)
+{
+  if (pullup) {
+    digitalWrite(18, 1);
+    digitalWrite(19, 1);
+  }
+  TWSR = 0; // prescaler = 1
+  TWBR = ((F_CPU / freq) - 16) / 2; // baud rate 
+//  TWCR = (1 << TWEN); // enable twi
+}
+
+void i2c_wait() 
+{
+  uint8_t timeout = 255;
+  do {
+    if (TWCR & (1 << TWINT))
+      return;
+  } while (--timeout);
+  Serial.println("I2C ERROR");
+  i2c_errors++;
+  TWCR = 0; // disable twi
+}
+
+void i2c_start(uint8_t addr)
+{
+  TWCR = (1 << TWINT) | (1 << TWSTA) | (1 << TWEN); // repeated start
+  i2c_wait();
+  TWDR = addr;
+  TWCR = (1 << TWINT) | (1 << TWEN);
+  i2c_wait();
+}
+
+void i2c_stop()
+{
+  TWCR = (1 << TWINT) | (1 << TWSTO) | (1 << TWEN);
+}
+
+void i2c_write(uint8_t data)
+{
+  TWDR = data;
+  TWCR = (1 << TWINT) | (1 << TWEN);
+  i2c_wait();
+}
+
+uint8_t i2c_read(int8_t ack)
+{
+  uint8_t data;
+  TWCR = (1 << TWINT) | (1 << TWEN) | (ack ? (1 << TWEA) : 0);
+  i2c_wait();
+  data = TWDR;
+  if (!ack) i2c_stop();
+  return data;
+}
+
+void i2c_write_reg(uint8_t addr, uint8_t reg, uint8_t data)
+{
+  i2c_start(addr << 1); // write reg
+  i2c_write(reg);
+  i2c_write(data); // write data
+  i2c_stop();
+}
+
+uint8_t i2c_read_reg(uint8_t addr, uint8_t reg)
+{
+  i2c_start(addr << 1); // write reg
+  i2c_write(reg);
+  i2c_start((addr << 1) | 1); // read data
+  return i2c_read(true);
+}
+
+void i2c_read_buf(uint8_t addr, uint8_t *buf, int8_t size)
+{
+  i2c_start((addr << 1) | 1); // read data
+  while (size--) {
+    *buf++ = i2c_read(size > 0);
+  }
+}
+
+void i2c_read_reg_buf(uint8_t addr, uint8_t reg, uint8_t *buf, int8_t size)
+{
+  i2c_start(addr << 1); // write reg
+  i2c_write(reg);
+  i2c_read_buf(addr, buf, size);
+}
+
+#define MPU6050_ADDR 0x68
+
+void mpu6050_init()
+{
+  i2c_write_reg(MPU6050_ADDR, 0x6B, 0x80);
+  delay(10);
+  i2c_write_reg(MPU6050_ADDR, 0x6B, 0x03);
+  i2c_write_reg(MPU6050_ADDR, 0x1A, 0);
+  i2c_write_reg(MPU6050_ADDR, 0x1B, 0x18);
+}
+
+void mpu6050_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
+{
+  uint8_t buf[6];
+  i2c_read_reg_buf(MPU6050_ADDR, 0x43, buf, 6);
+  *gx = (buf[0] << 8) | (buf[1]);
+  *gy = (buf[2] << 8) | (buf[3]);
+  *gz = (buf[4] << 8) | (buf[5]);
+}
+
+void mpu6050_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
+{
+  uint8_t buf[6];
+  i2c_read_reg_buf(MPU6050_ADDR, 0x3B, buf, 6);
+  *ax = (buf[0] << 8) | (buf[1]);
+  *ay = (buf[2] << 8) | (buf[3]);
+  *az = (buf[4] << 8) | (buf[5]);
+}
+
 /***************************************************************************************************************
  * LED
  ***************************************************************************************************************/
@@ -352,10 +478,10 @@ volatile int16_t *rx_chan[] = {&rud_in, &ele_in, NULL, &ail_in, &aux_in, &ailr_i
 
 ISR(PCINT0_vect)
 {
-  static int16_t last_time;
+  static uint16_t last_time;
   static uint8_t last_pinb;
   static uint8_t ch;
-  int16_t now;
+  uint16_t now;
   uint8_t pinb, rise;
 
   now = TCNT1; // in 0.5us units
@@ -366,7 +492,7 @@ ISR(PCINT0_vect)
 
   // cppm on arduino CPPM_PIN (in PORT B) 
   if (rise & (1 << (CPPM_PIN - 8))) {
-    int16_t width = (now - last_time) >> 1;
+    uint16_t width = (now - last_time) >> 1;
     last_time = now;
     if (width > 5000 || ch > 7) {
       ch = 0;
@@ -384,9 +510,9 @@ volatile int16_t *rx_portb[] = RX_PORTB;
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect)
 {
-  static int16_t rise_time[8];
+  static uint16_t rise_time[8];
   static uint8_t last_pinb;
-  int16_t now;
+  uint16_t now;
   uint8_t pinb, diff, rise;
 
   now = TCNT1; // in 0.5us units
@@ -401,7 +527,7 @@ ISR(PCINT0_vect)
       if (rise & (1 << i)) {
         rise_time[i] = now;
       } else {
-        int16_t width = (now - rise_time[i]) >> 1;
+        uint16_t width = (now - rise_time[i]) >> 1;
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portb[i] = width;
         }
@@ -415,9 +541,9 @@ volatile int16_t *rx_portd[] = RX_PORTD;
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
-  static int16_t rise_time[8];
+  static uint16_t rise_time[8];
   static uint8_t last_pind;
-  int16_t now;
+  uint16_t now;
   uint8_t pind, diff, rise;
 
   now = TCNT1; // in 0.5us units
@@ -432,7 +558,7 @@ ISR(PCINT2_vect)
       if (rise & (1 << i)) {
         rise_time[i] = now;
       } else {
-        int16_t width = (now - rise_time[i]) >> 1;
+        uint16_t width = (now - rise_time[i]) >> 1;
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portd[i] = width;
         }
@@ -611,10 +737,7 @@ int8_t read_eeprom(struct eeprom_cfg *pcfg, uint8_t expect_ver)
 
 void read_imu()
 {
-#if not defined(USE_I2C)
-  return;
-#endif
-  
+#if defined(USE_I2CDEVLIB)
   int16_t gx, gy, gz;
 #if defined(USE_MPU6050)
   //accelgyro.getMotion6(&aRoll, &aPitch, &aYaw, &gRoll, &gPitch, &gYaw);
@@ -626,16 +749,19 @@ void read_imu()
   gyro.getRotation(&gx, &gy, &gz);
   GYRO_ORIENTATION(gx, gy, gz);
 #endif
+#endif
+
+#if defined(USE_I2CLIGHT)
+  int16_t gx, gy, gz;  
+  mpu6050_read_gyro(&gx, &gy, &gz);
+  GYRO_ORIENTATION(gx, gy, gz);  
+#endif
 }
 
 void init_imu() {
-#if not defined(USE_I2C)
-  return;
-#endif
 
-#if defined(USE_MPU6050) or defined(USE_ITG3200)
+#if defined(USE_I2CDEVLIB)  
   Wire.begin();
-#endif
 
 #if defined(USE_MPU6050)
   accelgyro.initialize();
@@ -659,6 +785,12 @@ void init_imu() {
     set_led_msg(2, 5, LED_SHORT);
     terminal_led(); // does not return
   }
+#endif
+#endif
+
+#if defined(USE_I2CLIGHT)
+  i2c_init(true, 100000L);
+  mpu6050_init();
 #endif
 }
 
@@ -1335,7 +1467,6 @@ void loop()
       ailr_in2 = ail_in2;
   }
 
-#if 0 // DEBUG
   if (t - last_pid_time > PID_PERIOD) {
     long t1 = micros();
     // commanded rate of rotation (could be from ail/ele/rud _in, note direction/sign)
@@ -1382,7 +1513,6 @@ void loop()
 #endif
     last_pid_time = t;
   }
-#endif
 
   if (t - last_servo_time > servo_frame_period) {
     // mixer
