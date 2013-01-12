@@ -6,9 +6,9 @@
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
-//#define RX3S_V1
+#define RX3S_V1
 #define RX3S_V2
-#define NANO_MPU6050
+//#define NANO_MPU6050
 //#define USE_SERIAL
 
 //#define USE_I2CDEVLIB
@@ -40,7 +40,7 @@
 */
 
 // <VR>
-#define PORTC_AIN {&ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL, NULL, NULL}
+#define AIN_PORTC {&ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL}
 
 // <RX> (must in PORT B/D due to ISR)
 #define RX_PORTB {&ail_in, &ele_in, &rud_in, NULL, NULL, NULL, NULL, NULL}
@@ -90,7 +90,7 @@
 */
 
 // <VR>
-#define PORTC_AIN {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL, NULL}
+#define AIN_PORTC {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL}
 
 // <RX> (must in PORT B/D due to ISR)
 #define RX_PORTB {&ail_in, &ele_in, &rud_in, &aux_in, NULL, NULL, NULL, NULL}
@@ -226,7 +226,6 @@ int freeRam()
   return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
 }
 
-
 /***************************************************************************************************************
  * I2CLIGHT / MPU6050
  ***************************************************************************************************************/
@@ -241,7 +240,6 @@ void i2c_init(int8_t pullup, long freq)
   }
   TWSR = 0; // prescaler = 1
   TWBR = ((F_CPU / freq) - 16) / 2; // baud rate 
-//  TWCR = (1 << TWEN); // enable twi
 }
 
 void i2c_wait() 
@@ -251,7 +249,6 @@ void i2c_wait()
     if (TWCR & (1 << TWINT))
       return;
   } while (--timeout);
-  Serial.println("I2C ERROR");
   i2c_errors++;
   TWCR = 0; // disable twi
 }
@@ -311,7 +308,7 @@ void i2c_read_buf(uint8_t addr, uint8_t *buf, int8_t size)
   }
 }
 
-void i2c_read_reg_buf(uint8_t addr, uint8_t reg, uint8_t *buf, int8_t size)
+void i2c_read_buf_reg(uint8_t addr, uint8_t reg, uint8_t *buf, int8_t size)
 {
   i2c_start(addr << 1); // write reg
   i2c_write(reg);
@@ -322,17 +319,18 @@ void i2c_read_reg_buf(uint8_t addr, uint8_t reg, uint8_t *buf, int8_t size)
 
 void mpu6050_init()
 {
-  i2c_write_reg(MPU6050_ADDR, 0x6B, 0x80);
-  delay(10);
-  i2c_write_reg(MPU6050_ADDR, 0x6B, 0x03);
-  i2c_write_reg(MPU6050_ADDR, 0x1A, 0);
-  i2c_write_reg(MPU6050_ADDR, 0x1B, 0x18);
+  i2c_write_reg(MPU6050_ADDR, 0x6B, 0x80); // reset
+  delay(50);
+  i2c_write_reg(MPU6050_ADDR, 0x6B, 0x03); // clock=pll with z-gyro ref
+  i2c_write_reg(MPU6050_ADDR, 0x1A, 0x0); // accel_bw/delay=260hz/0ms gyro_bw/delay/sample=256hz/0.98ms/8khz
+  //i2c_write_reg(MPU6050_ADDR, 0x1A, 0x6); // accel_bw/delay=5hz/19ms gyro_bw/delay/sample=5hz/18.6ms/1khz
+  i2c_write_reg(MPU6050_ADDR, 0x1B, 0x18); // fs=2000deg/s
 }
 
 void mpu6050_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
 {
   uint8_t buf[6];
-  i2c_read_reg_buf(MPU6050_ADDR, 0x43, buf, 6);
+  i2c_read_buf_reg(MPU6050_ADDR, 0x43, buf, 6);
   *gx = (buf[0] << 8) | (buf[1]);
   *gy = (buf[2] << 8) | (buf[3]);
   *gz = (buf[4] << 8) | (buf[5]);
@@ -341,10 +339,32 @@ void mpu6050_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
 void mpu6050_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
 {
   uint8_t buf[6];
-  i2c_read_reg_buf(MPU6050_ADDR, 0x3B, buf, 6);
+  i2c_read_buf_reg(MPU6050_ADDR, 0x3B, buf, 6);
   *ax = (buf[0] << 8) | (buf[1]);
   *ay = (buf[2] << 8) | (buf[3]);
   *az = (buf[4] << 8) | (buf[5]);
+}
+
+   #define ITG3200_SMPLRT_DIV 0  //8000Hz
+    #define ITG3200_DLPF_CFG   0
+
+#define ITG3205_ADDR 0x68
+
+void itg3205_init()
+{
+  i2c_write_reg(ITG3205_ADDR, 0x3E, 0x80); // reset
+  delay(50);
+  i2c_write_reg(ITG3205_ADDR, 0x3E, 0x03); // clock=pll with z-gyro ref
+  i2c_write_reg(ITG3205_ADDR, 0x16, 0x18 | 0x6); // fs=2000deg/s | lpf=5hz sample=1khz
+}
+
+void itg3205_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
+{
+  uint8_t buf[6];
+  i2c_read_buf_reg(ITG3205_ADDR, 0x1D, buf, 6);
+  *gx = (buf[0] << 8) | (buf[1]);
+  *gy = (buf[2] << 8) | (buf[3]);
+  *gz = (buf[4] << 8) | (buf[5]);
 }
 
 /***************************************************************************************************************
@@ -397,7 +417,7 @@ void terminal_led()
  * ANALOG IN (VR)
  ***************************************************************************************************************/
 
-volatile uint8_t *adc_portc[] = PORTC_AIN;
+volatile uint8_t *adc_portc[] = AIN_PORTC;
 
 void start_adc(uint8_t ch)
 {
@@ -425,6 +445,14 @@ ISR(ADC_vect)
 
 void init_analog_in()
 {
+  int8_t i;
+  for (i=0; i<6; i++) {
+    if (adc_portc[i]) {
+      pinMode(14 + i, INPUT);
+      digitalWrite(14 + i, LOW); // don't enable internal pullup
+    }
+  }
+  
   ADMUX = (1 << REFS0) | (1 << ADLAR); // acc vref, adc left adjust, adc channel 0
   ADCSRB = 0;
   ADCSRA = (1 << ADEN) | (1 << ADIE) | (0x07); // adc enable, manual trigger, interrupt enable, prescaler 128
@@ -737,25 +765,24 @@ int8_t read_eeprom(struct eeprom_cfg *pcfg, uint8_t expect_ver)
 
 void read_imu()
 {
+  int16_t gx, gy, gz;  
 #if defined(USE_I2CDEVLIB)
-  int16_t gx, gy, gz;
 #if defined(USE_MPU6050)
   //accelgyro.getMotion6(&aRoll, &aPitch, &aYaw, &gRoll, &gPitch, &gYaw);
   accelgyro.getRotation(&gx, &gy, &gz);
-  GYRO_ORIENTATION(gx, gy, gz);  
-#endif
-
-#if defined(USE_ITG3200)
+#elif defined(USE_ITG3200)
   gyro.getRotation(&gx, &gy, &gz);
-  GYRO_ORIENTATION(gx, gy, gz);
 #endif
 #endif
 
 #if defined(USE_I2CLIGHT)
-  int16_t gx, gy, gz;  
+#if defined(USE_MPU6050)
   mpu6050_read_gyro(&gx, &gy, &gz);
-  GYRO_ORIENTATION(gx, gy, gz);  
+#elif defined(USE_ITG3200)
+  itg3205_read_gyro(&gx, &gy, &gz);
 #endif
+#endif
+  GYRO_ORIENTATION(gx, gy, gz);  
 }
 
 void init_imu() {
@@ -789,8 +816,12 @@ void init_imu() {
 #endif
 
 #if defined(USE_I2CLIGHT)
-  i2c_init(true, 100000L);
+  i2c_init(true, 400000L);
+#if defined(USE_MPU6050)
   mpu6050_init();
+#elif defined(USE_ITG3200)
+  itg3205_init();
+#endif
 #endif
 }
 
