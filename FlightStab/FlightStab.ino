@@ -6,8 +6,8 @@
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
-//#define RX3S_V1
-#define RX3S_V2
+#define RX3S_V1
+//#define RX3S_V2
 //#define NANO_MPU6050
 //#define USE_SERIAL
 
@@ -452,7 +452,7 @@ void init_analog_in()
       digitalWrite(14 + i, LOW); // don't enable internal pullup
     }
   }
-  
+
   ADMUX = (1 << REFS0) | (1 << ADLAR); // acc vref, adc left adjust, adc channel 0
   ADCSRB = 0;
   ADCSRA = (1 << ADEN) | (1 << ADIE) | (0x07); // adc enable, manual trigger, interrupt enable, prescaler 128
@@ -816,7 +816,7 @@ void init_imu() {
 #endif
 
 #if defined(USE_I2CLIGHT)
-  i2c_init(true, 400000L);
+  i2c_init(true, 100000L);
 #if defined(USE_MPU6050)
   mpu6050_init();
 #elif defined(USE_ITG3200)
@@ -1281,6 +1281,7 @@ void dump_sensors()
     }
 
     Serial.print("MISC "); 
+    Serial.print(i2c_errors); Serial.print(' ');
     Serial.print(servo_out); Serial.print(' ');
     Serial.print(mix_mode); Serial.print(' ');
     Serial.print(ail_mode); Serial.print(' ');
