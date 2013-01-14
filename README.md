@@ -57,14 +57,13 @@ C:\users\<user>\My Documents\Arduino\Libraries\ITG3200
 4. connect the ISP connector to the RX3S
 5. select `"Read All"`. the program should recognize the chip and proceed to read the flash, eeprom and fuse/lock bits
 6. the flash and eeprom will be read back as 0xff (since the lock bits LB1/2 are set). that is correct.
-7. the fuse/lock bits should read:
+7. the fuse/lock bits should read the following (the calibration value does not have to match):
 
 ```
     lo=0xf7
     hi=0xdf
     ext=0xf9
     lock=0xfc
-    cal=0xffffff95
 ```
 
 ###__DO NOT PROCEED IF THE VALUES DO NOT MATCH OR IF THE PROGRAM CANNOT RECOGNIZE THE CHIP (AFTER 2-3 TRIES).__
