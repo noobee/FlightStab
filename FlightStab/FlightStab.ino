@@ -2,8 +2,6 @@
 #include <avr/eeprom.h>
 #include <util/atomic.h>
 
-// check bit width math
-
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 //#define RX3S_V1
@@ -123,6 +121,10 @@
 #define GYRO_ORIENTATION(x, y, z) {gRoll = -(x); gPitch = (y); gYaw = (z);}
 #endif
 
+#if defined(USE_MPU6050) && defined(USE_ITG3200)
+#error Cannot define both USE_MPU6050 and USE_ITG3200
+#endif
+
 #if defined(USE_MPU6050)
   #include "Wire.h"
   #include "I2Cdev.h"
@@ -175,17 +177,14 @@ int16_t ele_in_mid = RX_WIDTH_MID; //
 int16_t rud_in_mid = RX_WIDTH_MID; //
 
 // switch
-int8_t ail_sw = 0;
-int8_t ele_sw = 0;
-int8_t rud_sw = 0;
-int8_t vtail_sw = 0;
-int8_t delta_sw = 0;
-int8_t aux_sw = 0;
+int8_t ail_sw = false;
+int8_t ele_sw = false;
+int8_t rud_sw = false;
+int8_t vtail_sw = false;
+int8_t delta_sw = false;
+int8_t aux_sw = false;
 
 // servo
-#define SERVO_FRAME_PERIOD_DEFAULT 20000
-int16_t servo_frame_period = SERVO_FRAME_PERIOD_DEFAULT;
-
 volatile int16_t ail_out = RX_WIDTH_MID;
 volatile int16_t ailr_out = RX_WIDTH_MID;
 volatile int16_t ele_out = RX_WIDTH_MID;
@@ -208,11 +207,11 @@ int16_t kd[3] = {PID_KD_DEFAULT, PID_KD_DEFAULT, PID_KD_DEFAULT};
 
 // mixer
 enum MIX_MODE {MIX_NORMAL, MIX_DELTA, MIX_VTAIL};
-enum MIX_MODE mix_mode = MIX_NORMAL;
+enum MIX_MODE mix_mode;
 
 // aileron mode
 enum AIL_MODE {AIL_SINGLE, AIL_DUAL};
-enum AIL_MODE ail_mode = AIL_SINGLE;
+enum AIL_MODE ail_mode;
 
 #define VR_GAIN_MAX (-128)
 #define STICK_GAIN_MAX 400
@@ -222,36 +221,42 @@ enum AIL_MODE ail_mode = AIL_SINGLE;
  * TIMER1 and MISC
  ***************************************************************************************************************/
 
-volatile uint16_t timer1_high;
+volatile uint16_t timer1_high = 0xff00; // start high to test rollover
+volatile uint8_t timer1_ovf = 0x00;
 
 ISR(TIMER1_OVF_vect)
 {
-  timer1_high++;
+  if (!++timer1_high)
+    timer1_ovf++;
 }
 
-long micros1()
+uint32_t micros1()
 {
   uint16_t th, tl;
+  uint32_t to;
 #if 0
+  // interrupt-disable version
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     th = timer1_high;
     tl = TCNT1;
   }
 #else
+  // lock-free version
   while (1) {
     th = timer1_high;
     tl = TCNT1;
     if (th == timer1_high && !((tl ^ TCNT1) & 0x8000))
       break;    
   }  
-#endif  
-  return ((long)th << 15) | (tl >> 1);
+#endif
+  return ((uint32_t)timer1_ovf << 31 | (uint32_t)th << 15) | (tl >> 1);
 }
 
-void delay1(long ms)
+void delay1(uint32_t ms)
 {
-  long t = micros1();
-  while (micros1() - t < ms * 1000);
+  uint32_t us = ms * 1000; 
+  uint32_t t = micros1();
+  while ((int32_t)(micros1() - t) < us);
 }
 
 int freeRam() 
@@ -262,24 +267,25 @@ int freeRam()
 }
 
 /***************************************************************************************************************
- * I2CLIGHT / MPU6050
+ * I2CLIGHT / MPU6050 / ITG3205
  ***************************************************************************************************************/
 
 uint16_t i2c_errors = 0;
 
-void i2c_init(int8_t pullup, long freq)
+void i2c_init(int8_t pullup, uint32_t freq)
 {
   if (pullup) {
+    // scl and sda
     digitalWrite(18, 1);
     digitalWrite(19, 1);
   }
   TWSR = 0; // prescaler = 1
-  TWBR = ((F_CPU / freq) - 16) / 2; // baud rate 
+  TWBR = ((F_CPU / freq) - 16) >> 1; // baud rate 
 }
 
 void i2c_wait() 
 {
-  uint8_t timeout = 255;
+  uint16_t timeout = 255;
   do {
     if (TWCR & (1 << TWINT))
       return;
@@ -352,7 +358,7 @@ void i2c_read_buf_reg(uint8_t addr, uint8_t reg, uint8_t *buf, int8_t size)
 
 #define MPU6050_ADDR 0x68
 
-void mpu6050_init()
+int8_t mpu6050_init()
 {
   i2c_write_reg(MPU6050_ADDR, 0x6B, 0x80); // reset
   delay1(50);
@@ -360,6 +366,8 @@ void mpu6050_init()
   i2c_write_reg(MPU6050_ADDR, 0x1A, 0x0); // accel_bw/delay=260hz/0ms gyro_bw/delay/sample=256hz/0.98ms/8khz
   //i2c_write_reg(MPU6050_ADDR, 0x1A, 0x6); // accel_bw/delay=5hz/19ms gyro_bw/delay/sample=5hz/18.6ms/1khz
   i2c_write_reg(MPU6050_ADDR, 0x1B, 0x18); // fs=2000deg/s
+
+  return ((i2c_read_reg(MPU6050_ADDR, 0x75) & 0x7E) >> 1) == 0x34; // chip id
 }
 
 void mpu6050_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
@@ -380,17 +388,16 @@ void mpu6050_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
   *az = (buf[4] << 8) | (buf[5]);
 }
 
-   #define ITG3200_SMPLRT_DIV 0  //8000Hz
-    #define ITG3200_DLPF_CFG   0
-
 #define ITG3205_ADDR 0x68
 
-void itg3205_init()
+int8_t itg3205_init()
 {
   i2c_write_reg(ITG3205_ADDR, 0x3E, 0x80); // reset
   delay1(50);
   i2c_write_reg(ITG3205_ADDR, 0x3E, 0x03); // clock=pll with z-gyro ref
   i2c_write_reg(ITG3205_ADDR, 0x16, 0x18 | 0x6); // fs=2000deg/s | lpf=5hz sample=1khz
+
+  return ((i2c_read_reg(ITG3205_ADDR, 0x00) & 0x7E) >> 1) == 0x34; // chip id
 }
 
 void itg3205_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
@@ -419,13 +426,13 @@ void set_led_msg(int8_t slot, int8_t pulse_count, int16_t pulse_msec) {
   led_pulse_msec[slot] = pulse_msec;
 }
 
-void update_led(long now)
+void update_led(uint32_t now)
 {
   static int8_t slot;
   static int8_t step;
-  static long next_time;
+  static uint32_t next_time;
   
-  if (next_time - now > 0)
+  if ((int32_t)(next_time - now) > 0)
     return;
 
   if (step == 0) {
@@ -437,7 +444,7 @@ void update_led(long now)
 
   step--;
   set_led(step & 0x1 ? LED_ON : LED_OFF);
-  next_time = now + ((long)led_pulse_msec[slot] << 10);
+  next_time = now + ((uint32_t)led_pulse_msec[slot] << 10);
 }
 
 void terminal_led()
@@ -577,16 +584,18 @@ volatile int16_t *rx_portb[] = RX_PORTB;
 ISR(PCINT0_vect)
 {
   static uint16_t rise_time[8];
-  static uint8_t last_pinb;
+  static uint8_t last_pin;
   uint16_t now;
-  uint8_t pinb, diff, rise;
+  uint8_t pin, last_pin2, diff, rise;
 
   now = TCNT1; // in 0.5us units
-  pinb = PINB;
-  diff = pinb ^ last_pinb;
-  rise = pinb & ~last_pinb;
-  last_pinb = pinb;
+  last_pin2 = last_pin;
+  pin = PINB;
+  last_pin = pin;
   sei();
+
+  diff = pin ^ last_pin2;
+  rise = pin & ~last_pin2;
 
   for (int8_t i = PCINT0; i <= PCINT7; i++) {
     if (rx_portb[i] && diff & (1 << i)) {
@@ -610,16 +619,18 @@ volatile int16_t *rx_portd[] = RX_PORTD;
 ISR(PCINT2_vect)
 {
   static uint16_t rise_time[8];
-  static uint8_t last_pind;
+  static uint8_t last_pin;
   uint16_t now;
-  uint8_t pind, diff, rise;
+  uint8_t pin, last_pin2, diff, rise;
 
   now = TCNT1; // in 0.5us units
-  pind = PIND;
-  diff = pind ^ last_pind;
-  rise = pind & ~last_pind;
-  last_pind = pind;
+  last_pin2 = last_pin;
+  pin = PIND;
+  last_pin = pin;
   sei();
+
+  diff = pin ^ last_pin2;
+  rise = pin & ~last_pin2;
 
   for (int8_t i = PCINT16; i <= PCINT23; i++) {
     if (rx_portd[i] && diff & (1 << i)) {
@@ -653,7 +664,7 @@ void init_digital_in_rx()
       PCMSK0 |= 1 << (PCINT0 + i);
       pinMode(8 + i, INPUT);
       digitalWrite(8 + i, HIGH);
-      rx_portb_ref = i; // will save the last known rx chan, should not remap it to output
+      rx_portb_ref = i; // will save the last known rx chan for servo sync, should not remap it to output
     }
   }
   // PORTD RX
@@ -676,10 +687,8 @@ volatile int16_t *pwm_out_var[] = PWM_OUT_VAR;
 volatile int8_t pwm_out_pin[] = PWM_OUT_PIN;
 volatile int8_t servo_busy = false;
 
-void timer1_compa()
+ISR(TIMER1_COMPA_vect)
 {
-  // must be called either with interrupts disabled (to start the sequence) or 
-  // in an interrupt context (to continue the sequence)
   static int8_t fall_ch = 0;
   static int8_t rise_ch = 0;
   uint16_t wait;
@@ -701,12 +710,6 @@ void timer1_compa()
   }
   OCR1A = tcnt1 + wait;
 }
-
-ISR(TIMER1_COMPA_vect)
-{
-  timer1_compa();
-}
-
 
 void init_digital_out()
 {
@@ -833,7 +836,6 @@ void read_imu()
 }
 
 void init_imu() {
-
 #if defined(USE_I2CDEVLIB)  
   Wire.begin();
 
@@ -865,9 +867,15 @@ void init_imu() {
 #if defined(USE_I2CLIGHT)
   i2c_init(true, 100000L);
 #if defined(USE_MPU6050)
-  mpu6050_init();
+  if (!mpu6050_init()) {
+    set_led_msg(2, 5, LED_SHORT);
+    terminal_led(); // does not return
+  }
 #elif defined(USE_ITG3200)
-  itg3205_init();
+  if (!itg3205_init()) {
+    set_led_msg(2, 5, LED_SHORT);
+    terminal_led(); // does not return
+  }
 #endif
 #endif
 }
@@ -906,7 +914,7 @@ bool calibrate_check_stat(int16_t *plow, int16_t *phigh, int16_t range, int8_t e
 
 void calibrate()
 {
-  long now;
+  uint32_t now;
   int16_t count;
   int16_t sample[4], low[4], high[4];
   int32_t tot[4];
@@ -915,7 +923,7 @@ void calibrate()
     calibrate_init_stat(low, high, tot);    
     count = 0;
     now = micros1();
-    while (micros1() - now < 1000000) {
+    while ((int32_t)(micros1() - now) < 1000000) {
       read_imu();
       sample[0] = gRoll;
       sample[1] = gPitch;
@@ -997,7 +1005,7 @@ void stick_config()
 {
   int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
   int8_t z0, z1, z2=-1;
-  long z0_time;
+  uint32_t z0_time;
   int8_t x, y=0;
   int8_t param[5];
   
@@ -1025,7 +1033,7 @@ void stick_config()
       z1 = z0;
       z0_time = micros1();
     } else {
-      if (micros1() - z0_time > 50000) {
+      if ((int32_t)(micros1() - z0_time) > 50000) {
         if (z0 != z2) {
           // stick moved from z2 -> z0
           int8_t z2z = z2 * 10 + z1;
@@ -1264,8 +1272,8 @@ void serial_rx()
 void dump_sensors()
 {
 #if defined(USE_SERIAL)  
-  long t;
-  long last_servo_time = 0;
+  uint32_t t;
+  uint32_t last_servo_time = 0;
   int16_t servo_out = 1500;
   int8_t servo_dir = 20;
 
@@ -1295,22 +1303,14 @@ void dump_sensors()
     Serial.print(ele_vr2); Serial.print('\t');
     Serial.print(rud_vr2); Serial.print('\t');
     
-    int8_t ail_sw2, ele_sw2, rud_sw2, vtail_sw2, delta_sw2, aux_sw2;
     read_switches();
-    ail_sw2 = ail_sw;
-    ele_sw2 = ele_sw;
-    rud_sw2 = rud_sw;
-    vtail_sw2 = vtail_sw;
-    delta_sw2 = delta_sw;
-    aux_sw2 = aux_sw;
-
     Serial.print("SW "); 
-    Serial.print(ail_sw2); Serial.print(' ');
-    Serial.print(ele_sw2); Serial.print(' ');
-    Serial.print(rud_sw2); Serial.print(' ');
-    Serial.print(vtail_sw2); Serial.print(' ');
-    Serial.print(delta_sw2); Serial.print(' ');
-    Serial.print(aux_sw2); Serial.print('\t');
+    Serial.print(ail_sw); Serial.print(' ');
+    Serial.print(ele_sw); Serial.print(' ');
+    Serial.print(rud_sw); Serial.print(' ');
+    Serial.print(vtail_sw); Serial.print(' ');
+    Serial.print(delta_sw); Serial.print(' ');
+    Serial.print(aux_sw); Serial.print('\t');
   
     read_imu();
     Serial.print("GY "); 
@@ -1325,7 +1325,7 @@ void dump_sensors()
     }
     ail_out2 = ailr_out2 = ele_out2 = rud_out2 = servo_out;
 //    ail_out2 = ailr_out2 = ele_out2 = rud_out2 = 1500;
-    if (!servo_busy && t - last_servo_time > 20000) {
+    if (!servo_busy && (int32_t)(t - last_servo_time) > 20000) {
       start_servo_frame();
       last_servo_time = t;
     } 
@@ -1408,8 +1408,8 @@ void start_servo_frame()
     rud_out = rud_out2;
     
     TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
-    timer1_compa(); // start the first channel       
     TIFR1 |= (1 << OCF1A); // clear any pending interrupt
+    OCR1A = TCNT1 + 4; // force interrupt condition
   } // reenable global interrupts
 }
 
@@ -1438,10 +1438,10 @@ void setup()
   // init digital in for dip switches to read config settings
   init_digital_in_sw(); // sw
   read_switches();
+  mix_mode = MIX_NORMAL;
+  ail_mode = AIL_SINGLE;
   
   // device-specific modes and pin assignment differences
-  // mix_mode = MIX_NORMAL default
-  // ail_mode = AIL_SINGLE default
 
 #if defined(RX3S_V1)
   switch ((ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)) {
@@ -1496,11 +1496,6 @@ void setup()
       rx_portd[2] = &ailr_in; // enable ailr_in
     }
   }
-
-  if (!rud_sw) {
-    // 10ms servo update rate
-    servo_frame_period = 10000;
-  }
 #endif
 
   set_led_msg(0, mix_mode + 1, LED_LONG);
@@ -1550,10 +1545,10 @@ void setup()
 
 void loop() 
 { 
-  long t;
-  long last_vr_time = 0;
-  long last_pid_time = 0;
-  long last_servo_time = 0;
+  uint32_t t;
+  uint32_t last_vr_time = 0;
+  uint32_t last_pid_time = 0;
+  uint32_t last_servo_time = 0;
   int8_t servo_sync = false;
 
   int16_t vr_gain[3] = {VR_GAIN_MAX, VR_GAIN_MAX, VR_GAIN_MAX};
@@ -1570,14 +1565,21 @@ again:
     servo_sync = true;
   }
 
-  if (!servo_busy && (servo_sync || t - last_servo_time > 30000)) {
+  // sync servo frame with rx frame immediately when servo ISR is idle, or timeout
+  if (!servo_busy && (servo_sync || (int32_t)(t - last_servo_time) > 30000)) {
     servo_sync = false;
     apply_correction();
     start_servo_frame();
+    
+    read_imu();
+    gRoll -= gRoll0;
+    gPitch -= gPitch0;
+    gYaw -= gYaw0;
+
     last_servo_time = t;
   } 
 
-  if (t - last_pid_time > PID_PERIOD) {
+  if ((int32_t)(t - last_pid_time) > PID_PERIOD) {
     int8_t i;
     
     // commanded rate of rotation (could be from ail/ele/rud _in, note direction/sign)
@@ -1585,10 +1587,12 @@ again:
     setpoint[1] = 0;
     setpoint[2] = 0;
 
+#if 0
     read_imu();
     gRoll -= gRoll0;
     gPitch -= gPitch0;
     gYaw -= gYaw0;
+#endif
 
     // measured rate of rotation (from the gyro)
     input[0] = constrain(gRoll, -8192, 8191);
@@ -1622,7 +1626,7 @@ again:
     last_pid_time = t;
   }
 
-  if (t - last_vr_time > 100123) {
+  if ((int32_t)(t - last_vr_time) > 100123) {
     // sample all adc channels
     uint8_t ail_vr2, ele_vr2, rud_vr2;
     ail_vr2 = ail_vr;
