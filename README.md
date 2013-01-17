@@ -57,14 +57,13 @@ C:\users\<user>\My Documents\Arduino\Libraries\ITG3200
 4. connect the ISP connector to the RX3S
 5. select `"Read All"`. the program should recognize the chip and proceed to read the flash, eeprom and fuse/lock bits
 6. the flash and eeprom will be read back as 0xff (since the lock bits LB1/2 are set). that is correct.
-7. the fuse/lock bits should read:
+7. the fuse/lock bits should read the following (the calibration value does not have to match):
 
 ```
     lo=0xf7
     hi=0xdf
     ext=0xf9
     lock=0xfc
-    cal=0xffffff95
 ```
 
 ###__DO NOT PROCEED IF THE VALUES DO NOT MATCH OR IF THE PROGRAM CANNOT RECOGNIZE THE CHIP (AFTER 2-3 TRIES).__
@@ -88,7 +87,7 @@ FROM THIS POINT ONWARDS, YOU WILL ERASE THE CHIP AND REFLASH WITH NEW FIRMWARE. 
    * 5 o'clock = max gain in opposite direction
 5. the RX AUX control the master gain (linearly). you can set it with 2P switch (MIN/MAX), 3P switch (MIN/MID/MAX) or KNOB on the TX. RX pulse width 1100us == MIN GAIN and 1900us == MAX GAIN (linearly)
 6. the stick position also controls the gain to reduce the stabilizer from over correcting your controls during manoeuvres.
-   * center position = max gain
+   * neutral position = max gain
    * extreme position = zero gain
    * in between = linear between max and zero.
 
@@ -98,10 +97,11 @@ FROM THIS POINT ONWARDS, YOU WILL ERASE THE CHIP AND REFLASH WITH NEW FIRMWARE. 
 ##FIGHTSTAB FEATURES
 * AUX master gain. RX aux channel controls the master gain linearly (1100us-1900us PWM)
 * VRs controls both servo gain and direction. pot position at 12 oclock = zero gain, 7 oclock / 5 oclock = max gain in opposite directions.
-* stick proportional master gain. channel gain reduces as stick position goes away from center position, which prevents the stabilizer from overcorrecting or "fighting" the control stick during manoeuvres.
+* stick proportional master gain. channel gain reduces as stick position goes away from center position, which prevents the stabilizer from overcorrecting or "fighting" the control stick during manoeuvres. about the the "neutral" position. if you applied any elevator trim, then the ppm will not be at 1500us (middle of 1100 and 1900) on neutral stick. on every power up, the rx3s will calibrate by reading the ppm positions assuming sticks are neutral (it will also check that they are still). thus stick deviation is taken from the measured neutral position rather than assuming 1500us. the result is slightly more symmetrical behaviour.
 * support DELTA wing and VTAIL modes.
 * oscillation detection (NOT DONE YET). detects oscillation with no stick input and reduces channel gain if needed.
 * stick controlled rotation "fly by wire" (NOT DONE YET). stick controls the stabilizer PID input so it will try to rotate at the commanded rate (instead of simple stabilization, which tries to correct any detected rate of rotation to zero). 
 * looking for other suggestions, please send message.
+*
 
 
