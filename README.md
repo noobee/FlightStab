@@ -6,7 +6,7 @@ Flight Stabilizer Firmware for RX3S (V1, V2 later) and Arduino-based microcontro
 ##DEVICE SUPPORT
 * NANO_MPU6050 (my development platform: Arduino Nano 328p 5V 16Mhz and MPU6050 sensor)
 * RX3S V1 (http://www.hobbyking.com/hobbyking/store/uh_viewitem.asp?idproduct=25448)
-* RX3S V2 (not yet supported) (http://www.hobbyking.com/hobbyking/store/uh_viewitem.asp?idproduct=28456)
+* RX3S V2 (http://www.hobbyking.com/hobbyking/store/uh_viewitem.asp?idproduct=28456)
  
 ##SETUP TO BUILD RX3S FIRMWARE (Optional, can use precompiled hex file)
 1. install arduino v1.0x (http://arduino.cc/en/Main/Software)
@@ -72,7 +72,7 @@ C:\users\<user>\My Documents\Arduino\Libraries\ITG3200
 FROM THIS POINT ONWARDS, YOU WILL ERASE THE CHIP AND REFLASH WITH NEW FIRMWARE. THERE IS NO WAY TO RESTORE THE ORIGINAL FIRMWARE.
 
 8. select `Chip Erase`. the program will erase the chip and reset the lock bits.
-9. select `Read All` again, this time the lock fuse should lock=0xff.
+9. select `Read All` again, this time the lock fuse should read lock=0xff.
 10. open the generated hex file `FlightStab.cpp.hex`
 11. select `Write` from the menu bar then `Flash`. the program will write the updated firmware to the flash. sometimes it will fail to recognize the chip ID. try again 2-3 times and it would usually succeed.
 12. disconnect the ISP connector from the RX3S.
@@ -94,7 +94,6 @@ FROM THIS POINT ONWARDS, YOU WILL ERASE THE CHIP AND REFLASH WITH NEW FIRMWARE. 
 
 ##OTHER NOTES
 * the FlightStabGUI is still incomplete and is likely to be supported by ATmega328-based devices (instead of the ATmega168-based ones) in the future.
-* RX3S V2 support NOT DONE YET, but will be next.
 
 ##FIGHTSTAB FEATURES
 * AUX master gain. RX aux channel controls the master gain linearly (1100us-1900us PWM)
