@@ -6,7 +6,7 @@
 
 //#define RX3S_V1
 #define RX3S_V2
-#define NANO_MPU6050
+//#define NANO_MPU6050
 //#define USE_SERIAL
 
 //#define USE_I2CDEVLIB
@@ -233,23 +233,26 @@ ISR(TIMER1_OVF_vect)
 uint32_t micros1()
 {
   uint16_t th, tl;
-  uint32_t to;
+  uint8_t to;
 #if 0
   // interrupt-disable version
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    th = timer1_high;
     tl = TCNT1;
+    th = timer1_high;
+    to = timer1_ovf;
   }
 #else
-  // lock-free version
+  // lock-free version. read twice, ensure low order counter did not overflow and 
+  // high order bits remain unchanged
   while (1) {
-    th = timer1_high;
     tl = TCNT1;
-    if (th == timer1_high && !((tl ^ TCNT1) & 0x8000))
+    th = timer1_high;
+    to = timer1_ovf;
+    if (!((tl ^ TCNT1) & 0x8000) && th == timer1_high && to == timer1_ovf)
       break;    
   }  
 #endif
-  return ((uint32_t)timer1_ovf << 31 | (uint32_t)th << 15) | (tl >> 1);
+  return ((uint32_t)to << 31 | (uint32_t)th << 15) | (tl >> 1);
 }
 
 void delay1(uint32_t ms)
@@ -546,7 +549,7 @@ void read_switches()
 int8_t rx_portb_ref;
 volatile int8_t rx_portb_sync; // true if rx_portb_ref pulse has occurred
 
-#if defined(CPPM_PIN)
+#if defined(CPPM_PIN) // DO NOT USE AT THIS TIME
 volatile int16_t *rx_chan[] = {&rud_in, &ele_in, NULL, &ail_in, &aux_in, &ailr_in, NULL, NULL}; // open9x RETA1a
 
 ISR(PCINT0_vect)
@@ -865,13 +868,14 @@ void init_imu() {
 #endif
 
 #if defined(USE_I2CLIGHT)
-  i2c_init(true, 100000L);
 #if defined(USE_MPU6050)
+  i2c_init(true, 100000L);
   if (!mpu6050_init()) {
     set_led_msg(2, 5, LED_SHORT);
     terminal_led(); // does not return
   }
 #elif defined(USE_ITG3200)
+  i2c_init(true, 400000L);
   if (!itg3205_init()) {
     set_led_msg(2, 5, LED_SHORT);
     terminal_led(); // does not return
