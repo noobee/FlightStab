@@ -680,9 +680,10 @@ void init_digital_in_rx()
       PCMSK0 |= 1 << (PCINT0 + i);
       pinMode(8 + i, INPUT);
       digitalWrite(8 + i, HIGH);
-      rx_portb_ref = i; // will save the last known rx chan for servo sync, should not remap it to output
     }
   }
+  rx_portb_ref = 1; // use ELE_IN as ref channel. both V1/V2 use it in all mix modes.
+
   // PORTD RX
   PCICR |= (1 << PCIE2);
   for (int8_t i=0; i<8; i++) {
