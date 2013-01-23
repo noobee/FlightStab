@@ -1,11 +1,10 @@
-
 #include <avr/eeprom.h>
 #include <util/atomic.h>
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
-#define RX3S_V1
-//#define RX3S_V2
+//#define RX3S_V1
+#define RX3S_V2
 //#define NANO_MPU6050
 //#define USE_SERIAL
 
@@ -217,6 +216,8 @@ enum AIL_MODE ail_mode;
 #define STICK_GAIN_MAX 400
 #define MASTER_GAIN_MAX 800
 
+#define F_CPU_8MHZ 8000000UL
+
 /***************************************************************************************************************
  * TIMER1 and MISC
  ***************************************************************************************************************/
@@ -237,7 +238,7 @@ uint32_t micros1()
 #if 0
   // interrupt-disable version
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    tl = TCNT1;
+    tl = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
     th = timer1_high;
     to = timer1_ovf;
   }
@@ -245,14 +246,18 @@ uint32_t micros1()
   // lock-free version. read twice, ensure low order counter did not overflow and 
   // high order bits remain unchanged
   while (1) {
-    tl = TCNT1;
+    tl = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
     th = timer1_high;
     to = timer1_ovf;
     if (!((tl ^ TCNT1) & 0x8000) && th == timer1_high && to == timer1_ovf)
       break;    
   }  
 #endif
-  return ((uint32_t)to << 31 | (uint32_t)th << 15) | (tl >> 1);
+#if F_CPU == F_CPU_8MHZ
+  return ((uint32_t)th << 16) | tl;
+#else
+  return ((uint32_t)to << 31) | ((uint32_t)th << 15) | (tl >> 1);
+#endif
 }
 
 void delay1(uint32_t ms)
@@ -604,7 +609,7 @@ ISR(PCINT0_vect)
   uint16_t now;
   uint8_t pin, last_pin2, diff, rise;
 
-  now = TCNT1; // in 0.5us units
+  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
   last_pin2 = last_pin;
   pin = PINB;
   last_pin = pin;
@@ -618,7 +623,7 @@ ISR(PCINT0_vect)
       if (rise & (1 << i)) {
         rise_time[i] = now;
       } else {
-        uint16_t width = (now - rise_time[i]) >> 1;
+        uint16_t width = (now - rise_time[i]) >> (F_CPU == F_CPU_8MHZ ? 0 : 1);
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portb[i] = width;
           if (i == rx_portb_ref)
@@ -639,7 +644,7 @@ ISR(PCINT2_vect)
   uint16_t now;
   uint8_t pin, last_pin2, diff, rise;
 
-  now = TCNT1; // in 0.5us units
+  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
   last_pin2 = last_pin;
   pin = PIND;
   last_pin = pin;
@@ -653,7 +658,7 @@ ISR(PCINT2_vect)
       if (rise & (1 << i)) {
         rise_time[i] = now;
       } else {
-        uint16_t width = (now - rise_time[i]) >> 1;
+        uint16_t width = (now - rise_time[i]) >> (F_CPU == F_CPU_8MHZ ? 0 : 1);
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portd[i] = width;
         }
@@ -715,7 +720,7 @@ ISR(TIMER1_COMPA_vect)
   if (rise_ch >= 0) {
     tcnt1 = TCNT1;
     digitalWrite(pwm_out_pin[rise_ch], HIGH);
-    wait = (*pwm_out_var[rise_ch] - 2 << 1);
+    wait = (*pwm_out_var[rise_ch] - 2) << (F_CPU == F_CPU_8MHZ ? 0 : 1);
     fall_ch = rise_ch;
     if (!pwm_out_var[++rise_ch]) {
       rise_ch = -1;
@@ -1297,6 +1302,76 @@ void serial_rx()
 #endif
 
 /***************************************************************************************************************
+ * RX IN - MIXER - SERVO OUT
+ ***************************************************************************************************************/
+
+void copy_rx_in()
+{
+  // lock-free method to copy isr-owned *_in vars to *_in2 vars.
+  int16_t tmp;
+  ail_in2 = (tmp = ail_in) == ail_in ? tmp : ail_in2;
+  ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
+  ele_in2 = (tmp = ele_in) == ele_in ? tmp : ele_in2;
+  rud_in2 = (tmp = rud_in) == rud_in ? tmp : rud_in2;
+  aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
+  
+  if (ail_mode == AIL_SINGLE)
+    ailr_in2 = ail_in2;
+}
+
+void apply_mixer() 
+{
+  // *_in2 => [correction] => *_out2
+  
+  // mixer
+  int16_t tmp0, tmp1, tmp2;
+  switch (mix_mode) {
+  case MIX_NORMAL:
+    ail_out2 = ail_in2 + output[0];
+    ailr_out2 = ailr_in2 + output[0];
+    ele_out2 = ele_in2 + output[1];
+    rud_out2 = rud_in2 + output[2];
+    break;
+  case MIX_DELTA:
+    tmp0 =  ail_in2 + output[0];
+    tmp1 =  ele_in2 + output[1];
+    ail_out2 = (tmp0 + tmp1) >> 1;
+    ele_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
+    rud_out2 = rud_in2 + output[2];
+    break;
+  case MIX_VTAIL:
+    ail_out2 = ail_in2 + output[0];
+    ailr_out2 = ailr_in2 + output[0];
+    tmp1 =  ele_in2 + output[1];
+    tmp2 =  rud_in2 + output[2];
+    ele_out2 = (tmp2 + tmp1) >> 1;
+    rud_out2 = ((tmp2 - tmp1) >> 1) + RX_WIDTH_MID;
+    break;
+  }
+
+  // clamp output
+  ail_out2 = constrain(ail_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
+  ailr_out2 = constrain(ailr_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
+  ele_out2 = constrain(ele_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
+  rud_out2 = constrain(rud_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
+}
+
+void start_servo_frame()
+{
+  servo_busy = true;
+  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
+    ail_out = ail_out2;
+    ailr_out = ailr_out2;
+    ele_out = ele_out2;
+    rud_out = rud_out2;
+    
+    TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
+    TIFR1 |= (1 << OCF1A); // clear any pending interrupt
+    OCR1A = TCNT1 + 4; // force interrupt condition
+  } // reenable global interrupts
+}
+
+/***************************************************************************************************************
  * DUMP SENSORS
  ***************************************************************************************************************/
 
@@ -1379,83 +1454,21 @@ void dump_sensors()
 }
 
 /***************************************************************************************************************
- * RX IN - MIXER - SERVO OUT
- ***************************************************************************************************************/
-
-void copy_rx_in()
-{
-  // lock-free method to copy isr-owned *_in vars to *_in2 vars.
-  int16_t tmp;
-  ail_in2 = (tmp = ail_in) == ail_in ? tmp : ail_in2;
-  ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
-  ele_in2 = (tmp = ele_in) == ele_in ? tmp : ele_in2;
-  rud_in2 = (tmp = rud_in) == rud_in ? tmp : rud_in2;
-  aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
-  
-  if (ail_mode == AIL_SINGLE)
-    ailr_in2 = ail_in2;
-}
-
-void apply_mixer() 
-{
-  // *_in2 => [correction] => *_out2
-  
-  // mixer
-  int16_t tmp0, tmp1, tmp2;
-  switch (mix_mode) {
-  case MIX_NORMAL:
-    ail_out2 = ail_in2 + output[0];
-    ailr_out2 = ailr_in2 + output[0];
-    ele_out2 = ele_in2 + output[1];
-    rud_out2 = rud_in2 + output[2];
-    break;
-  case MIX_DELTA:
-    tmp0 =  ail_in2 + output[0];
-    tmp1 =  ele_in2 + output[1];
-    ail_out2 = (tmp0 + tmp1) >> 1;
-    ele_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
-    rud_out2 = rud_in2 + output[2];
-    break;
-  case MIX_VTAIL:
-    ail_out2 = ail_in2 + output[0];
-    ailr_out2 = ailr_in2 + output[0];
-    tmp1 =  ele_in2 + output[1];
-    tmp2 =  rud_in2 + output[2];
-    ele_out2 = (tmp2 + tmp1) >> 1;
-    rud_out2 = ((tmp2 - tmp1) >> 1) + RX_WIDTH_MID;
-    break;
-  }
-
-  // clamp output
-  ail_out2 = constrain(ail_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-  ailr_out2 = constrain(ailr_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-  ele_out2 = constrain(ele_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-  rud_out2 = constrain(rud_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-}
-
-void start_servo_frame()
-{
-  servo_busy = true;
-  ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-    ail_out = ail_out2;
-    ailr_out = ailr_out2;
-    ele_out = ele_out2;
-    rud_out = rud_out2;
-    
-    TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
-    TIFR1 |= (1 << OCF1A); // clear any pending interrupt
-    OCR1A = TCNT1 + 4; // force interrupt condition
-  } // reenable global interrupts
-}
-
-/***************************************************************************************************************
  * SETUP
  ***************************************************************************************************************/
 
 void setup() 
 {
   int8_t i;
-  
+
+#if F_CPU == F_CPU_8MHZ
+  uint8_t saveSREG = SREG;
+  cli();
+  CLKPR = (1 << CLKPCE);
+  CLKPR = (1 << CLKPS0);
+  SREG = saveSREG;
+#endif
+
 #if defined(USE_SERIAL)
   Serial.begin(115200);
 #endif
@@ -1464,7 +1477,7 @@ void setup()
 
   // init TIMER1
   TCCR1A = 0; // normal counting mode
-  TCCR1B = (1 << CS11); // clkio/8 = 2MHz
+  TCCR1B = (1 << CS11); // clkio/8
   TIMSK1 = (1 << TOIE1); // enable overflow interrupt
 //  TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
 
