@@ -6,7 +6,7 @@
 //#define RX3S_V1
 #define RX3S_V2
 //#define NANO_MPU6050
-//#define USE_SERIAL
+#define USE_SERIAL
 
 //#define USE_I2CDEVLIB
 #define USE_I2CLIGHT
@@ -14,6 +14,9 @@
 #if defined(USE_I2CDEVLIB) && defined(USE_I2CLIGHT)
 #error Cannot define both USE_I2CDEVLIB and USE_I2CLIGHT
 #endif
+
+#define F_8MHZ 8000000UL
+#define F_16MHZ 16000000UL
 
 /* RX3S_V1 ************************************************************************************************/
 #if defined(RX3S_V1)
@@ -59,6 +62,8 @@
 
 #define USE_ITG3200
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
+
+#define F_XTAL F_16MHZ // external crystal oscillator frequency
 
 #endif 
 /* RX3S_V1 ************************************************************************************************/
@@ -109,6 +114,8 @@
 
 #define USE_ITG3200
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
+
+#define F_XTAL F_16MHZ // external crystal oscillator frequency
 
 #endif
 /* RX3S_V2 ************************************************************************************************/
@@ -213,10 +220,14 @@ enum AIL_MODE {AIL_SINGLE, AIL_DUAL};
 enum AIL_MODE ail_mode;
 
 #define VR_GAIN_MAX (-128)
-#define STICK_GAIN_MAX 400
-#define MASTER_GAIN_MAX 800
+#define STICK_GAIN_MAX 400 // 1900-1500 or 1500-1100 
+#define MASTER_GAIN_MAX 800 // 1900-1100
 
-#define F_CPU_8MHZ 8000000UL
+#if !((F_XTAL == F_16MHZ && F_CPU == F_16MHZ) || \
+      (F_XTAL == F_16MHZ && F_CPU == F_8MHZ) || \
+      (F_XTAL == F_8MHZ && F_CPU == F_8MHZ))
+#error (F_XTAL,F_CPU) must be (16MHz,16MHz), (16MHz,8MHz) or (8MHz,8MHz)
+#endif
 
 /***************************************************************************************************************
  * TIMER1 and MISC
@@ -253,10 +264,10 @@ uint32_t micros1()
       break;    
   }  
 #endif
-#if F_CPU == F_CPU_8MHZ
-  return ((uint32_t)th << 16) | tl;
-#else
+#if F_CPU == F_16MHZ
   return ((uint32_t)to << 31) | ((uint32_t)th << 15) | (tl >> 1);
+#else
+  return ((uint32_t)th << 16) | tl;
 #endif
 }
 
@@ -578,7 +589,7 @@ ISR(PCINT0_vect)
   uint16_t now;
   uint8_t pinb, rise;
 
-  now = TCNT1; // in 0.5us units
+  now = TCNT1;
   pinb = PINB;
   sei();
   rise = pinb & ~last_pinb;
@@ -586,7 +597,7 @@ ISR(PCINT0_vect)
 
   // cppm on arduino CPPM_PIN (in PORT B) 
   if (rise & (1 << (CPPM_PIN - 8))) {
-    uint16_t width = (now - last_time) >> 1;
+    uint16_t width = (now - last_time) >> (F_CPU == F_16MHZ ? 1 : 0);
     last_time = now;
     if (width > 5000 || ch > 7) {
       ch = 0;
@@ -623,7 +634,7 @@ ISR(PCINT0_vect)
       if (rise & (1 << i)) {
         rise_time[i] = now;
       } else {
-        uint16_t width = (now - rise_time[i]) >> (F_CPU == F_CPU_8MHZ ? 0 : 1);
+        uint16_t width = (now - rise_time[i]) >> (F_CPU == F_16MHZ ? 1 : 0);
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portb[i] = width;
           if (i == rx_portb_ref)
@@ -658,7 +669,7 @@ ISR(PCINT2_vect)
       if (rise & (1 << i)) {
         rise_time[i] = now;
       } else {
-        uint16_t width = (now - rise_time[i]) >> (F_CPU == F_CPU_8MHZ ? 0 : 1);
+        uint16_t width = (now - rise_time[i]) >> (F_CPU == F_16MHZ ? 1 : 0);
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portd[i] = width;
         }
@@ -720,7 +731,7 @@ ISR(TIMER1_COMPA_vect)
   if (rise_ch >= 0) {
     tcnt1 = TCNT1;
     digitalWrite(pwm_out_pin[rise_ch], HIGH);
-    wait = (*pwm_out_var[rise_ch] - 2) << (F_CPU == F_CPU_8MHZ ? 0 : 1);
+    wait = (*pwm_out_var[rise_ch] - 2) << (F_CPU == F_16MHZ ? 1 : 0);
     fall_ch = rise_ch;
     if (!pwm_out_var[++rise_ch]) {
       rise_ch = -1;
@@ -1461,7 +1472,8 @@ void setup()
 {
   int8_t i;
 
-#if F_CPU == F_CPU_8MHZ
+  // set clock prescaler to /2 when (F_XTAL, F_CPU) = (16M, 8M) 
+#if F_XTAL == F_16MHZ && F_CPU == F_8MHZ
   uint8_t saveSREG = SREG;
   cli();
   CLKPR = (1 << CLKPCE);
@@ -1586,7 +1598,7 @@ void setup()
 #endif
 
   // low sram check
-  if (freeRam() < 200)
+  if (freeRam() < 128)
     set_led_msg(3, 40, LED_VERY_SHORT); 
 
   loop(); // invoke loop, which never returns
