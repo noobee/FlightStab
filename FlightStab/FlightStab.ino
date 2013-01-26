@@ -660,25 +660,27 @@ ISR(PCINT0_vect)
   diff = last_pin ^ last_pin2;
   rise = last_pin & ~last_pin2;
 
-  if (diff & 1 << AIL_PORT_BIT)	// Roll
+  if (diff & (1 << AIL_PORT_BIT))	// Roll
   {
-    if (rise & 1 << AIL_PORT_BIT)	// Rising
+    if (rise & (1 << AIL_PORT_BIT))	// Rising
     {
 	ail_rise = now;
     }
     else
     {
       width = (now - ail_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
-      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) 
+      {
         ail_in = width;
-      if (rx_portb_ref == AIL_PORT_BIT)
-        rx_portb_sync = true;	
-     }
+        if (rx_portb_ref == AIL_PORT_BIT)
+          rx_portb_sync = true;
+      }	
+    }
   }
   
-  if (diff & 1 << ELE_PORT_BIT)	// Pitch
+  if (diff & (1 << ELE_PORT_BIT))	// Pitch
   {
-    if (rise & 1 << ELE_PORT_BIT)	// Rising
+    if (rise & (1 << ELE_PORT_BIT))	// Rising
     {
 	elev_rise = now;
     }
@@ -686,15 +688,35 @@ ISR(PCINT0_vect)
     {
       width = (now - elev_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
       if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
+      {
         ele_in = width;
-      if (rx_portb_ref == ELE_PORT_BIT)
-        rx_portb_sync = true;	
-     }
+        if (rx_portb_ref == ELE_PORT_BIT)
+          rx_portb_sync = true;
+      }	
+    }
   }
 
-  if (diff & 1 << AUX_PORT_BIT)	// AUX
+  if (diff & (1 << RUD_PORT_BIT))	// Yaw
   {
-    if (rise & 1 << AUX_PORT_BIT)	// Rising
+    if (rise & (1 << RUD_PORT_BIT))	// Rising
+    {
+	rud_rise = now;
+    }
+    else
+    {
+      width = (now - rud_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
+      {
+        rud_in = width;
+        if (rx_portb_ref == RUD_PORT_BIT)
+          rx_portb_sync = true;
+      }	
+    }
+  }
+
+  if (diff & (1 << AUX_PORT_BIT))	// AUX
+  {
+    if (rise & (1 << AUX_PORT_BIT))	// Rising
     {
 	aux_rise = now;
     }
@@ -702,27 +724,14 @@ ISR(PCINT0_vect)
     {
       width = (now - aux_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
       if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
+      {
         aux_in = width;
-      if (rx_portb_ref == AUX_PORT_BIT)
-        rx_portb_sync = true;	
-     }
+        if (rx_portb_ref == AUX_PORT_BIT)
+          rx_portb_sync = true;
+      }	
+    }
   }  
 
-  if (diff & 1 << RUD_PORT_BIT)	// Yaw
-  {
-    if (rise & 1 << ELE_PORT_BIT)	// Rising
-    {
-	rud_rise = now;
-    }
-    else
-    {
-      uint16_t width = (now - rud_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
-      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
-        rud_in = width;
-      if (rx_portb_ref == RUD_PORT_BIT)
-        rx_portb_sync = true;	
-     }
-  }
   LED_TIMING_STOP;
 }
 
