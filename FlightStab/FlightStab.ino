@@ -237,6 +237,15 @@ enum AIL_MODE ail_mode;
 #error (F_XTAL,F_CPU) must be (16MHz,16MHz), (16MHz,8MHz) or (8MHz,8MHz)
 #endif
 
+#if defined(LED_TIMING)
+// PB5 = LED_PIN
+#define LED_TIMING_START do {bitSet(PORTB, 5);} while(0)
+#define LED_TIMING_STOP do {bitClear(PORTB, 5);} while(0)
+#else
+#define LED_TIMING_START
+#define LED_TIMING_STOP
+#endif
+
 /***************************************************************************************************************
  * TIMER1 and MISC
  ***************************************************************************************************************/
@@ -626,7 +635,6 @@ volatile int16_t *rx_portb[] = RX_PORTB;
 // contributed by JohnRB
 // this ISR uses a fixed map of (AIL, ELE, RUD, AUX)_IN_PINs assigned to PB(0,1,2,3)
 
-
 #define    AIL_PORT_BIT  0
 #define    ELE_PORT_BIT  1
 #define    RUD_PORT_BIT  2
@@ -643,10 +651,8 @@ ISR(PCINT0_vect)
   uint8_t last_pin2;   // temporary save for previous Port B value
   uint16_t width;      // work register to verify width
 
-#if defined(LED_TIMING)
-  bitSet(PORTB,5);
-#endif
-	
+  LED_TIMING_START;
+
   now = TCNT1;         
   last_pin2 = last_pin;  // save previous Port B value
   last_pin = PINB;
@@ -717,9 +723,7 @@ ISR(PCINT0_vect)
         rx_portb_sync = true;	
      }
   }
-#if defined(LED_TIMING)
-  bitClear(PORTB,5);
-#endif
+  LED_TIMING_STOP;
 }
 
 #else  // MOD_PCINT0
