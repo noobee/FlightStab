@@ -6,10 +6,18 @@
 //#define RX3S_V1
 #define RX3S_V2
 //#define NANO_MPU6050
-#define USE_SERIAL
+//#define USE_SERIAL
 
-//#define USE_I2CDEVLIB
-#define USE_I2CLIGHT
+#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2 and non DUAL_AIL
+#define LED_TIMING // disable LED_MSG and use LED_PIN to measure timings
+
+//#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
+#define USE_I2CLIGHT // poll-based i2c access routines
+
+// basic #define asserts
+#if defined (MOD_PCINT0) && !defined(RX3S_V2)
+#error MOD_PCINTO requires RX3S_V2 and (AIL, ELE, RUD, AUX)_IN_PINs assigned to PB(0,1,2,3)
+#endif
 
 #if defined(USE_I2CDEVLIB) && defined(USE_I2CLIGHT)
 #error Cannot define both USE_I2CDEVLIB and USE_I2CLIGHT
@@ -458,7 +466,9 @@ int16_t led_pulse_msec[4];
 
 void set_led(int8_t i)
 {
+#if !defined(LED_TIMING)
   digitalWrite(LED_PIN, i == LED_OFF ? LOW : i == LED_ON ? HIGH : digitalRead(LED_PIN) ^ 1);
+#endif
 }
 
 void set_led_msg(int8_t slot, int8_t pulse_count, int16_t pulse_msec) {
@@ -612,6 +622,108 @@ ISR(PCINT0_vect)
 
 volatile int16_t *rx_portb[] = RX_PORTB;
 
+#ifdef MOD_PCINT0
+// contributed by JohnRB
+// this ISR uses a fixed map of (AIL, ELE, RUD, AUX)_IN_PINs assigned to PB(0,1,2,3)
+
+
+#define    AIL_PORT_BIT  0
+#define    ELE_PORT_BIT  1
+#define    RUD_PORT_BIT  2
+#define    AUX_PORT_BIT  3
+  
+ISR(PCINT0_vect)
+{
+  static uint16_t ail_rise, elev_rise, rud_rise, aux_rise;
+  static uint8_t last_pin;
+
+  uint16_t now;        // current timer value
+  uint8_t rise;	       // rising edge pulses
+  uint8_t diff;        // portb changed bits     
+  uint8_t last_pin2;   // temporary save for previous Port B value
+  uint16_t width;      // work register to verify width
+
+#if defined(LED_TIMING)
+  bitSet(PORTB,5);
+#endif
+	
+  now = TCNT1;         
+  last_pin2 = last_pin;  // save previous Port B value
+  last_pin = PINB;
+	
+  diff = last_pin ^ last_pin2;
+  rise = last_pin & ~last_pin2;
+
+  if (diff & 1 << AIL_PORT_BIT)	// Roll
+  {
+    if (rise & 1 << AIL_PORT_BIT)	// Rising
+    {
+	ail_rise = now;
+    }
+    else
+    {
+      width = (now - ail_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
+        ail_in = width;
+      if (rx_portb_ref == AIL_PORT_BIT)
+        rx_portb_sync = true;	
+     }
+  }
+  
+  if (diff & 1 << ELE_PORT_BIT)	// Pitch
+  {
+    if (rise & 1 << ELE_PORT_BIT)	// Rising
+    {
+	elev_rise = now;
+    }
+    else
+    {
+      width = (now - elev_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
+        ele_in = width;
+      if (rx_portb_ref == ELE_PORT_BIT)
+        rx_portb_sync = true;	
+     }
+  }
+
+  if (diff & 1 << AUX_PORT_BIT)	// AUX
+  {
+    if (rise & 1 << AUX_PORT_BIT)	// Rising
+    {
+	aux_rise = now;
+    }
+    else
+    {
+      width = (now - aux_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
+        aux_in = width;
+      if (rx_portb_ref == AUX_PORT_BIT)
+        rx_portb_sync = true;	
+     }
+  }  
+
+  if (diff & 1 << RUD_PORT_BIT)	// Yaw
+  {
+    if (rise & 1 << ELE_PORT_BIT)	// Rising
+    {
+	rud_rise = now;
+    }
+    else
+    {
+      uint16_t width = (now - rud_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
+        rud_in = width;
+      if (rx_portb_ref == RUD_PORT_BIT)
+        rx_portb_sync = true;	
+     }
+  }
+#if defined(LED_TIMING)
+  bitClear(PORTB,5);
+#endif
+}
+
+#else  // MOD_PCINT0
+
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect)
 {
@@ -644,6 +756,7 @@ ISR(PCINT0_vect)
     }
   }
 }
+#endif
 
 volatile int16_t *rx_portd[] = RX_PORTD;
 
