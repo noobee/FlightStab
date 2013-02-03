@@ -1,24 +1,27 @@
+/* FlightStab **************************************************************************************************/
+
+#include <arduino.h>
 #include <avr/eeprom.h>
-#include <util/atomic.h>
+#include <util/atomic.h> // todo: deprecate
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
+/***************************************************************************************************************
+ * device definitions (todo: move to separate files)
+ ***************************************************************************************************************/
+
 //#define RX3S_V1
-#define RX3S_V2
+//#define RX3S_V2
 //#define NANO_MPU6050
 #define USE_SERIAL
 
 //#define USE_I2CDEVLIB
 #define USE_I2CLIGHT
 
-#if defined(USE_I2CDEVLIB) && defined(USE_I2CLIGHT)
-#error Cannot define both USE_I2CDEVLIB and USE_I2CLIGHT
-#endif
-
 #define F_8MHZ 8000000UL
 #define F_16MHZ 16000000UL
 
-/* RX3S_V1 ************************************************************************************************/
+/* RX3S_V1 *****************************************************************************************************/
 #if defined(RX3S_V1)
 /*
  OrangeRx Stabilizer RX3S V1
@@ -60,15 +63,17 @@
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
 
+// <IMU>
 #define USE_ITG3200
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 
+#warning RX3S_V1 // emit device name
 #endif 
-/* RX3S_V1 ************************************************************************************************/
+/* RX3S_V1 *****************************************************************************************************/
 
-/* RX3S_V2 ************************************************************************************************/
+/* RX3S_V2 *****************************************************************************************************/
 #if defined(RX3S_V2)
 /*
  OrangeRx Stabilizer RX3S V2
@@ -112,31 +117,53 @@
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
 
+// <IMU>
 #define USE_ITG3200
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 
+#warning RX3S_V2 // emit device name
 #endif
-/* RX3S_V2 ************************************************************************************************/
+/* RX3S_V2 *****************************************************************************************************/
 
-
+/* NANO_MPU6050 ************************************************************************************************/
 #if defined(NANO_MPU6050)
 #undef USE_ITG3200
 #define USE_MPU6050
 #define GYRO_ORIENTATION(x, y, z) {gRoll = -(x); gPitch = (y); gYaw = (z);}
+#warning NANO_MPU6050 // emit device name
+#endif
+/* NANO_MPU6050 ************************************************************************************************/
+
+
+// emit cpu frequency
+#if F_CPU == F_8MHZ
+#warning F_CPU == F_8MHZ
+#endif
+#if F_CPU == F_16MHZ
+#warning F_CPU == F_16MHZ
 #endif
 
+// verify single i2c lib defined
+#if defined(USE_I2CDEVLIB) && defined(USE_I2CLIGHT)
+#error Cannot define both USE_I2CDEVLIB and USE_I2CLIGHT
+#endif
+
+// verify single imu defined
 #if defined(USE_MPU6050) && defined(USE_ITG3200)
 #error Cannot define both USE_MPU6050 and USE_ITG3200
 #endif
 
-#if defined(USE_MPU6050)
+
+// i2cdevlib includes
+#if defined(USE_I2CDEVLIB) && defined(USE_MPU6050)
   #include "Wire.h"
   #include "I2Cdev.h"
   #include "MPU6050.h"
   MPU6050 accelgyro;
-#elif defined(USE_ITG3200)
+#endif
+#if defined(USE_I2CDEVLIB) && defined(USE_ITG3200)
   #include "Wire.h"
   #include "I2Cdev.h"
   #include "ITG3200.h"
