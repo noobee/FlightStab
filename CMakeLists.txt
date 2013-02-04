@@ -2,6 +2,13 @@
 #  FlightStab cmake                                                  #
 #====================================================================#
 
+# basic build instructions for windows
+# cd ./Builds
+# optional: rd /s .  (to wipe out all intermediate files)
+# cmake [-Dtoday=yyyymmdd] -G"MSYS Makefiles" ..  (cmake will use the 
+#   system date if -Dtoday is not specified)
+# make
+
 set(CMAKE_TOOLCHAIN_FILE cmake/ArduinoToolchain.cmake)
 cmake_minimum_required(VERSION 2.8)
 project(FlightStab C CXX)
@@ -21,12 +28,12 @@ macro(get_today today)
 endmacro(get_today)
 
 # build specific target
-macro(build_target target sketch board definitions)
+macro(add_arduino_firmware target sketch board defines)
 	set(${target}_SKETCH ${sketch})
 	set(${target}_BOARD ${board})
 	generate_arduino_firmware(${target})
-	set_target_properties(${target} PROPERTIES COMPILE_DEFINITIONS "${definitions}")
-endmacro(build_target)
+	set_target_properties(${target} PROPERTIES COMPILE_DEFINITIONS "${defines}")
+endmacro(add_arduino_firmware)
 
 #====================================================================#
 #  build all targets                                                 #
@@ -35,12 +42,17 @@ endmacro(build_target)
 print_board_list()
 print_programmer_list()
 
-get_today(today)
+# get system date if <today> is not specified in cmake command line (cmake -Dtoday=yyyymmdd .....)
+if (NOT today)
+  get_today(today)
+endif (NOT today)
 
-build_target(${today}_RX3S_V1 FlightStab pro5v "RX3S_V1")
-build_target(${today}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
-build_target(${today}_RX3S_V2 FlightStab pro5v "RX3S_V2")
-build_target(${today}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
+# defines = semicolon-separated list of key-value pairs "RX3S_V1;DEF=VAL;DEF2=VAL2"
+
+add_arduino_firmware(${today}_RX3S_V1 FlightStab pro5v "RX3S_V1")
+add_arduino_firmware(${today}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
+add_arduino_firmware(${today}_RX3S_V2 FlightStab pro5v "RX3S_V2")
+add_arduino_firmware(${today}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
 
 
 
