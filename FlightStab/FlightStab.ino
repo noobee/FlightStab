@@ -13,7 +13,7 @@
 //#define RX3S_V1
 //#define RX3S_V2
 //#define NANO_MPU6050
-#define USE_SERIAL
+//#define USE_SERIAL
 
 //#define USE_I2CDEVLIB
 #define USE_I2CLIGHT
@@ -1446,9 +1446,9 @@ void dump_sensors()
     start_next_adc(0);
 
     Serial.print("VR "); 
-    Serial.print(ail_vr2); Serial.print('\t');
-    Serial.print(ele_vr2); Serial.print('\t');
-    Serial.print(rud_vr2); Serial.print('\t');
+    Serial.print(ail_vr2, HEX); Serial.print(' ');
+    Serial.print(ele_vr2, HEX); Serial.print(' ');
+    Serial.print(rud_vr2, HEX); Serial.print('\t');
     
     read_switches();
     Serial.print("SW "); 
@@ -1479,10 +1479,10 @@ void dump_sensors()
 
     Serial.print("MISC "); 
     Serial.print(i2c_errors); Serial.print(' ');
-    Serial.print(servo_out); Serial.print(' ');
     Serial.print(mix_mode); Serial.print(' ');
     Serial.print(ail_mode); Serial.print(' ');
     Serial.print(freeRam()); Serial.print(' ');
+    Serial.print(servo_out); Serial.print(' ');
     Serial.println();
 
     set_led(LED_INVERT);
