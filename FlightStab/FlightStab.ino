@@ -16,7 +16,7 @@
 
 // basic #define asserts
 #if defined (MOD_PCINT0) && !defined(RX3S_V2)
-#error MOD_PCINTO requires RX3S_V2 and (AIL, ELE, RUD, AUX)_IN_PINs assigned to PB(0,1,2,3)
+#error MOD_PCINTO requires RX3S_V2 and (AIL, ELE, RUD, AUX/AILR)_IN_PINs assigned to PB(0,1,2,3)
 #endif
 
 #if defined(USE_I2CDEVLIB) && defined(USE_I2CLIGHT)
@@ -239,8 +239,8 @@ enum AIL_MODE ail_mode;
 
 #if defined(LED_TIMING)
 // PB5 = LED_PIN
-#define LED_TIMING_START do {bitSet(PORTB, 5);} while(0)
-#define LED_TIMING_STOP do {bitClear(PORTB, 5);} while(0)
+#define LED_TIMING_START do { PORTB |= (1 << 5); } while(0)
+#define LED_TIMING_STOP do { PORTB &= ~(1 << 5); } while(0)
 #else
 #define LED_TIMING_START
 #define LED_TIMING_STOP
@@ -633,12 +633,34 @@ volatile int16_t *rx_portb[] = RX_PORTB;
 
 #ifdef MOD_PCINT0
 // contributed by JohnRB
+//*********************************************************************************/
+//  Excessive delay in processing interrupts for port B bit changes causes        */
+//  inaccurate pulse width measurements which may result in jitter seen/heard on  */
+//  the attached servos.                                                          */
+//                                                                                */
+//  This version of the interrupt handler was an attempt to get the fastest       */
+//  possible execution time with the minimal use of stack space.  This ISR does   */
+//  not enable interrupts again until it completes (about 6.35us at 16MHz).	      */
+//                                                                                */
+//  The downside of using this option is increased use of Flash memory (about 150 */
+//  bytes).	                                                                      */
+//	                                                                              */
+//  The original ISR is reentrant and runs disabled for about 1.6us less than this*/
+//  version but takes about 23.5us to complete (at 16MHz).  The original is also  */
+//  reentrant and each new invocation requires an additonal 25 bytes of stack     */
+//  space.	                                                                      */
+//	                                                                              */
+//  Bottom Line - If stack space becomes critical and/or processor is starting to */
+//  get overloaded, use this replacement ISR, otherwise just stick with the       */
+//  original ISR.	                                                                */
+//*********************************************************************************/
+// 
 // this ISR uses a fixed map of (AIL, ELE, RUD, AUX)_IN_PINs assigned to PB(0,1,2,3)
 
 #define    AIL_PORT_BIT  0
 #define    ELE_PORT_BIT  1
 #define    RUD_PORT_BIT  2
-#define    AUX_PORT_BIT  3
+#define    AUX_PORT_BIT  3	// Also AILR_PORT_BIT in DUAL AILERON mode
   
 ISR(PCINT0_vect)
 {
@@ -651,88 +673,101 @@ ISR(PCINT0_vect)
   uint8_t last_pin2;   // temporary save for previous Port B value
   uint16_t width;      // work register to verify width
 
-  LED_TIMING_START;
-
   now = TCNT1;         
   last_pin2 = last_pin;  // save previous Port B value
   last_pin = PINB;
-	
-  diff = last_pin ^ last_pin2;
-  rise = last_pin & ~last_pin2;
 
-  if (diff & (1 << AIL_PORT_BIT))	// Roll
+  diff = last_pin ^ last_pin2;	// pins that just changed state
+  rise = last_pin & ~last_pin2;	// oins that just went positive (start of pulse)
+
+  if (diff & (1 << AIL_PORT_BIT))	// Roll - Aileron bit change?
   {
-    if (rise & (1 << AIL_PORT_BIT))	// Rising
+    if (rise & (1 << AIL_PORT_BIT))	// Start timeing if leading edge
     {
-	ail_rise = now;
+      ail_rise = now;
     }
     else
     {
+      // Must be falling edge, calculate width and discard if out of range
       width = (now - ail_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
       if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) 
       {
         ail_in = width;
+        // If this is the reference port, indicate sync
         if (rx_portb_ref == AIL_PORT_BIT)
           rx_portb_sync = true;
       }	
     }
   }
   
-  if (diff & (1 << ELE_PORT_BIT))	// Pitch
+  if (diff & (1 << ELE_PORT_BIT))	// Pitch - Elevator bit change?
   {
-    if (rise & (1 << ELE_PORT_BIT))	// Rising
+    if (rise & (1 << ELE_PORT_BIT))	// Start timeing if leading edge
     {
-	elev_rise = now;
+      elev_rise = now;
     }
     else
     {
+      // Must be falling edge, calculate width and discard if out of range
       width = (now - elev_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
       if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
       {
         ele_in = width;
+        // If this is the reference port, indicate sync
         if (rx_portb_ref == ELE_PORT_BIT)
           rx_portb_sync = true;
       }	
     }
   }
 
-  if (diff & (1 << RUD_PORT_BIT))	// Yaw
+  if (diff & (1 << RUD_PORT_BIT))	// Yaw - Rudder bit change?
   {
-    if (rise & (1 << RUD_PORT_BIT))	// Rising
+    if (rise & (1 << RUD_PORT_BIT))	// Start timeing if leading edge
     {
-	rud_rise = now;
+      rud_rise = now;
     }
     else
     {
+      // Must be falling edge, calculate width and discard if out of range
       width = (now - rud_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
       if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
       {
         rud_in = width;
+        // If this is the reference port, indicate sync
         if (rx_portb_ref == RUD_PORT_BIT)
           rx_portb_sync = true;
       }	
     }
   }
 
-  if (diff & (1 << AUX_PORT_BIT))	// AUX
+  if (diff & (1 << AUX_PORT_BIT))	// AUX or AILR bit change?
   {
-    if (rise & (1 << AUX_PORT_BIT))	// Rising
+    if (rise & (1 << AUX_PORT_BIT))	// Start timeing if leading edge
     {
-	aux_rise = now;
+      aux_rise = now;
     }
     else
     {
+      // Must be falling edge, calculate width and discard if out of range
       width = (now - aux_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
       if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
       {
-        aux_in = width;
+        // In DUAL AILERON mode ailr_in replaces aux_in
+        // (no gain control in DUAL AILERON mode) 
+        if (ail_mode == AIL_DUAL)
+        {	
+          ailr_in = width;
+        }	
+        else
+        {	
+          aux_in = width;
+        }
+        // If this is the reference port, indicate sync
         if (rx_portb_ref == AUX_PORT_BIT)
           rx_portb_sync = true;
       }	
     }
   }  
-
-  LED_TIMING_STOP;
 }
 
 #else  // MOD_PCINT0
