@@ -6,18 +6,13 @@
 //#define RX3S_V1
 #define RX3S_V2
 //#define NANO_MPU6050
-//#define USE_SERIAL
 
-#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2 and non DUAL_AIL
-#define LED_TIMING // disable LED_MSG and use LED_PIN to measure timings
+
+//#define USE_SERIAL // enable serial port
+//#define LED_TIMING // disable LED_MSG and use LED_PIN to measure timings
 
 //#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 #define USE_I2CLIGHT // poll-based i2c access routines
-
-// basic #define asserts
-#if defined (MOD_PCINT0) && !defined(RX3S_V2)
-#error MOD_PCINTO requires RX3S_V2 and (AIL, ELE, RUD, AUX/AILR)_IN_PINs assigned to PB(0,1,2,3)
-#endif
 
 #if defined(USE_I2CDEVLIB) && defined(USE_I2CLIGHT)
 #error Cannot define both USE_I2CDEVLIB and USE_I2CLIGHT
@@ -124,6 +119,8 @@
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
+
+//#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2
 
 #endif
 /* RX3S_V2 ************************************************************************************************/
@@ -661,7 +658,21 @@ volatile int16_t *rx_portb[] = RX_PORTB;
 #define    ELE_PORT_BIT  1
 #define    RUD_PORT_BIT  2
 #define    AUX_PORT_BIT  3	// Also AILR_PORT_BIT in DUAL AILERON mode
-  
+
+#define CHECK_CHANNEL(PORT_BIT, RISE_VAR, PORT_VAR) \\
+  if (diff & (1 << PORT_BIT))	{ \\
+    if (rise & (1 << PORT_BIT)) { \\
+      RISE_VAR = now; \\
+    } else { \\
+      width = (now - RISE_VAR) >> (F_CPU == F_16MHZ ? 1 : 0); \\
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) { \\
+        PORT_VAR = width; \\
+        if (rx_portb_ref == PORT_BIT) \\
+          rx_portb_sync = true; \\
+      } \\
+    } \\
+  }
+
 ISR(PCINT0_vect)
 {
   static uint16_t ail_rise, elev_rise, rud_rise, aux_rise;
@@ -678,96 +689,16 @@ ISR(PCINT0_vect)
   last_pin = PINB;
 
   diff = last_pin ^ last_pin2;	// pins that just changed state
-  rise = last_pin & ~last_pin2;	// oins that just went positive (start of pulse)
+  rise = last_pin & ~last_pin2;	// pins that just went positive (start of pulse)
 
-  if (diff & (1 << AIL_PORT_BIT))	// Roll - Aileron bit change?
-  {
-    if (rise & (1 << AIL_PORT_BIT))	// Start timeing if leading edge
-    {
-      ail_rise = now;
-    }
-    else
-    {
-      // Must be falling edge, calculate width and discard if out of range
-      width = (now - ail_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
-      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) 
-      {
-        ail_in = width;
-        // If this is the reference port, indicate sync
-        if (rx_portb_ref == AIL_PORT_BIT)
-          rx_portb_sync = true;
-      }	
-    }
+  CHECK_CHANNEL(AIL_PORT_BIT, ail_rise, ail_in);
+  CHECK_CHANNEL(ELE_PORT_BIT, ele_rise, ele_in);
+  CHECK_CHANNEL(RUD_PORT_BIT, rud_rise, rud_in);
+  if (ail_mode == AIL_DUAL && ail_sw) {
+    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, ailr_in); // dual aileron mode A
+  } else {
+    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, aux_in); // all other modes 
   }
-  
-  if (diff & (1 << ELE_PORT_BIT))	// Pitch - Elevator bit change?
-  {
-    if (rise & (1 << ELE_PORT_BIT))	// Start timeing if leading edge
-    {
-      elev_rise = now;
-    }
-    else
-    {
-      // Must be falling edge, calculate width and discard if out of range
-      width = (now - elev_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
-      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
-      {
-        ele_in = width;
-        // If this is the reference port, indicate sync
-        if (rx_portb_ref == ELE_PORT_BIT)
-          rx_portb_sync = true;
-      }	
-    }
-  }
-
-  if (diff & (1 << RUD_PORT_BIT))	// Yaw - Rudder bit change?
-  {
-    if (rise & (1 << RUD_PORT_BIT))	// Start timeing if leading edge
-    {
-      rud_rise = now;
-    }
-    else
-    {
-      // Must be falling edge, calculate width and discard if out of range
-      width = (now - rud_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
-      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
-      {
-        rud_in = width;
-        // If this is the reference port, indicate sync
-        if (rx_portb_ref == RUD_PORT_BIT)
-          rx_portb_sync = true;
-      }	
-    }
-  }
-
-  if (diff & (1 << AUX_PORT_BIT))	// AUX or AILR bit change?
-  {
-    if (rise & (1 << AUX_PORT_BIT))	// Start timeing if leading edge
-    {
-      aux_rise = now;
-    }
-    else
-    {
-      // Must be falling edge, calculate width and discard if out of range
-      width = (now - aux_rise) >> (F_CPU == F_16MHZ ? 1 : 0); // Falling
-      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX)
-      {
-        // In DUAL AILERON mode ailr_in replaces aux_in
-        // (no gain control in DUAL AILERON mode) 
-        if (ail_mode == AIL_DUAL)
-        {	
-          ailr_in = width;
-        }	
-        else
-        {	
-          aux_in = width;
-        }
-        // If this is the reference port, indicate sync
-        if (rx_portb_ref == AUX_PORT_BIT)
-          rx_portb_sync = true;
-      }	
-    }
-  }  
 }
 
 #else  // MOD_PCINT0
