@@ -660,13 +660,15 @@ volatile int16_t *rx_portb[] = RX_PORTB;
 #define    AUX_PORT_BIT  3	// Also AILR_PORT_BIT in DUAL AILERON mode
 
 #define CHECK_CHANNEL(PORT_BIT, RISE_VAR, PORT_VAR) \\
-  if (diff & (1 << PORT_BIT))	{ \\
-    if (rise & (1 << PORT_BIT)) { \\
+  if (diff & (1 << PORT_BIT))	{ \\ // Bit changed?
+    if (rise & (1 << PORT_BIT)) { \\ // Start timing if leading edge
       RISE_VAR = now; \\
     } else { \\
+      \\ // Must be falling edge, calculate width and discard if out of range
       width = (now - RISE_VAR) >> (F_CPU == F_16MHZ ? 1 : 0); \\
       if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) { \\
         PORT_VAR = width; \\
+        \\ // If this is the reference port, indicate sync
         if (rx_portb_ref == PORT_BIT) \\
           rx_portb_sync = true; \\
       } \\
@@ -694,10 +696,11 @@ ISR(PCINT0_vect)
   CHECK_CHANNEL(AIL_PORT_BIT, ail_rise, ail_in);
   CHECK_CHANNEL(ELE_PORT_BIT, ele_rise, ele_in);
   CHECK_CHANNEL(RUD_PORT_BIT, rud_rise, rud_in);
+  // In DUAL AILERON mode A, ailr_in replaces aux_in and there is no gain control
   if (ail_mode == AIL_DUAL && ail_sw) {
-    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, ailr_in); // dual aileron mode A
+    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, ailr_in); // DUAL AILERON mode A
   } else {
-    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, aux_in); // all other modes 
+    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, aux_in); // All other modes 
   }
 }
 
