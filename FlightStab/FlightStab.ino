@@ -13,10 +13,13 @@
 //#define RX3S_V1
 //#define RX3S_V2
 //#define NANO_MPU6050
-//#define USE_SERIAL
 
-//#define USE_I2CDEVLIB
-#define USE_I2CLIGHT
+
+//#define USE_SERIAL // enable serial port
+//#define LED_TIMING // disable LED_MSG and use LED_PIN to measure timings
+
+//#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
+#define USE_I2CLIGHT // poll-based i2c access routines
 
 #define F_8MHZ 8000000UL
 #define F_16MHZ 16000000UL
@@ -122,6 +125,8 @@
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
+
+//#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2
 
 #warning RX3S_V2 // emit device name
 #endif
@@ -254,6 +259,15 @@ enum AIL_MODE ail_mode;
       (F_XTAL == F_16MHZ && F_CPU == F_8MHZ) || \
       (F_XTAL == F_8MHZ && F_CPU == F_8MHZ))
 #error (F_XTAL,F_CPU) must be (16MHz,16MHz), (16MHz,8MHz) or (8MHz,8MHz)
+#endif
+
+#if defined(LED_TIMING)
+// PB5 = LED_PIN
+#define LED_TIMING_START do { PORTB |= (1 << 5); } while(0)
+#define LED_TIMING_STOP do { PORTB &= ~(1 << 5); } while(0)
+#else
+#define LED_TIMING_START
+#define LED_TIMING_STOP
 #endif
 
 /***************************************************************************************************************
@@ -485,7 +499,9 @@ int16_t led_pulse_msec[4];
 
 void set_led(int8_t i)
 {
+#if !defined(LED_TIMING)
   digitalWrite(LED_PIN, i == LED_OFF ? LOW : i == LED_ON ? HIGH : digitalRead(LED_PIN) ^ 1);
+#endif
 }
 
 void set_led_msg(int8_t slot, int8_t pulse_count, int16_t pulse_msec) {
@@ -639,6 +655,86 @@ ISR(PCINT0_vect)
 
 volatile int16_t *rx_portb[] = RX_PORTB;
 
+#ifdef MOD_PCINT0
+// contributed by JohnRB
+//*********************************************************************************/
+//  Excessive delay in processing interrupts for port B bit changes causes        */
+//  inaccurate pulse width measurements which may result in jitter seen/heard on  */
+//  the attached servos.                                                          */
+//                                                                                */
+//  This version of the interrupt handler was an attempt to get the fastest       */
+//  possible execution time with the minimal use of stack space.  This ISR does   */
+//  not enable interrupts again until it completes (about 6.35us at 16MHz).	      */
+//                                                                                */
+//  The downside of using this option is increased use of Flash memory (about 150 */
+//  bytes).	                                                                      */
+//	                                                                              */
+//  The original ISR is reentrant and runs disabled for about 1.6us less than this*/
+//  version but takes about 23.5us to complete (at 16MHz).  The original is also  */
+//  reentrant and each new invocation requires an additonal 25 bytes of stack     */
+//  space.	                                                                      */
+//	                                                                              */
+//  Bottom Line - If stack space becomes critical and/or processor is starting to */
+//  get overloaded, use this replacement ISR, otherwise just stick with the       */
+//  original ISR.	                                                                */
+//*********************************************************************************/
+// 
+// this ISR uses a fixed map of (AIL, ELE, RUD, AUX)_IN_PINs assigned to PB(0,1,2,3)
+
+#define    AIL_PORT_BIT  0
+#define    ELE_PORT_BIT  1
+#define    RUD_PORT_BIT  2
+#define    AUX_PORT_BIT  3	// Also AILR_PORT_BIT in DUAL AILERON mode
+
+#define CHECK_CHANNEL(PORT_BIT, RISE_VAR, PORT_VAR) \
+  if (diff & (1 << PORT_BIT))	{ \
+    if (rise & (1 << PORT_BIT)) { \
+      RISE_VAR = now; \
+    } else { \
+      width = (now - RISE_VAR) >> (F_CPU == F_16MHZ ? 1 : 0); \
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) { \
+        PORT_VAR = width; \
+        if (rx_portb_ref == PORT_BIT) \
+          rx_portb_sync = true; \
+      } \
+    } \
+  }
+
+ISR(PCINT0_vect)
+{
+  static uint16_t ail_rise, ele_rise, rud_rise, aux_rise;
+  static uint8_t last_pin;
+
+  uint16_t now;        // current timer value
+  uint8_t rise;	       // rising edge pulses
+  uint8_t diff;        // portb changed bits     
+  uint8_t last_pin2;   // temporary save for previous Port B value
+  uint16_t width;      // work register to verify width
+
+  now = TCNT1;         
+  last_pin2 = last_pin;  // save previous Port B value
+  last_pin = PINB;
+
+  diff = last_pin ^ last_pin2;	// pins that just changed state
+  rise = last_pin & ~last_pin2;	// pins that just went positive (start of pulse)
+
+  // The following tests each input for change, 
+  // at rise captures time and at fall calculates and validates the width & saves it.
+  // If the channel is the reference port, indicate sync
+  
+  CHECK_CHANNEL(AIL_PORT_BIT, ail_rise, ail_in);
+  CHECK_CHANNEL(ELE_PORT_BIT, ele_rise, ele_in);
+  CHECK_CHANNEL(RUD_PORT_BIT, rud_rise, rud_in);
+  // In DUAL AILERON mode A, ailr_in replaces aux_in and there is no gain control
+  if (ail_mode == AIL_DUAL && ail_sw) {
+    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, ailr_in); // DUAL AILERON mode A
+  } else {
+    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, aux_in); // All other modes 
+  }
+}
+
+#else  // MOD_PCINT0
+
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect)
 {
@@ -671,6 +767,7 @@ ISR(PCINT0_vect)
     }
   }
 }
+#endif
 
 volatile int16_t *rx_portd[] = RX_PORTD;
 
