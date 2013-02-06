@@ -21,7 +21,7 @@ project(FlightStab C CXX)
 macro(get_today today)
 	if (MSYS)
 		EXECUTE_PROCESS(COMMAND "cmd" " /C date /T" OUTPUT_VARIABLE ${today})
-		STRING(REGEX REPLACE ".*(..)/(..)/(....).*" "\\3\\2\\1" ${today} ${${today}})
+		STRING(REGEX REPLACE ".*(..)/(..)/(....).*" "\\3\\1\\2" ${today} ${${today}})
 	else (MSYS)
 		set(today "NODATE")
 	endif (MSYS)
@@ -43,16 +43,16 @@ print_board_list()
 print_programmer_list()
 
 # get system date if <today> is not specified in cmake command line (cmake -Dtoday=yyyymmdd .....)
-if (NOT today)
-  get_today(today)
-endif (NOT today)
+if (NOT TODAY)
+  get_today(TODAY)
+endif (NOT TODAY)
 
 # defines = semicolon-separated list of key-value pairs "RX3S_V1;DEF=VAL;DEF2=VAL2"
 
-add_arduino_firmware(${today}_RX3S_V1 FlightStab pro5v "RX3S_V1")
-add_arduino_firmware(${today}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
-add_arduino_firmware(${today}_RX3S_V2 FlightStab pro5v "RX3S_V2")
-add_arduino_firmware(${today}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
+add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")
+add_arduino_firmware(${TODAY}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
+add_arduino_firmware(${TODAY}_RX3S_V2 FlightStab pro5v "RX3S_V2")
+add_arduino_firmware(${TODAY}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
 
 
 
