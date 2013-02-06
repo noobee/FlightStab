@@ -4,7 +4,7 @@
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 //#define RX3S_V1
-#define RX3S_V2
+//#define RX3S_V2
 //#define NANO_MPU6050
 
 
@@ -659,25 +659,23 @@ volatile int16_t *rx_portb[] = RX_PORTB;
 #define    RUD_PORT_BIT  2
 #define    AUX_PORT_BIT  3	// Also AILR_PORT_BIT in DUAL AILERON mode
 
-#define CHECK_CHANNEL(PORT_BIT, RISE_VAR, PORT_VAR) \\
-  if (diff & (1 << PORT_BIT))	{ \\ // Bit changed?
-    if (rise & (1 << PORT_BIT)) { \\ // Start timing if leading edge
-      RISE_VAR = now; \\
-    } else { \\
-      \\ // Must be falling edge, calculate width and discard if out of range
-      width = (now - RISE_VAR) >> (F_CPU == F_16MHZ ? 1 : 0); \\
-      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) { \\
-        PORT_VAR = width; \\
-        \\ // If this is the reference port, indicate sync
-        if (rx_portb_ref == PORT_BIT) \\
-          rx_portb_sync = true; \\
-      } \\
-    } \\
+#define CHECK_CHANNEL(PORT_BIT, RISE_VAR, PORT_VAR) \
+  if (diff & (1 << PORT_BIT))	{ \
+    if (rise & (1 << PORT_BIT)) { \
+      RISE_VAR = now; \
+    } else { \
+      width = (now - RISE_VAR) >> (F_CPU == F_16MHZ ? 1 : 0); \
+      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) { \
+        PORT_VAR = width; \
+        if (rx_portb_ref == PORT_BIT) \
+          rx_portb_sync = true; \
+      } \
+    } \
   }
 
 ISR(PCINT0_vect)
 {
-  static uint16_t ail_rise, elev_rise, rud_rise, aux_rise;
+  static uint16_t ail_rise, ele_rise, rud_rise, aux_rise;
   static uint8_t last_pin;
 
   uint16_t now;        // current timer value
@@ -693,6 +691,10 @@ ISR(PCINT0_vect)
   diff = last_pin ^ last_pin2;	// pins that just changed state
   rise = last_pin & ~last_pin2;	// pins that just went positive (start of pulse)
 
+  // The following tests each input for change, 
+  // at rise captures time and at fall calculates and validates the width & saves it.
+  // If the channel is the reference port, indicate sync
+  
   CHECK_CHANNEL(AIL_PORT_BIT, ail_rise, ail_in);
   CHECK_CHANNEL(ELE_PORT_BIT, ele_rise, ele_in);
   CHECK_CHANNEL(RUD_PORT_BIT, rud_rise, rud_in);
