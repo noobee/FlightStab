@@ -1,8 +1,8 @@
 /* FlightStab **************************************************************************************************/
 
-#include <arduino.h>
+#include <Arduino.h>
 #include <avr/eeprom.h>
-#include <util/atomic.h> // todo: deprecate
+#include <util/atomic.h>
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
@@ -14,15 +14,17 @@
 //#define RX3S_V2
 //#define NANO_MPU6050
 
+//#define USE_CPPM // enable CPPM input on CPPM_IN_PIN
+//#define EEPROM_CFG_VER 1 // do not use at this time
 
 //#define USE_SERIAL // enable serial port
 //#define LED_TIMING // disable LED_MSG and use LED_PIN to measure timings
 
 //#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
-#define USE_I2CLIGHT // poll-based i2c access routines
-
-#define F_8MHZ 8000000UL
-#define F_16MHZ 16000000UL
+//#define USE_I2CLIGHT // poll-based i2c access routines
+#if !(defined(USE_I2CDEVLIB) || defined(USE_I2CLIGHT))
+#define USE_I2CLIGHT
+#endif
 
 /* RX3S_V1 *****************************************************************************************************/
 #if defined(RX3S_V1)
@@ -43,6 +45,10 @@
  AIL_DUAL mode
  PB3 11 AUX_IN instead of MOSI
  PB4 12 AILR_IN instead of MISO
+ 
+ CPPM enabled
+ PB0 8 CPPM_IN instead of AIL_IN
+ PB2 10 THR_OUT instead of RUD_IN
 */
 
 // <VR>
@@ -57,8 +63,8 @@
 #define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define DIN_PORTD {NULL, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1}
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
 
 // <SERVO>
 #define AIL_OUT_PIN 4
@@ -69,6 +75,10 @@
 // <IMU>
 #define USE_ITG3200
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
+
+// CPPM
+#define CPPM_IN_PIN 8
+#define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 
@@ -97,6 +107,10 @@
 
  AIL_DUAL mode B
  PD2 2 AILR_IN instead of ELE_SW
+ 
+ CPPM enabled
+ PB0 8 CPPM_IN instead of AIL_IN
+ PB2 10 THR_OUT instead of RUD_IN
 */
 
 // <VR>
@@ -111,8 +125,8 @@
 #define DIN_PORTC {&delta_sw, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define DIN_PORTD {&aux_sw, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1}
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
 
 // <SERVO>
 #define AIL_OUT_PIN 4
@@ -123,6 +137,10 @@
 // <IMU>
 #define USE_ITG3200
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
+
+// CPPM
+#define CPPM_IN_PIN 8
+#define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 
@@ -141,13 +159,32 @@
 #endif
 /* NANO_MPU6050 ************************************************************************************************/
 
+// standard frequency definitions
+#define F_8MHZ 8000000UL
+#define F_16MHZ 16000000UL
 
-// emit cpu frequency
+// emit xtal and cpu frequencies
+#if F_XTAL == F_8MHZ
+#warning F_XTAL == F_8MHZ
+#endif
+#if F_XTAL == F_16MHZ
+#warning F_XTAL == F_16MHZ
+#endif
 #if F_CPU == F_8MHZ
 #warning F_CPU == F_8MHZ
 #endif
 #if F_CPU == F_16MHZ
 #warning F_CPU == F_16MHZ
+#endif
+#if !((F_XTAL == F_16MHZ && F_CPU == F_16MHZ) || \
+      (F_XTAL == F_16MHZ && F_CPU == F_8MHZ) || \
+      (F_XTAL == F_8MHZ && F_CPU == F_8MHZ))
+#error (F_XTAL,F_CPU) must be (16MHz,16MHz), (16MHz,8MHz) or (8MHz,8MHz)
+#endif
+
+// emit CPPM config
+#if defined(USE_CPPM)
+#warning CPPM enabled
 #endif
 
 // verify single i2c lib defined
@@ -159,7 +196,6 @@
 #if defined(USE_MPU6050) && defined(USE_ITG3200)
 #error Cannot define both USE_MPU6050 and USE_ITG3200
 #endif
-
 
 // i2cdevlib includes
 #if defined(USE_I2CDEVLIB) && defined(USE_MPU6050)
@@ -175,10 +211,7 @@
   ITG3200 gyro;
 #endif
 
-//#define EEPROM_CFG_VER 1
-//#define CPPM_PIN 8 // must be in PORT B
-
-#define LED_PIN 13 // standard on all devices (SCK)
+#define LED_PIN 13 // standard on most devices (SCK)
 
 // LED set
 #define LED_ON 1
@@ -207,7 +240,9 @@ volatile int16_t ailr_in = RX_WIDTH_MID;
 volatile int16_t ele_in = RX_WIDTH_MID;
 volatile int16_t rud_in = RX_WIDTH_MID;
 volatile int16_t aux_in = RX_WIDTH_HIGH; // assume max gain if no aux_in
-int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
+volatile int16_t aux2_in = RX_WIDTH_MID;
+volatile int16_t thr_in = RX_WIDTH_LOW;
+int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2, aux2_in2, thr_in2;
 
 int16_t ail_in2_mid = RX_WIDTH_MID; // calibration sets stick-neutral-position offsets
 int16_t ailr_in2_mid = RX_WIDTH_MID; //
@@ -227,7 +262,8 @@ volatile int16_t ail_out;
 volatile int16_t ailr_out;
 volatile int16_t ele_out;
 volatile int16_t rud_out;
-int16_t ail_out2, ailr_out2, ele_out2, rud_out2;
+volatile int16_t thr_out;
+int16_t ail_out2, ailr_out2, ele_out2, rud_out2, thr_out2;
 
 // imu
 int16_t gRoll0=0, gPitch0=0, gYaw0=0; // calibration sets zero-movement-measurement offsets
@@ -251,16 +287,18 @@ enum MIX_MODE mix_mode;
 enum AIL_MODE {AIL_SINGLE, AIL_DUAL};
 enum AIL_MODE ail_mode;
 
+// cppm
+#if defined(USE_CPPM)
+int8_t cppm_enabled = true;
+#else
+int8_t cppm_enabled = false;
+#endif
+
 #define VR_GAIN_MAX (-128)
 #define STICK_GAIN_MAX 400 // 1900-1500 or 1500-1100 
 #define MASTER_GAIN_MAX 800 // 1900-1100
 
-#if !((F_XTAL == F_16MHZ && F_CPU == F_16MHZ) || \
-      (F_XTAL == F_16MHZ && F_CPU == F_8MHZ) || \
-      (F_XTAL == F_8MHZ && F_CPU == F_8MHZ))
-#error (F_XTAL,F_CPU) must be (16MHz,16MHz), (16MHz,8MHz) or (8MHz,8MHz)
-#endif
-
+// debugging with logic analyzer through led
 #if defined(LED_TIMING)
 // PB5 = LED_PIN
 #define LED_TIMING_START do { PORTB |= (1 << 5); } while(0)
@@ -618,42 +656,48 @@ void read_switches()
  * DIGITAL IN (RX)
  ***************************************************************************************************************/
 
-int8_t rx_portb_ref;
-volatile int8_t rx_portb_sync; // true if rx_portb_ref pulse has occurred
+int8_t rx_portb_ref; // for non cppm
+volatile int16_t *rx_portb_pref; // for cppm
+volatile int8_t rx_portb_sync; // true if rx_portb_ref/rx_portb_pref pulse has occurred
 
-#if defined(CPPM_PIN) // DO NOT USE AT THIS TIME
-volatile int16_t *rx_chan[] = {&rud_in, &ele_in, NULL, &ail_in, &aux_in, &ailr_in, NULL, NULL}; // open9x RETA1a
+volatile int16_t *rx_chan[] = {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, NULL}; // open9x RETA1a2
+volatile int16_t *rx_portb[] = RX_PORTB; // non CPPM
+volatile int16_t *rx_portd[] = RX_PORTD; // non CPPM
+
+#if defined(USE_CPPM)
 
 ISR(PCINT0_vect)
 {
-  static uint16_t last_time;
-  static uint8_t last_pinb;
+  static uint16_t rise_time;
+  static uint8_t last_pin;
   static uint8_t ch;
   uint16_t now;
-  uint8_t pinb, rise;
+  uint8_t pin, last_pin2, rise;
 
-  now = TCNT1;
-  pinb = PINB;
+  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
+  last_pin2 = last_pin;
+  pin = PINB;
+  last_pin = pin;
   sei();
-  rise = pinb & ~last_pinb;
-  last_pinb = pinb;
 
-  // cppm on arduino CPPM_PIN (in PORT B) 
-  if (rise & (1 << (CPPM_PIN - 8))) {
-    uint16_t width = (now - last_time) >> (F_CPU == F_16MHZ ? 1 : 0);
-    last_time = now;
-    if (width > 5000 || ch > 7) {
+  rise = pin & ~last_pin2;
+
+  // cppm on arduino CPPM_IN_PIN (in PORT B) 
+  if (rise & (1 << CPPM_IN_PIN - 8)) {
+    uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+    rise_time = now;
+    if (width > 3000 || ch > 7) {
       ch = 0;
     } else if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
       *rx_chan[ch] = width;
+      if (rx_chan[ch] == rx_portb_pref)
+        rx_portb_sync = true;
       ch++;
     }
   }
 }
-
+    
 #else
-
-volatile int16_t *rx_portb[] = RX_PORTB;
 
 #ifdef MOD_PCINT0
 // contributed by JohnRB
@@ -769,8 +813,6 @@ ISR(PCINT0_vect)
 }
 #endif
 
-volatile int16_t *rx_portd[] = RX_PORTD;
-
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
@@ -806,13 +848,16 @@ ISR(PCINT2_vect)
 
 void init_digital_in_rx()
 {
-#if defined(CPPM_PIN)  
-  // CPPM_PIN (in PORT B)
-  PCICR |= (1 << PCIE0);
-  PCMSK0 |= 1 << (CPPM_PIN - 8);
-  pinMode(CPPM_PIN, INPUT);
-  digitalWrite(CPPM_PIN, HIGH);
-#else
+  if (cppm_enabled) {
+    // CPPM_IN_PIN (in PORT B)
+    PCICR |= (1 << PCIE0);
+    PCMSK0 |= 1 << (CPPM_IN_PIN - 8);
+    pinMode(CPPM_IN_PIN, INPUT);
+    digitalWrite(CPPM_IN_PIN, HIGH);
+    rx_portb_pref = &ele_in; // CPPM isr needs to compare pointer to var
+    return;
+  }
+
   // PORTB RX
   PCICR |= (1 << PCIE0);
   for (int8_t i=0; i<8; i++) {
@@ -833,7 +878,6 @@ void init_digital_in_rx()
       digitalWrite(0 + i, HIGH);
     }
   }
-#endif
 }
 
 /***************************************************************************************************************
@@ -857,7 +901,8 @@ ISR(TIMER1_COMPA_vect)
     digitalWrite(pwm_out_pin[rise_ch], HIGH);
     wait = (*pwm_out_var[rise_ch] - 2) << (F_CPU == F_16MHZ ? 1 : 0);
     fall_ch = rise_ch;
-    if (!pwm_out_var[++rise_ch]) {
+    // two consecutive null entries to indicate end of list
+    if (!pwm_out_var[++rise_ch] && !pwm_out_var[++rise_ch]) {
       rise_ch = -1;
     }
   } else {
@@ -870,10 +915,12 @@ ISR(TIMER1_COMPA_vect)
 
 void init_digital_out()
 {
-  int8_t i = 0;
-  while (pwm_out_pin[i] >= 0) {
+  int8_t i = -1;
+  while (true) {
+    // two consecutive null entries to indicate end of list
+    if (!pwm_out_var[++i] && !pwm_out_var[++i])
+      break;
     pinMode(pwm_out_pin[i], OUTPUT);
-    i++;
   }
 } 
 
@@ -895,6 +942,7 @@ int16_t last_input[3]; // [-8192, 8191] 14b
 int32_t sum_iterm[3]; // clamped to PID_WINDUP
 int16_t output[3]; //
 
+// process variable = angular speed = gyro reading
 void compute_pid() 
 {
   int8_t i;
@@ -1005,9 +1053,7 @@ void init_imu()
   accelgyro.setFullScaleAccelRange(MPU6050_ACCEL_FS_16);
   accelgyro.setDLPFMode(MPU6050_DLPF_BW_256);
   accelgyro.setClockSource(MPU6050_CLOCK_PLL_ZGYRO); 
-#endif
-
-#if defined(USE_ITG3200)
+#elif defined(USE_ITG3200)
   Wire.begin();
   gyro.initialize();
   gyro.setClockSource(ITG3200_CLOCK_PLL_XGYRO); 
@@ -1442,13 +1488,15 @@ void serial_rx()
 
 void copy_rx_in()
 {
-  // lock-free method to copy isr-owned *_in vars to *_in2 vars.
+  // lock-free method to copy isr-owned *_in vars to *_in2 vars
   int16_t tmp;
   ail_in2 = (tmp = ail_in) == ail_in ? tmp : ail_in2;
   ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
   ele_in2 = (tmp = ele_in) == ele_in ? tmp : ele_in2;
   rud_in2 = (tmp = rud_in) == rud_in ? tmp : rud_in2;
   aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
+  aux2_in2 = (tmp = aux2_in) == aux2_in ? tmp : aux2_in2;
+  thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
   
   if (ail_mode == AIL_SINGLE)
     ailr_in2 = ail_in2;
@@ -1489,16 +1537,21 @@ void apply_mixer()
   ailr_out2 = constrain(ailr_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
   ele_out2 = constrain(ele_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
   rud_out2 = constrain(rud_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
+
+  // throttle pass through
+  thr_out2 = thr_in2;  
 }
 
 void start_servo_frame()
 {
+  // copy *_out2 vars to isr-owned *_out vars
   servo_busy = true;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     ail_out = ail_out2;
     ailr_out = ailr_out2;
     ele_out = ele_out2;
     rud_out = rud_out2;
+    thr_out = thr_out2;
     
     TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
     TIFR1 |= (1 << OCF1A); // clear any pending interrupt
@@ -1534,7 +1587,9 @@ void dump_sensors()
     Serial.print(ailr_in2); Serial.print(' ');
     Serial.print(ele_in2); Serial.print(' ');
     Serial.print(rud_in2); Serial.print(' ');
-    Serial.print(aux_in2); Serial.print('\t');
+    Serial.print(aux_in2); Serial.print(' ');
+    Serial.print(aux2_in2); Serial.print(' ');
+    Serial.print(thr_in2); Serial.print('\t');
   
     uint8_t ail_vr2, ele_vr2, rud_vr2;
     ail_vr2 = ail_vr;
@@ -1567,8 +1622,8 @@ void dump_sensors()
       servo_out = constrain(servo_out, 1000, 2000);
       servo_dir = -servo_dir;
     }
-    ail_out2 = ailr_out2 = ele_out2 = rud_out2 = servo_out;
-//    ail_out2 = ailr_out2 = ele_out2 = rud_out2 = 1500;
+    ail_out2 = ailr_out2 = ele_out2 = rud_out2 = thr_out2 = servo_out;
+//    ail_out2 = ailr_out2 = ele_out2 = rud_out2 = thr_out2 = 1500;
     if (servo_sync && !servo_busy) {
       servo_sync = false;
       start_servo_frame();
@@ -1655,6 +1710,16 @@ void setup()
     rx_portb[3] = &aux_in; // enable aux_in
     rx_portb[4] = &ailr_in; // enable ailr_in
   }
+  
+  if (cppm_enabled) {
+    // PB0 8 CPPM_IN instead of AIL_IN
+    // PB2 10 THR_OUT instead of RUD_IN
+    rx_portb[0] = NULL; // disable ail_in
+    rx_portb[2] = NULL; // disable rud_in
+    pwm_out_var[4] = &thr_out; // enable thr_out
+    pwm_out_pin[4] = THR_OUT_PIN; //
+
+  }
 #endif
 
 #if defined(RX3S_V2)
@@ -1681,6 +1746,16 @@ void setup()
       din_portd[2] = NULL; // disable ele_sw
       rx_portd[2] = &ailr_in; // enable ailr_in
     }
+  }
+
+  if (cppm_enabled) {
+    // PB0 8 CPPM_IN instead of AIL_IN
+    // PB2 10 THR_OUT instead of RUD_IN
+    rx_portb[0] = NULL; // disable ail_in
+    rx_portb[2] = NULL; // disable rud_in
+    pwm_out_var[4] = &thr_out; // enable thr_out
+    pwm_out_pin[4] = THR_OUT_PIN; //
+
   }
 #endif
 
