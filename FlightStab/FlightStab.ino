@@ -23,11 +23,12 @@
 //#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 //#define USE_I2CLIGHT // poll-based i2c access routines
 #if !(defined(USE_I2CDEVLIB) || defined(USE_I2CLIGHT))
-#define USE_I2CLIGHT
+#define USE_I2CLIGHT // default
 #endif
 
 /* RX3S_V1 *****************************************************************************************************/
 #if defined(RX3S_V1)
+#warning RX3S_V1 defined // emit device name
 /*
  OrangeRx Stabilizer RX3S V1
  PB0  8 AIL_IN            PC0 14/A0 AIL_GAIN       PD0 0 (RXD)
@@ -82,12 +83,12 @@
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 
-#warning RX3S_V1 // emit device name
 #endif 
 /* RX3S_V1 *****************************************************************************************************/
 
 /* RX3S_V2 *****************************************************************************************************/
 #if defined(RX3S_V2)
+#warning RX3S_V2 defined // emit device name
 /*
  OrangeRx Stabilizer RX3S V2
  PB0  8 AIL_IN            PC0 14/A0 DELTA_SW       PD0 0 AUX_SW (RXD)
@@ -145,17 +146,19 @@
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 
 //#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2
+#if defined(MOD_PCINT0)
+#warning MOD_PCINT0 defined
+#endif
 
-#warning RX3S_V2 // emit device name
 #endif
 /* RX3S_V2 *****************************************************************************************************/
 
 /* NANO_MPU6050 ************************************************************************************************/
 #if defined(NANO_MPU6050)
+#warning NANO_MPU6050 defined // emit device name
 #undef USE_ITG3200
 #define USE_MPU6050
 #define GYRO_ORIENTATION(x, y, z) {gRoll = -(x); gPitch = (y); gYaw = (z);}
-#warning NANO_MPU6050 // emit device name
 #endif
 /* NANO_MPU6050 ************************************************************************************************/
 
@@ -163,18 +166,9 @@
 #define F_8MHZ 8000000UL
 #define F_16MHZ 16000000UL
 
-// emit xtal and cpu frequencies
-#if F_XTAL == F_8MHZ
-#warning F_XTAL == F_8MHZ
-#endif
-#if F_XTAL == F_16MHZ
-#warning F_XTAL == F_16MHZ
-#endif
+// emit cpu frequency if not 16MHz
 #if F_CPU == F_8MHZ
 #warning F_CPU == F_8MHZ
-#endif
-#if F_CPU == F_16MHZ
-#warning F_CPU == F_16MHZ
 #endif
 #if !((F_XTAL == F_16MHZ && F_CPU == F_16MHZ) || \
       (F_XTAL == F_16MHZ && F_CPU == F_8MHZ) || \
@@ -182,9 +176,14 @@
 #error (F_XTAL,F_CPU) must be (16MHz,16MHz), (16MHz,8MHz) or (8MHz,8MHz)
 #endif
 
+// emit serial enabled
+#if defined(USE_SERIAL)
+#warning USE_SERIAL defined
+#endif
+
 // emit CPPM config
 #if defined(USE_CPPM)
-#warning CPPM enabled
+#warning USE_CPPM defined
 #endif
 
 // verify single i2c lib defined
@@ -198,18 +197,19 @@
 #endif
 
 // i2cdevlib includes
-#if defined(USE_I2CDEVLIB) && defined(USE_MPU6050)
+#if defined(USE_I2CDEVLIB)
+#warning USE_I2CDEVLIB defined
   #include "Wire.h"
   #include "I2Cdev.h"
+#if defined(USE_MPU6050)
   #include "MPU6050.h"
   MPU6050 accelgyro;
-#endif
-#if defined(USE_I2CDEVLIB) && defined(USE_ITG3200)
-  #include "Wire.h"
-  #include "I2Cdev.h"
+#elif defined(USE_ITG3200)
   #include "ITG3200.h"
   ITG3200 gyro;
 #endif
+#endif
+
 
 #define LED_PIN 13 // standard on most devices (SCK)
 

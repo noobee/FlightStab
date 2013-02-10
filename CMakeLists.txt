@@ -21,6 +21,12 @@ set(CMAKE_TOOLCHAIN_FILE cmake/ArduinoToolchain.cmake)
 cmake_minimum_required(VERSION 2.8)
 project(FlightStab C CXX)
 
+if (MSYS)
+  link_directories("$ENV{USERPROFILE}\\Documents\\Arduino\\libraries")
+else (MSYS)
+  link_directories("~/Arduino/libraries")
+endif (MSYS)
+
 #====================================================================#
 #  macros                                                            #
 #====================================================================#
@@ -39,8 +45,6 @@ endmacro(get_today)
 macro(add_arduino_firmware target sketch board defines)
 	set(${target}_SKETCH ${sketch})
 	set(${target}_BOARD ${board})
-  include_directories("C:\\Users\\z570\\Documents\\Arduino\\Libraries\\I2Cdev"
-                      "C:\\Users\\z570\\Documents\\Arduino\\Libraries\\ITG3200")
 	generate_arduino_firmware(${target})
 	set_target_properties(${target} PROPERTIES COMPILE_DEFINITIONS "${defines}")
 endmacro(add_arduino_firmware)
@@ -74,6 +78,6 @@ add_arduino_firmware(${TODAY}_RX3S_V2_CPPM FlightStab pro5v "RX3S_V2;USE_CPPM")
 # test permutations (TODO: build only on "make test_targets")          
 add_arduino_firmware(TEST_RX3S_V2_MOD_PCINT0 FlightStab pro5v "RX3S_V2;MOD_PCINT0")
 add_arduino_firmware(TEST_RX3S_V2_SERIAL FlightStab pro5v "RX3S_V2;USE_SERIAL")
-#add_arduino_firmware(TEST_RX3S_V2_USE_I2CDEVLIB FlightStab pro5v "RX3S_V2;USE_I2CDEVLIB")
+add_arduino_firmware(TEST_RX3S_V2_USE_I2CDEVLIB FlightStab pro5v "RX3S_V2;USE_I2CDEVLIB")
          
          
