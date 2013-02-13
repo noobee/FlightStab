@@ -12,6 +12,7 @@
 
 //#define RX3S_V1
 //#define RX3S_V2
+#define NANO_WII
 //#define NANO_MPU6050
 
 //#define USE_CPPM // enable CPPM input on CPPM_IN_PIN
@@ -64,14 +65,14 @@
 #define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define DIN_PORTD {NULL, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
-
 // <SERVO>
 #define AIL_OUT_PIN 4
 #define ELE_OUT_PIN 5
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
+
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
 
 // <IMU>
 #define USE_ITG3200
@@ -82,6 +83,8 @@
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define SCL_PIN 19
+#define SDA_PIN 18
 
 #endif 
 /* RX3S_V1 *****************************************************************************************************/
@@ -126,14 +129,14 @@
 #define DIN_PORTC {&delta_sw, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define DIN_PORTD {&aux_sw, &ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL}
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
-
 // <SERVO>
 #define AIL_OUT_PIN 4
 #define ELE_OUT_PIN 5
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
+
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
 
 // <IMU>
 #define USE_ITG3200
@@ -144,6 +147,8 @@
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define SCL_PIN 19
+#define SDA_PIN 18
 
 //#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2
 #if defined(MOD_PCINT0)
@@ -152,6 +157,61 @@
 
 #endif
 /* RX3S_V2 *****************************************************************************************************/
+
+/* NANO_WII ****************************************************************************************************/
+#if defined(NANO_WII)
+#warning NANO_WII defined // emit device name
+/*
+ Nano WII
+ PB0 17    (SS/RXLED)    |                        | PD0  3 SCL (SCL)   |                   | PF0 23/A5    (ADC0)
+ PB1 15 RX (SCK/PCINT1)  |                        | PD1  2 SDA (SDA)   |                   | PF1 22/A4    (ADC1)
+ PB2 16 RX (MOSI/PCINT2) |                        | PD2  0 RXD (RXD)   | PE2       (HWB_)  |
+ PB3 14 RX (MISO/PCINT3) |                        | PD3  1 TXD (TXD)   |                   |
+ PB4  8 RX (PCINT4)      |                        | PD4  4  SV (ADC8)  |                   | PF4 21/A3 SV (ADC4)
+ PB5  9  M (OC1A/OC4B_)  |                        | PD5        (TXLED) |                   | PF5 20/A2 SV (ADC5)
+ PB6 10  M (OC1B/OC4B)   | PC6  5  M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6  7 RX (INT.6) | PF6 19/A1 SV (ADC6)
+ PB7 11  M (OC0A/OC1C)   | PC7 13  M (OC4A)       | PD7  6   M (OC4D)  |                   | PF7 18/A0 SV (ADC7)
+*/
+
+// <VR>
+#define AIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <RX> (must in PORT B/D due to ISR)
+#define RX_PORTB {NULL, &ail_in, &ele_in, &rud_in, &aux_in, NULL, NULL, NULL}
+#define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <SWITCH>
+#define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <SERVO>
+#define AIL_OUT_PIN 9
+#define ELE_OUT_PIN 10
+#define RUD_OUT_PIN 5
+#define AILR_OUT_PIN 6 // dual aileron mode only
+
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
+
+// <IMU>
+#define USE_MPU6050
+#define GYRO_ORIENTATION(x, y, z) {gRoll = (-y); gPitch = (-x); gYaw = (z);}
+
+// CPPM
+#define CPPM_IN_PIN 15
+#define THR_OUT_PIN 11
+
+#define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define SCL_PIN 3
+#define SDA_PIN 2
+
+#endif
+/* NANO_WII ****************************************************************************************************/
+
+
+
+
 
 /* NANO_MPU6050 ************************************************************************************************/
 #if defined(NANO_MPU6050)
@@ -374,8 +434,8 @@ void i2c_init(int8_t pullup, uint32_t freq)
 {
   if (pullup) {
     // scl and sda
-    digitalWrite(18, 1);
-    digitalWrite(19, 1);
+    digitalWrite(SCL_PIN, HIGH);
+    digitalWrite(SDA_PIN, HIGH);
   }
   TWSR = 0; // prescaler = 1
   TWBR = ((F_CPU / freq) - 16) >> 1; // baud rate 
@@ -383,13 +443,14 @@ void i2c_init(int8_t pullup, uint32_t freq)
 
 void i2c_wait() 
 {
-  uint16_t timeout = 255;
-  do {
-    if (TWCR & (1 << TWINT))
-      return;
-  } while (--timeout);
-  i2c_errors++;
-  TWCR = 0; // disable twi
+  int16_t timeout = 255;
+  while (!(TWCR & (1 << TWINT))) {
+    if (!timeout--) {
+      TWCR = 0; // disable twi
+      i2c_errors++;
+      break;
+    }
+  }
 }
 
 void i2c_start(uint8_t addr)
@@ -603,8 +664,8 @@ void init_analog_in()
   int8_t i;
   for (i=0; i<6; i++) {
     if (adc_portc[i]) {
-      pinMode(14 + i, INPUT);
-      digitalWrite(14 + i, LOW); // don't enable internal pullup
+      DDRC &= ~(1 << i); // set to input mode
+      PORTC &= ~(1 << i); // do not enable internal pullup
     }
   }
 
@@ -622,32 +683,32 @@ int8_t *din_portb[] = DIN_PORTB;
 int8_t *din_portc[] = DIN_PORTC;
 int8_t *din_portd[] = DIN_PORTD;
 
-void init_digital_in_port_list(int8_t **pport_list, int8_t pin_base)
+void init_digital_in_port_list(int8_t **pport_list, volatile uint8_t *pDDR, volatile uint8_t *pPORT)
 {
   for (int8_t i=0; i<8; i++) {
     if (pport_list[i]) {
-      pinMode(pin_base + i, INPUT);
-      digitalWrite(pin_base + i, HIGH);
+      *pDDR &= ~(1 << i); // set to input mode
+      *pPORT |= (1 << i); // enable internal pullup
     }
   }    
 }
 
 void init_digital_in_sw()
 {
-  init_digital_in_port_list(din_portb, 8);
-  init_digital_in_port_list(din_portc, 14);
-  init_digital_in_port_list(din_portd, 0);
+  init_digital_in_port_list(din_portb, &DDRB, &PORTB);
+  init_digital_in_port_list(din_portc, &DDRC, &PORTC);
+  init_digital_in_port_list(din_portd, &DDRD, &PORTD);
 }
 
 void read_switches()
 {
   for (int8_t i=0; i<8; i++) {
     if (din_portb[i])
-     *din_portb[i] = digitalRead(8 + i);
+     *din_portb[i] = PORTB & (1 << i);
     if (din_portc[i])
-     *din_portc[i] = digitalRead(14 + i);
+     *din_portc[i] = PORTC & (1 << i);
     if (din_portd[i])
-     *din_portd[i] = digitalRead(0 + i);
+     *din_portd[i] = PORTD & (1 << i);
   } 
 }
 
@@ -699,7 +760,7 @@ ISR(PCINT0_vect)
     
 #else
 
-#ifdef MOD_PCINT0
+#if defined(MOD_PCINT0)
 // contributed by JohnRB
 //*********************************************************************************/
 //  Excessive delay in processing interrupts for port B bit changes causes        */
@@ -777,7 +838,7 @@ ISR(PCINT0_vect)
   }
 }
 
-#else  // MOD_PCINT0
+#else // MOD_PCINT0
 
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect)
@@ -811,8 +872,9 @@ ISR(PCINT0_vect)
     }
   }
 }
-#endif
+#endif // MOD_PCINT0
 
+#if !defined(NANO_WII)
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
@@ -830,7 +892,7 @@ ISR(PCINT2_vect)
   diff = pin ^ last_pin2;
   rise = pin & ~last_pin2;
 
-  for (int8_t i = PCINT16; i <= PCINT23; i++) {
+  for (int8_t i = 0; i < 8; i++) {
     if (rx_portd[i] && diff & (1 << i)) {
       if (rise & (1 << i)) {
         rise_time[i] = now;
@@ -843,6 +905,7 @@ ISR(PCINT2_vect)
     }
   }
 }
+#endif
 
 #endif
 
@@ -851,7 +914,7 @@ void init_digital_in_rx()
   if (cppm_enabled) {
     // CPPM_IN_PIN (in PORT B)
     PCICR |= (1 << PCIE0);
-    PCMSK0 |= 1 << (CPPM_IN_PIN - 8);
+    PCMSK0 |= 1 << (CPPM_IN_PIN - 8); // TODO: does not work for NANO_WII
     pinMode(CPPM_IN_PIN, INPUT);
     digitalWrite(CPPM_IN_PIN, HIGH);
     rx_portb_pref = &ele_in; // CPPM isr needs to compare pointer to var
@@ -863,21 +926,23 @@ void init_digital_in_rx()
   for (int8_t i=0; i<8; i++) {
     if (rx_portb[i]) {
       PCMSK0 |= 1 << (PCINT0 + i);
-      pinMode(8 + i, INPUT);
-      digitalWrite(8 + i, HIGH);
+      DDRB &= ~(1 << i); // set input mode
+      PORTB |= (1 << i); // enable internal pullup
     }
   }
   rx_portb_ref = 1; // use ELE_IN as ref channel. both V1/V2 use it in all mix modes.
 
+ #if !defined(NANO_WII)
   // PORTD RX
   PCICR |= (1 << PCIE2);
   for (int8_t i=0; i<8; i++) {
     if (rx_portd[i]) {
-      PCMSK2 |= 1 << (PCINT16 + i);
-      pinMode(0 + i, INPUT);
-      digitalWrite(0 + i, HIGH);
+      PCMSK2 |= 1 << i;
+      DDRD &= ~(1 << i); // set to input mode
+      PORTD |= (1 << i); // enable internal pullup
     }
   }
+#endif
 }
 
 /***************************************************************************************************************
@@ -1661,7 +1726,7 @@ void setup()
 #endif
 
 #if defined(USE_SERIAL)
-  Serial.begin(115200);
+  Serial.begin(115200L);
 #endif
 
   pinMode(LED_PIN, OUTPUT);
