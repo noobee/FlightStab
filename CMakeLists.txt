@@ -63,11 +63,11 @@ endif (NOT TODAY)
 
 # defines = semicolon-separated list of key-value pairs "RX3S_V1;DEF=VAL;DEF2=VAL2"
 
-# NANO_WII
-add_arduino_firmware(${TODAY}_NANO_WII FlightStab leonardo "NANO_WII")
-add_arduino_firmware(TEST_NANO_WII_CPPM FlightStab leonardo "NANO_WII;USE_CPPM")
-add_arduino_firmware(TEST_NANO_WII_SERIAL FlightStab leonardo "NANO_WII;USE_SERIAL")
-add_arduino_firmware(TEST_NANO_WII_I2CDEVLIB FlightStab leonardo "NANO_WII;USE_I2CDEVLIB")
+# NANOWII
+add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
+add_arduino_firmware(TEST_NANOWII_CPPM FlightStab leonardo "NANOWII;USE_CPPM")
+add_arduino_firmware(TEST_NANOWII_SERIAL FlightStab leonardo "NANOWII;USE_SERIAL")
+add_arduino_firmware(TEST_NANOWII_I2CDEVLIB FlightStab leonardo "NANOWII;USE_I2CDEVLIB")
 
 # RX3S_* 16MHz (standard)
 add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")
@@ -84,6 +84,7 @@ add_arduino_firmware(${TODAY}_RX3S_V2_CPPM FlightStab pro5v "RX3S_V2;USE_CPPM")
 # RX3S_V2 test permutations          
 add_arduino_firmware(TEST_RX3S_V2_MOD_PCINT0 FlightStab pro5v "RX3S_V2;MOD_PCINT0")
 add_arduino_firmware(TEST_RX3S_V2_SERIAL FlightStab pro5v "RX3S_V2;USE_SERIAL")
+add_arduino_firmware(TEST_RX3S_V2_LED_TIMING FlightStab pro5v "RX3S_V2;LED_TIMING")
 add_arduino_firmware(TEST_RX3S_V2_I2CDEVLIB FlightStab pro5v "RX3S_V2;USE_I2CDEVLIB")
 
 

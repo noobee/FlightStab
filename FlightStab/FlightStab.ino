@@ -10,18 +10,18 @@
  * device definitions (todo: move to separate files)
  ***************************************************************************************************************/
 
-//#define RX3S_V1
+#define RX3S_V1
 //#define RX3S_V2
-#define NANO_WII
-//#define NANO_MPU6050
+//#define NANOWII
+#define NANO_MPU6050
 
-//#define USE_CPPM // enable CPPM input on CPPM_IN_PIN
+#define USE_CPPM // enable CPPM input on CPPM_IN_PIN
 //#define EEPROM_CFG_VER 1 // do not use at this time
 
-//#define USE_SERIAL // enable serial port
+#define USE_SERIAL // enable serial port
 //#define LED_TIMING // disable LED_MSG and use LED_PIN to measure timings
 
-//#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
+#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 //#define USE_I2CLIGHT // poll-based i2c access routines
 #if !(defined(USE_I2CDEVLIB) || defined(USE_I2CLIGHT))
 #define USE_I2CLIGHT // default
@@ -79,12 +79,15 @@
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
 
 // CPPM
-#define CPPM_IN_PIN 8
+#define CPPM_PINREG PINB
+#define CPPM_PINBIT 0
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define SCL_PIN 19
 #define SDA_PIN 18
+#define LED_PORTREG PORTB
+#define LED_PORTBIT 5
 
 #endif 
 /* RX3S_V1 *****************************************************************************************************/
@@ -143,7 +146,8 @@
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
 
 // CPPM
-#define CPPM_IN_PIN 8
+#define CPPM_PINREG PINB
+#define CPPM_PINBIT 0
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
@@ -158,26 +162,26 @@
 #endif
 /* RX3S_V2 *****************************************************************************************************/
 
-/* NANO_WII ****************************************************************************************************/
-#if defined(NANO_WII)
-#warning NANO_WII defined // emit device name
+/* NANOWII ****************************************************************************************************/
+#if defined(NANOWII)
+#warning NANOWII defined // emit device name
 /*
- Nano WII
- PB0 17    (SS/RXLED)    |                        | PD0  3 SCL (SCL)   |                   | PF0 23/A5    (ADC0)
- PB1 15 RX (SCK/PCINT1)  |                        | PD1  2 SDA (SDA)   |                   | PF1 22/A4    (ADC1)
- PB2 16 RX (MOSI/PCINT2) |                        | PD2  0 RXD (RXD)   | PE2       (HWB_)  |
- PB3 14 RX (MISO/PCINT3) |                        | PD3  1 TXD (TXD)   |                   |
- PB4  8 RX (PCINT4)      |                        | PD4  4  SV (ADC8)  |                   | PF4 21/A3 SV (ADC4)
- PB5  9  M (OC1A/OC4B_)  |                        | PD5        (TXLED) |                   | PF5 20/A2 SV (ADC5)
- PB6 10  M (OC1B/OC4B)   | PC6  5  M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6  7 RX (INT.6) | PF6 19/A1 SV (ADC6)
- PB7 11  M (OC0A/OC1C)   | PC7 13  M (OC4A)       | PD7  6   M (OC4D)  |                   | PF7 18/A0 SV (ADC7)
+ NanoWii
+ PB0 17    (SS/RXLED)    |                        | PD0  3 SCL (SCL)   |                  | PF0 23/A5    (ADC0)
+ PB1 15 RX (SCK/PCINT1)  |                        | PD1  2 SDA (SDA)   |                  | PF1 22/A4    (ADC1)
+ PB2 16 RX (MOSI/PCINT2) |                        | PD2  0 RXD (RXD)   | PE2       (HWB_) |
+ PB3 14 RX (MISO/PCINT3) |                        | PD3  1 TXD (TXD)   |                  |
+ PB4  8 RX (PCINT4)      |                        | PD4  4  SV (ADC8)  |                  | PF4 21/A3 SV (ADC4)
+ PB5  9  M (OC1A/OC4B_)  |                        | PD5        (TXLED) |                  | PF5 20/A2 SV (ADC5)
+ PB6 10  M (OC1B/OC4B)   | PC6  5  M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6  7 RX (INT6) | PF6 19/A1 SV (ADC6)
+ PB7 11  M (OC0A/OC1C)   | PC7 13  M (OC4A)       | PD7  6   M (OC4D)  |                  | PF7 18/A0 SV (ADC7)
 */
 
-// <VR>
+// <VR> MUST BE ALL NULL
 #define AIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL}
 
-// <RX> (must in PORT B/D due to ISR)
-#define RX_PORTB {NULL, &ail_in, &ele_in, &rud_in, &aux_in, NULL, NULL, NULL}
+// <RX> PORTD MUST BE ALL NULL
+#define RX_PORTB {NULL, &rud_in, &ail_in, &ele_in, &aux_in, NULL, NULL, NULL}
 #define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SWITCH>
@@ -199,17 +203,16 @@
 #define GYRO_ORIENTATION(x, y, z) {gRoll = (-y); gPitch = (-x); gYaw = (z);}
 
 // CPPM
-#define CPPM_IN_PIN 15
-#define THR_OUT_PIN 11
+#define CPPM_PINREG PINE
+#define CPPM_PINBIT 6
+#define THR_OUT_PIN 14
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define SCL_PIN 3
 #define SDA_PIN 2
 
 #endif
-/* NANO_WII ****************************************************************************************************/
-
-
+/* NANOWII ****************************************************************************************************/
 
 
 
@@ -347,26 +350,10 @@ enum MIX_MODE mix_mode;
 enum AIL_MODE {AIL_SINGLE, AIL_DUAL};
 enum AIL_MODE ail_mode;
 
-// cppm
-#if defined(USE_CPPM)
-int8_t cppm_enabled = true;
-#else
-int8_t cppm_enabled = false;
-#endif
-
 #define VR_GAIN_MAX (-128)
 #define STICK_GAIN_MAX 400 // 1900-1500 or 1500-1100 
 #define MASTER_GAIN_MAX 800 // 1900-1100
 
-// debugging with logic analyzer through led
-#if defined(LED_TIMING)
-// PB5 = LED_PIN
-#define LED_TIMING_START do { PORTB |= (1 << 5); } while(0)
-#define LED_TIMING_STOP do { PORTB &= ~(1 << 5); } while(0)
-#else
-#define LED_TIMING_START
-#define LED_TIMING_STOP
-#endif
 
 /***************************************************************************************************************
  * TIMER1 and MISC
@@ -596,10 +583,49 @@ void itg3205_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
 int8_t led_pulse_count[4];
 int16_t led_pulse_msec[4];
 
+void init_led()
+{
+#if !defined(NANOWII)
+  pinMode(LED_PIN, OUTPUT); // PB5 usually
+#else
+  DDRD |= (1 << 5); // PD5
+#endif
+}
+
 void set_led(int8_t i)
 {
 #if !defined(LED_TIMING)
+#if !defined(NANOWII)
   digitalWrite(LED_PIN, i == LED_OFF ? LOW : i == LED_ON ? HIGH : digitalRead(LED_PIN) ^ 1);
+#else
+  switch (i) {
+  case LED_OFF: PORTD |= (1 << 5); break;
+  case LED_ON: PORTD &= ~(1 << 5); break;
+  default: PORTD ^= (1 << 5); break;
+  }
+#endif
+#endif
+}
+
+inline void LED_TIMING_START()
+{
+#if defined(LED_TIMING)
+#if !defined(NANOWII)
+  PORTB |= (1 << 5);
+#else
+  PORTD &= ~(1 << 5);
+#endif
+#endif
+}
+
+inline void LED_TIMING_STOP()
+{
+#if defined(LED_TIMING)
+#if !defined(NANOWII)
+  PORTB &= ~(1 << 5);
+#else
+  PORTD |= (1 << 5);
+#endif
 #endif
 }
 
@@ -704,11 +730,11 @@ void read_switches()
 {
   for (int8_t i=0; i<8; i++) {
     if (din_portb[i])
-     *din_portb[i] = PORTB & (1 << i);
+     *din_portb[i] = PINB & (1 << i);
     if (din_portc[i])
-     *din_portc[i] = PORTC & (1 << i);
+     *din_portc[i] = PINC & (1 << i);
     if (din_portd[i])
-     *din_portd[i] = PORTD & (1 << i);
+     *din_portd[i] = PIND & (1 << i);
   } 
 }
 
@@ -725,9 +751,10 @@ volatile int16_t *rx_chan[] = {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ail
 volatile int16_t *rx_portb[] = RX_PORTB; // non CPPM
 volatile int16_t *rx_portd[] = RX_PORTD; // non CPPM
 
+
 #if defined(USE_CPPM)
 
-ISR(PCINT0_vect)
+void isr_cppm()
 {
   static uint16_t rise_time;
   static uint8_t last_pin;
@@ -737,14 +764,13 @@ ISR(PCINT0_vect)
 
   now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
   last_pin2 = last_pin;
-  pin = PINB;
+  pin = CPPM_PINREG;
   last_pin = pin;
   sei();
 
   rise = pin & ~last_pin2;
 
-  // cppm on arduino CPPM_IN_PIN (in PORT B) 
-  if (rise & (1 << CPPM_IN_PIN - 8)) {
+  if (rise & (1 << CPPM_PINBIT)) {
     uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
     rise_time = now;
     if (width > 3000 || ch > 7) {
@@ -757,8 +783,19 @@ ISR(PCINT0_vect)
     }
   }
 }
+
+#if !defined(NANOWII)
+ISR(PCINT0_vect)
+{
+  isr_cppm();
+}
+#else // NANOWII
+ISR(INT6_vect){ 
+  isr_cppm();
+}
+#endif // NANOWII
     
-#else
+#else // USE_CPPM
 
 #if defined(MOD_PCINT0)
 // contributed by JohnRB
@@ -874,7 +911,7 @@ ISR(PCINT0_vect)
 }
 #endif // MOD_PCINT0
 
-#if !defined(NANO_WII)
+#if !defined(NANOWII)
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
@@ -905,21 +942,29 @@ ISR(PCINT2_vect)
     }
   }
 }
-#endif
+#endif // NANOWII
 
-#endif
+#endif // USE_CPPM
 
 void init_digital_in_rx()
 {
-  if (cppm_enabled) {
-    // CPPM_IN_PIN (in PORT B)
+#if defined(USE_CPPM)
+#if defined(NANOWII)
+    // (CPPM_PINREG, CPPM_PINBIT) must be (PINE, 6)
+    EICRB |= (1 << ISC60); // interrupt on pin change
+    EIMSK |= (1 << INT6);
+    DDRE &= ~(1 << CPPM_PINBIT);
+    PORTE |= (1 << CPPM_PINBIT);
+#else // NANOWII
+    // CPPM_PINREG must be PORTB
     PCICR |= (1 << PCIE0);
-    PCMSK0 |= 1 << (CPPM_IN_PIN - 8); // TODO: does not work for NANO_WII
-    pinMode(CPPM_IN_PIN, INPUT);
-    digitalWrite(CPPM_IN_PIN, HIGH);
+    PCMSK0 |= (1 << CPPM_PINBIT);
+    DDRB &= ~(1 << CPPM_PINBIT);
+    PORTB |= (1 << CPPM_PINBIT);
+#endif // NANOWII
     rx_portb_pref = &ele_in; // CPPM isr needs to compare pointer to var
     return;
-  }
+#endif // USE_CPPM
 
   // PORTB RX
   PCICR |= (1 << PCIE0);
@@ -932,7 +977,7 @@ void init_digital_in_rx()
   }
   rx_portb_ref = 1; // use ELE_IN as ref channel. both V1/V2 use it in all mix modes.
 
- #if !defined(NANO_WII)
+ #if !defined(NANOWII)
   // PORTD RX
   PCICR |= (1 << PCIE2);
   for (int8_t i=0; i<8; i++) {
@@ -942,7 +987,7 @@ void init_digital_in_rx()
       PORTD |= (1 << i); // enable internal pullup
     }
   }
-#endif
+#endif // NANOWII
 }
 
 /***************************************************************************************************************
@@ -1273,66 +1318,6 @@ void calibrate_imu()
   }
 }
 
-
-/***************************************************************************************************************
- * STICK CONFIGURATION
- ***************************************************************************************************************/
-
-int8_t zone(int16_t pwm)
-{
-  return pwm < 1200 ? 0 : pwm < 1800 ? 1 : 2;
-}
-
-void stick_config()
-{
-  int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2;
-  int8_t z0, z1, z2=-1;
-  uint32_t z0_time;
-  int8_t x, y=0;
-  int8_t param[5];
-  
-  // param[0] 0=
-  // param[1]
-  // param[2]
-  // param[3]
-  // param[4]
-
-  while (1) {
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
-      ail_in2 = ail_in;
-      ailr_in2 = ailr_in;
-      ele_in2 = ele_in;
-      rud_in2 = rud_in;
-      aux_in2 = aux_in;
-    }
-    
-    // stick zone code
-    // 1 2 3
-    // 4 5 6
-    // 7 8 9
-    z0 = zone(ele_in2) * 3 + zone(ail_in2) + 1;
-    if (z0 != z1) {
-      z1 = z0;
-      z0_time = micros1();
-    } else {
-      if ((int32_t)(micros1() - z0_time) > 50000) {
-        if (z0 != z2) {
-          // stick moved from z2 -> z0
-          int8_t z2z = z2 * 10 + z1;
-          switch (z2z) {
-            case 52: // zone 5 to zone 2
-              y = y > 0 ? y-1 : y;
-              break;
-            case 58: // zone 5 to zone 8
-              y = y < 4 ? y+1 : y;
-              break;
-          }
-          z2 = z0;
-        }
-      }
-    } 
-  }    
-}
 
 
 /***************************************************************************************************************
@@ -1708,6 +1693,72 @@ void dump_sensors()
 #endif
 }
 
+ /***************************************************************************************************************
+ * STICK CONFIGURATION
+ ***************************************************************************************************************/
+
+int8_t stick_zone(int16_t pwm)
+{
+  if (pwm <= 1200) return -1;
+  if (pwm >= 1300 && pwm <= 1700) return 0;
+  if (pwm >= 1800) return +1;
+}
+
+// 0=mix_mode 1=ail_mode 2=roll_gain 3=pitch_gain 4=yaw_gain
+// mix_mode 1=normal 2=delta 3=vtail
+// ail_mode 1=single 2=dual
+// roll|pitch|yaw_gain [-5,5] = [-5,5]
+
+const int8_t param_xcount = 5;
+const int8_t param_ymin[param_xcount] = {1, 1, -5, -5, -5};
+const int8_t param_ymax[param_xcount] = {3, 2, +5, +5, +5};
+int8_t param_yval[param_xcount] = {1, 1, 3, 3, 3};
+
+void stick_config()
+{
+  int8_t z0, z1=5;
+  int8_t x=0;
+    
+  while (true) {
+
+    if (rx_portb_sync) {
+      rx_portb_sync = false;
+      copy_rx_in();
+    }
+
+    // telephone pad mapping
+    // 1 2 3
+    // 4 5 6
+    // 7 8 9 
+    z0 = -stick_zone(ele_in2)*3+4 + stick_zone(ail_in2)+1; 
+    if (z0 != z1) {
+      switch (z0) {
+        case 4: // left
+          x = max(x - 1, 0);
+          break;
+        case 6: // right
+          x = min(x + 1, param_xcount - 1);
+          break;
+        case 2: // up
+          param_yval[x] = min(param_yval[x] + 1, param_ymax[x]);
+          break;
+        case 8: // down
+          param_yval[x] = max(param_yval[x] - 1, param_ymin[x]);
+          break;
+        }
+        
+      Serial.print("param "); 
+      Serial.print(z0); Serial.print(' ');
+      Serial.print(x); Serial.print(' ');
+      Serial.print(param_yval[x]); Serial.print(' ');
+      Serial.println();
+
+        
+      z1 = z0;
+    }
+  }
+}
+
 /***************************************************************************************************************
  * SETUP
  ***************************************************************************************************************/
@@ -1729,7 +1780,7 @@ void setup()
   Serial.begin(115200L);
 #endif
 
-  pinMode(LED_PIN, OUTPUT);
+  init_led();
 
   // init TIMER1
   TCCR1A = 0; // normal counting mode
@@ -1776,16 +1827,16 @@ void setup()
     rx_portb[4] = &ailr_in; // enable ailr_in
   }
   
-  if (cppm_enabled) {
-    // PB0 8 CPPM_IN instead of AIL_IN
-    // PB2 10 THR_OUT instead of RUD_IN
-    rx_portb[0] = NULL; // disable ail_in
-    rx_portb[2] = NULL; // disable rud_in
-    pwm_out_var[4] = &thr_out; // enable thr_out
-    pwm_out_pin[4] = THR_OUT_PIN; //
+#if defined(USE_CPPM)
+  // PB0 8 CPPM_IN instead of AIL_IN
+  // PB2 10 THR_OUT instead of RUD_IN
+  rx_portb[0] = NULL; // disable ail_in
+  rx_portb[2] = NULL; // disable rud_in
+  pwm_out_var[4] = &thr_out; // enable thr_out
+  pwm_out_pin[4] = THR_OUT_PIN; //
+#endif // USE_CPPM
 
-  }
-#endif
+#endif // RX3S_V1
 
 #if defined(RX3S_V2)
   switch ((vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)) {
@@ -1813,16 +1864,16 @@ void setup()
     }
   }
 
-  if (cppm_enabled) {
-    // PB0 8 CPPM_IN instead of AIL_IN
-    // PB2 10 THR_OUT instead of RUD_IN
-    rx_portb[0] = NULL; // disable ail_in
-    rx_portb[2] = NULL; // disable rud_in
-    pwm_out_var[4] = &thr_out; // enable thr_out
-    pwm_out_pin[4] = THR_OUT_PIN; //
+#if defined(USE_CPPM)
+  // PB0 8 CPPM_IN instead of AIL_IN
+  // PB2 10 THR_OUT instead of RUD_IN
+  rx_portb[0] = NULL; // disable ail_in
+  rx_portb[2] = NULL; // disable rud_in
+  pwm_out_var[4] = &thr_out; // enable thr_out
+  pwm_out_pin[4] = THR_OUT_PIN; //
+#endif // USE_CPPM
 
-  }
-#endif
+#endif // RX3S_V2
 
   set_led_msg(0, mix_mode + 1, LED_LONG);
 
@@ -1836,7 +1887,8 @@ void setup()
     output[i] = 0;
   apply_mixer(); // init *_out2 vars
   
-  //dump_sensors();
+  dump_sensors();
+  stick_config();
 
 #if defined(EEPROM_CFG_VER)
   struct eeprom_cfg cfg;
