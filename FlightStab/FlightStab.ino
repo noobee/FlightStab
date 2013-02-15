@@ -186,13 +186,9 @@
  PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5        M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6 7 AUX2_IN (INT6) | PF6 19/A1 SV (ADC6)
  PB7 11 RUD_OUT (PCINT7/OC0A/OC1C)  | PC7 13 AILR_OUT (OC4A)       | PD7  6   M (OC4D)  |                      | PF7 18/A0 SV (ADC7)
  
- 
- 
- 
  CPPM enabled
  PE6 7 CPPM_IN instead of AUX2_IN
- PC7 5 THR_OUT instead of UNDEF
-
+ PC7 5 THR_OUT instead of NULL
 */
 
 // <VR> MUST BE ALL NULL
@@ -202,7 +198,7 @@
 #define RX_PORTB {NULL, &rud_in, &ail_in, &ele_in, &aux_in, NULL, NULL, NULL}
 #define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
-// <SWITCH>
+// <SWITCH> MUST BE ALL NULL
 #define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
@@ -316,7 +312,6 @@
 volatile uint8_t ail_vr = 128;
 volatile uint8_t ele_vr = 128;
 volatile uint8_t rud_vr = 128;
-
 // rx
 #define RX_WIDTH_MIN 900
 #define RX_WIDTH_LOW 1000
@@ -360,13 +355,19 @@ int16_t gRoll=0, gPitch=0, gYaw=0; // full scale = 16b signed = 2000 deg/sec
 int16_t aRoll=0, aPitch=0, aYaw=0; // full scale = 16b signed = 16g? (TODO)
 
 // pid
-#define PID_PERIOD 10000
 #define PID_KP_DEFAULT 500 // [0, 999] 11bits signed
 #define PID_KI_DEFAULT 500
 #define PID_KD_DEFAULT 500
-int16_t kp[3] = {PID_KP_DEFAULT, PID_KP_DEFAULT, PID_KP_DEFAULT};
-int16_t ki[3] = {PID_KI_DEFAULT, PID_KI_DEFAULT, PID_KI_DEFAULT};
-int16_t kd[3] = {PID_KD_DEFAULT, PID_KD_DEFAULT, PID_KD_DEFAULT};
+// rate pid thresholds
+#define PID_RATE_I_THRESHOLD 2048
+#define PID_RATE_I_WINDUP (((int32_t)1 << 13) - 1)
+#define PID_RATE_OUTPUT_SHIFT 10
+// position pid thresholds
+#define PID_POS_I_THRESHOLD 2048
+#define PID_POS_I_WINDUP (((int32_t)1 << 13) - 1)
+#define PID_POS_OUTPUT_SHIFT 10
+
+int16_t correction[3]; // final correction values
 
 // mixer
 enum MIX_MODE {MIX_NORMAL, MIX_DELTA, MIX_VTAIL};
@@ -1051,47 +1052,57 @@ void init_digital_out()
  * PID
  ***************************************************************************************************************/
 
-#define PID_I_THRESHOLD 2048
-#define PID_I_WINDUP (((int32_t)1 << 13) - 1)
+#define PID_PERIOD 10000
 #define PID_KP_SHIFT 3 
 #define PID_KI_SHIFT 6
 #define PID_KD_SHIFT 2
-#define PID_OUTPUT_SHIFT 10
 
-// kp[], kd[], ki[] = [0, 1023] 11b signed
-int16_t setpoint[3] = {0, 0, 0}; // [-8192, 8191] 14b signed, stick commanded rate or 0 for stabilize-only
-int16_t input[3]; // [-8192, 8191] 14b signed gyro measured rate
-int16_t last_input[3]; // [-8192, 8191] 14b
-int32_t sum_iterm[3]; // clamped to PID_WINDUP
-int16_t output[3]; //
+struct pid {
+  int16_t kp[3]; // 11b
+  int16_t ki[3];
+  int16_t kd[3];
+  int16_t i_threshold;
+  int32_t i_windup;
+  int8_t output_shift;
+  
+  int16_t setpoint[3]; // [-8192, 8191] 14b signed, stick commanded rate or 0 for stabilize-only
+  int16_t input[3]; // [-8192, 8191] 14b signed gyro measured rate
+  int16_t last_input[3]; // [-8192, 8191] 14b
+  int32_t sum_iterm[3]; // clamped to PID_WINDUP
+  int16_t output[3]; //
+};
 
-// process variable = angular speed = gyro reading
-void compute_pid() 
+struct pid pid_rate;
+struct pid pid_pos;
+
+void compute_pid(struct pid *ppid) 
 {
   int8_t i;
   int32_t err, diff;
 
   for (i=0; i<3; i++) {
-    err = input[i] - setpoint[i];
-    diff = input[i] - last_input[i];
-    if (abs(diff) >= PID_I_THRESHOLD) {
-      sum_iterm[i] = 0;
+    err = ppid->input[i] - ppid->setpoint[i];
+    diff = ppid->input[i] - ppid->last_input[i];
+    if (abs(diff) >= ppid->i_threshold) {
+      ppid->sum_iterm[i] = 0;
     } else {
-      sum_iterm[i] = constrain(sum_iterm[i] + ((ki[i] * err) >> PID_KI_SHIFT), -PID_I_WINDUP-1, +PID_I_WINDUP); 
+      ppid->sum_iterm[i] = constrain(ppid->sum_iterm[i] + ((ppid->ki[i] * err) >> PID_KI_SHIFT), 
+        -ppid->i_windup-1, +ppid->i_windup); 
     }
-    output[i] = (((kp[i] * err) >> PID_KP_SHIFT) + sum_iterm[i] - ((kd[i] * diff) >> PID_KD_SHIFT)) >> PID_OUTPUT_SHIFT;
-    last_input[i] = input[i];
+    ppid->output[i] = (((ppid->kp[i] * err) >> PID_KP_SHIFT) + ppid->sum_iterm[i] - 
+      ((ppid->kd[i] * diff) >> PID_KD_SHIFT)) >> ppid->output_shift;
+    ppid->last_input[i] = ppid->input[i];
 
 #if defined(USE_SERIAL) && 0
     if (i == 2) {
-      Serial.print(input[i]); Serial.print('\t');
+      Serial.print(ppid->input[i]); Serial.print('\t');
       Serial.print(err); Serial.print('\t');
       Serial.print(diff); Serial.print('\t');
-      Serial.print((kp[i] * err) >> PID_KP_SHIFT); Serial.print('\t');
-      Serial.print((ki[i] * err) >> PID_KI_SHIFT); Serial.print('\t');
-      Serial.print(sum_iterm[i]); Serial.print('\t');
-      Serial.print((kd[i] * diff) >> PID_KD_SHIFT); Serial.print('\t');
-      Serial.println(output[i]);
+      Serial.print((ppid->kp[i] * err) >> PID_KP_SHIFT); Serial.print('\t');
+      Serial.print((ppid->ki[i] * err) >> PID_KI_SHIFT); Serial.print('\t');
+      Serial.print(ppid->sum_iterm[i]); Serial.print('\t');
+      Serial.print((ppid->kd[i] * diff) >> PID_KD_SHIFT); Serial.print('\t');
+      Serial.println(ppid->output[i]);
     }
 #endif
   }
@@ -1573,29 +1584,29 @@ void apply_mixer()
   int16_t tmp0, tmp1, tmp2;
   switch (mix_mode) {
   case MIX_NORMAL:
-    ail_out2 = ail_in2 + output[0];
-    ailr_out2 = ailr_in2 + output[0];
-    ele_out2 = ele_in2 + output[1];
-    rud_out2 = rud_in2 + output[2];
+    ail_out2 = ail_in2 + correction[0];
+    ailr_out2 = ailr_in2 + correction[0];
+    ele_out2 = ele_in2 + correction[1];
+    rud_out2 = rud_in2 + correction[2];
     break;
   case MIX_DELTA:
-    tmp0 =  ail_in2 + output[0];
-    tmp1 =  ele_in2 + output[1];
+    tmp0 =  ail_in2 + correction[0];
+    tmp1 =  ele_in2 + correction[1];
     ail_out2 = (tmp0 + tmp1) >> 1;
     ele_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
-    rud_out2 = rud_in2 + output[2];
+    rud_out2 = rud_in2 + correction[2];
     break;
   case MIX_VTAIL:
-    ail_out2 = ail_in2 + output[0];
-    ailr_out2 = ailr_in2 + output[0];
-    tmp1 =  ele_in2 + output[1];
-    tmp2 =  rud_in2 + output[2];
+    ail_out2 = ail_in2 + correction[0];
+    ailr_out2 = ailr_in2 + correction[0];
+    tmp1 =  ele_in2 + correction[1];
+    tmp2 =  rud_in2 + correction[2];
     ele_out2 = (tmp2 + tmp1) >> 1;
     rud_out2 = ((tmp2 - tmp1) >> 1) + RX_WIDTH_MID;
     break;
   }
 
-  // clamp output
+  // clamp final servo output
   ail_out2 = constrain(ail_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
   ailr_out2 = constrain(ailr_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
   ele_out2 = constrain(ele_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
@@ -1901,13 +1912,23 @@ void setup()
   init_imu(); // gyro/accelgyro
 
   copy_rx_in(); // init *_in2 vars
-  for (i=0; i<3; i++) // init pid/gain correction
-    output[i] = 0;
+  for (i=0; i<3; i++) // init mixer correction
+    correction[i] = 0;
   apply_mixer(); // init *_out2 vars
   
   //dump_sensors();
   //stick_config();
 
+  // set up rate pid paramaters
+  pid_rate.i_threshold = PID_RATE_I_THRESHOLD;
+  pid_rate.i_windup = PID_RATE_I_WINDUP;
+  pid_rate.output_shift = PID_RATE_OUTPUT_SHIFT;
+  for (i=0; i<3; i++) {
+    pid_rate.kp[i] = PID_KP_DEFAULT;
+    pid_rate.ki[i] = PID_KI_DEFAULT;
+    pid_rate.kd[i] = PID_KD_DEFAULT;
+  }
+  
 #if defined(EEPROM_CFG_VER)
   struct eeprom_cfg cfg;
   if (read_eeprom(&cfg, EEPROM_CFG_VER) < 0) {
@@ -1995,7 +2016,7 @@ again:
     }
   } 
 
-  // short circuit rest of the loop if still calibrating, do not compute output[]
+  // short circuit rest of the loop if still calibrating, do not compute correction[]
   if (rx_calibrating || imu_calibrating) {
     goto again;
   }
@@ -2003,17 +2024,17 @@ again:
   if ((int32_t)(t - last_pid_time) > PID_PERIOD) {
     int8_t i;
 
-    // commanded rate of rotation (could be from ail/ele/rud _in, note direction/sign)
-    setpoint[0] = 0;
-    setpoint[1] = 0;
-    setpoint[2] = 0;
+    // commanded rate of rotation (could be from [ail|ele|rud]_in2, note direction/sign)
+    pid_rate.setpoint[0] = 0;
+    pid_rate.setpoint[1] = 0;
+    pid_rate.setpoint[2] = 0;
 
     // measured rate of rotation (from the gyro)
-    input[0] = constrain(gRoll, -8192, 8191);
-    input[1] = constrain(gPitch, -8192, 8191);
-    input[2] = constrain(gYaw, -8192, 8191);
+    pid_rate.input[0] = constrain(gRoll, -8192, 8191);
+    pid_rate.input[1] = constrain(gPitch, -8192, 8191);
+    pid_rate.input[2] = constrain(gYaw, -8192, 8191);
 
-    compute_pid();
+    compute_pid(&pid_rate);
 
     // stick_gain[] [1100, <ail*|ele|rud>_in2_mid, 1900] => [0%, 100%, 0%] = [0, STICK_GAIN_MAX, 0]
     int16_t ail_stick_pos = abs(((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1);
@@ -2026,16 +2047,13 @@ again:
     
     for (i=0; i<3; i++) {
       // vr_gain/128, stick_gain/256, master_gain/512
-      output[i] = ((((int32_t)output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
+      correction[i] = ((((int32_t)pid_rate.output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
     }
     
 #if defined(USE_SERIAL) && 0
-    Serial.print(kp[0]); Serial.print('\t'); 
-    Serial.print(input[0]); Serial.print('\t');
-    Serial.print(sum_iterm[0]); Serial.print('\t');
-    Serial.print(output[0]); Serial.print('\t');
-    Serial.print(output[1]); Serial.print('\t');
-    Serial.print(output[2]); Serial.println('\t');
+    Serial.print(correction[0]); Serial.print('\t');
+    Serial.print(correction[1]); Serial.print('\t');
+    Serial.print(correction[2]); Serial.println('\t');
 #endif
     last_pid_time = t;
   }
