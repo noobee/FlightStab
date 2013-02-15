@@ -81,6 +81,7 @@
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
+#define CPPM_VECT PCINT0_vect
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
@@ -151,6 +152,7 @@
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
+#define CPPM_VECT PCINT0_vect
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
@@ -175,14 +177,22 @@
 #warning NANOWII defined // emit device name
 /*
  NanoWii
- PB0 17        (PCINT0)            |                       | PD0  3 SCL (SCL)   |                 | PF0 23/A5    (ADC0)
- PB1 15 RUD_IN (SCK/PCINT1)        |                       | PD1  2 SDA (SDA)   |                 | PF1 22/A4    (ADC1)
- PB2 16 AIL_IN (MOSI/PCINT2)       |                       | PD2  0 RXD (RXD)   | PE2      (HWB_) |
- PB3 14 ELE_IN (MISO/PCINT3)       |                       | PD3  1 TXD (TXD)   |                 |
- PB4  8 AUX_IN (PCINT4)            |                       | PD4  4  SV (ADC8)  |                 | PF4 21/A3 SV (ADC4)
- PB5  9      M (PCINT5/OC1A/OC4B_) |                       | PD5        (TXLED) |                 | PF5 20/A2 SV (ADC5)
- PB6 10      M (PCINT6/OC1B/OC4B)  | PC6  5 M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6 7 RX (INT6) | PF6 19/A1 SV (ADC6)
- PB7 11      M (PCINT7/OC0A/OC1C)  | PC7 13 M (OC4A)       | PD7  6   M (OC4D)  |                 | PF7 18/A0 SV (ADC7)
+ PB0 17         (PCINT0)            |                              | PD0  3 SCL (SCL)   |                      | PF0 23/A5    (ADC0)
+ PB1 15  RUD_IN (SCK/PCINT1)        |                              | PD1  2 SDA (SDA)   |                      | PF1 22/A4    (ADC1)
+ PB2 16  AIL_IN (MOSI/PCINT2)       |                              | PD2  0 RXD (RXD)   | PE2           (HWB_) |
+ PB3 14  ELE_IN (MISO/PCINT3)       |                              | PD3  1 TXD (TXD)   |                      |
+ PB4  8  AUX_IN (PCINT4)            |                              | PD4  4  SV (ADC8)  |                      | PF4 21/A3 SV (ADC4)
+ PB5  9 AIL_OUT (PCINT5/OC1A/OC4B_) |                              | PD5        (TXLED) |                      | PF5 20/A2 SV (ADC5)
+ PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5        M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6 7 AUX2_IN (INT6) | PF6 19/A1 SV (ADC6)
+ PB7 11 RUD_OUT (PCINT7/OC0A/OC1C)  | PC7 13 AILR_OUT (OC4A)       | PD7  6   M (OC4D)  |                      | PF7 18/A0 SV (ADC7)
+ 
+ 
+ 
+ 
+ CPPM enabled
+ PE6 7 CPPM_IN instead of AUX2_IN
+ PC7 5 THR_OUT instead of UNDEF
+
 */
 
 // <VR> MUST BE ALL NULL
@@ -200,8 +210,8 @@
 // <SERVO>
 #define AIL_OUT_PIN 9
 #define ELE_OUT_PIN 10
-#define RUD_OUT_PIN 5
-#define AILR_OUT_PIN 6 // dual aileron mode only
+#define RUD_OUT_PIN 11
+#define AILR_OUT_PIN 13 // dual aileron mode only
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
 #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
@@ -213,7 +223,8 @@
 // CPPM
 #define CPPM_PINREG PINE
 #define CPPM_PINBIT 6
-#define THR_OUT_PIN 14
+#define CPPM_VECT INT6_vect
+#define THR_OUT_PIN 5
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define SCL_PIN 3
@@ -736,10 +747,9 @@ volatile int16_t *rx_chan[] = {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ail
 volatile int16_t *rx_portb[] = RX_PORTB; // non CPPM
 volatile int16_t *rx_portd[] = RX_PORTD; // non CPPM
 
-
 #if defined(USE_CPPM)
 
-void isr_cppm()
+ISR(CPPM_VECT)
 {
   static uint16_t rise_time;
   static uint8_t last_pin;
@@ -768,17 +778,6 @@ void isr_cppm()
     }
   }
 }
-
-#if !defined(NANOWII)
-ISR(PCINT0_vect)
-{
-  isr_cppm();
-}
-#else // NANOWII
-ISR(INT6_vect){ 
-  isr_cppm();
-}
-#endif // NANOWII
     
 #else // USE_CPPM
 
@@ -896,7 +895,31 @@ ISR(PCINT0_vect)
 }
 #endif // MOD_PCINT0
 
-#if !defined(NANOWII)
+#if defined(NANOWII)
+// PE6 = aux2_in
+ISR(INT6_vect){ 
+  static uint16_t rise_time;
+  static uint8_t last_pin;
+  uint16_t now;
+  uint8_t pin, last_pin2, rise;
+
+  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
+  last_pin2 = last_pin;
+  pin = PINE;
+  last_pin = pin;
+  sei();
+
+  rise = pin & ~last_pin2;
+  if (rise & (1 << 6)) {
+    rise_time = now;
+  } else {
+    uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+    if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+      aux2_in = width;
+    }
+  }
+}
+#else // NANOWII
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
@@ -928,27 +951,26 @@ ISR(PCINT2_vect)
   }
 }
 #endif // NANOWII
-
 #endif // USE_CPPM
 
 void init_digital_in_rx()
 {
 #if defined(USE_CPPM)
 #if defined(NANOWII)
-    // (CPPM_PINREG, CPPM_PINBIT) must be (PINE, 6)
-    EICRB |= (1 << ISC60); // interrupt on pin change
-    EIMSK |= (1 << INT6);
-    DDRE &= ~(1 << CPPM_PINBIT);
-    PORTE |= (1 << CPPM_PINBIT);
+  // (CPPM_PINREG, CPPM_PINBIT) must be (PINE, 6)
+  EICRB |= (1 << ISC60); // interrupt on pin change
+  EIMSK |= (1 << INT6);
+  DDRE &= ~(1 << CPPM_PINBIT);
+  PORTE |= (1 << CPPM_PINBIT);
 #else // NANOWII
-    // CPPM_PINREG must be PORTB
-    PCICR |= (1 << PCIE0);
-    PCMSK0 |= (1 << CPPM_PINBIT);
-    DDRB &= ~(1 << CPPM_PINBIT);
-    PORTB |= (1 << CPPM_PINBIT);
+  // CPPM_PINREG must be PORTB
+  PCICR |= (1 << PCIE0);
+  PCMSK0 |= (1 << CPPM_PINBIT);
+  DDRB &= ~(1 << CPPM_PINBIT);
+  PORTB |= (1 << CPPM_PINBIT);
 #endif // NANOWII
-    rx_portb_pref = &ele_in; // CPPM isr needs to compare pointer to var
-    return;
+  rx_portb_pref = &ele_in; // CPPM isr needs to compare pointer to var
+  return;
 #endif // USE_CPPM
 
   // PORTB RX
@@ -962,7 +984,13 @@ void init_digital_in_rx()
   }
   rx_portb_ref = 1; // use ELE_IN as ref channel. both V1/V2 use it in all mix modes.
 
- #if !defined(NANOWII)
+#if defined(NANOWII)
+  // PE6
+  EICRB |= (1 << ISC60); // interrupt on pin change
+  EIMSK |= (1 << INT6);
+  DDRE &= ~(1 << 6);
+  PORTE |= (1 << 6);
+#else // NANOWII
   // PORTD RX
   PCICR |= (1 << PCIE2);
   for (int8_t i=0; i<8; i++) {
