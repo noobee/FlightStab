@@ -10,18 +10,18 @@
  * device definitions (todo: move to separate files)
  ***************************************************************************************************************/
 
-#define RX3S_V1
+//#define RX3S_V1
 //#define RX3S_V2
 //#define NANOWII
-#define NANO_MPU6050
+//#define NANO_MPU6050
 
-#define USE_CPPM // enable CPPM input on CPPM_IN_PIN
+//#define USE_CPPM // enable CPPM input on CPPM_IN_PIN
 //#define EEPROM_CFG_VER 1 // do not use at this time
 
-#define USE_SERIAL // enable serial port
-//#define LED_TIMING // disable LED_MSG and use LED_PIN to measure timings
+//#define USE_SERIAL // enable serial port
+//#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
 
-#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
+//#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 //#define USE_I2CLIGHT // poll-based i2c access routines
 #if !(defined(USE_I2CDEVLIB) || defined(USE_I2CLIGHT))
 #define USE_I2CLIGHT // default
@@ -86,8 +86,11 @@
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define SCL_PIN 19
 #define SDA_PIN 18
-#define LED_PORTREG PORTB
-#define LED_PORTBIT 5
+
+#define LED_DDR DDRB // led register
+#define LED_PORT PORTB
+#define LED_BIT 5
+#define LED_XOR 0 // active high
 
 #endif 
 /* RX3S_V1 *****************************************************************************************************/
@@ -154,6 +157,11 @@
 #define SCL_PIN 19
 #define SDA_PIN 18
 
+#define LED_DDR DDRB // led register
+#define LED_PORT PORTB
+#define LED_BIT 5
+#define LED_XOR 0 // active high
+
 //#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2
 #if defined(MOD_PCINT0)
 #warning MOD_PCINT0 defined
@@ -167,14 +175,14 @@
 #warning NANOWII defined // emit device name
 /*
  NanoWii
- PB0 17    (SS/RXLED)    |                        | PD0  3 SCL (SCL)   |                  | PF0 23/A5    (ADC0)
- PB1 15 RX (SCK/PCINT1)  |                        | PD1  2 SDA (SDA)   |                  | PF1 22/A4    (ADC1)
- PB2 16 RX (MOSI/PCINT2) |                        | PD2  0 RXD (RXD)   | PE2       (HWB_) |
- PB3 14 RX (MISO/PCINT3) |                        | PD3  1 TXD (TXD)   |                  |
- PB4  8 RX (PCINT4)      |                        | PD4  4  SV (ADC8)  |                  | PF4 21/A3 SV (ADC4)
- PB5  9  M (OC1A/OC4B_)  |                        | PD5        (TXLED) |                  | PF5 20/A2 SV (ADC5)
- PB6 10  M (OC1B/OC4B)   | PC6  5  M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6  7 RX (INT6) | PF6 19/A1 SV (ADC6)
- PB7 11  M (OC0A/OC1C)   | PC7 13  M (OC4A)       | PD7  6   M (OC4D)  |                  | PF7 18/A0 SV (ADC7)
+ PB0 17        (PCINT0)            |                       | PD0  3 SCL (SCL)   |                 | PF0 23/A5    (ADC0)
+ PB1 15 RUD_IN (SCK/PCINT1)        |                       | PD1  2 SDA (SDA)   |                 | PF1 22/A4    (ADC1)
+ PB2 16 AIL_IN (MOSI/PCINT2)       |                       | PD2  0 RXD (RXD)   | PE2      (HWB_) |
+ PB3 14 ELE_IN (MISO/PCINT3)       |                       | PD3  1 TXD (TXD)   |                 |
+ PB4  8 AUX_IN (PCINT4)            |                       | PD4  4  SV (ADC8)  |                 | PF4 21/A3 SV (ADC4)
+ PB5  9      M (PCINT5/OC1A/OC4B_) |                       | PD5        (TXLED) |                 | PF5 20/A2 SV (ADC5)
+ PB6 10      M (PCINT6/OC1B/OC4B)  | PC6  5 M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6 7 RX (INT6) | PF6 19/A1 SV (ADC6)
+ PB7 11      M (PCINT7/OC0A/OC1C)  | PC7 13 M (OC4A)       | PD7  6   M (OC4D)  |                 | PF7 18/A0 SV (ADC7)
 */
 
 // <VR> MUST BE ALL NULL
@@ -210,6 +218,11 @@
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define SCL_PIN 3
 #define SDA_PIN 2
+
+#define LED_DDR DDRD // led register
+#define LED_PORT PORTD
+#define LED_BIT 5
+#define LED_XOR 1 // active low
 
 #endif
 /* NANOWII ****************************************************************************************************/
@@ -273,18 +286,20 @@
 #endif
 #endif
 
-
-#define LED_PIN 13 // standard on most devices (SCK)
-
 // LED set
+#define LED_OFF 0
 #define LED_ON 1
-#define LED_OFF 2
-#define LED_INVERT 3
+#define LED_INVERT 2
 
 // LED message pulse duration
 #define LED_LONG 600
 #define LED_SHORT 200
 #define LED_VERY_SHORT 30
+
+#if defined(LED_TIMING)
+#define LED_TIMING_START do {LED_PORT |= (1 << LED_BIT);} while (0)
+#define LED_TIMING_STOP do {LED_PORT &= ~(1 << LED_BIT);} while (0)
+#endif
 
 // adc
 volatile uint8_t ail_vr = 128;
@@ -585,47 +600,17 @@ int16_t led_pulse_msec[4];
 
 void init_led()
 {
-#if !defined(NANOWII)
-  pinMode(LED_PIN, OUTPUT); // PB5 usually
-#else
-  DDRD |= (1 << 5); // PD5
-#endif
+  LED_DDR |= (1 << LED_BIT);
 }
 
 void set_led(int8_t i)
 {
 #if !defined(LED_TIMING)
-#if !defined(NANOWII)
-  digitalWrite(LED_PIN, i == LED_OFF ? LOW : i == LED_ON ? HIGH : digitalRead(LED_PIN) ^ 1);
-#else
-  switch (i) {
-  case LED_OFF: PORTD |= (1 << 5); break;
-  case LED_ON: PORTD &= ~(1 << 5); break;
-  default: PORTD ^= (1 << 5); break;
-  }
-#endif
-#endif
-}
-
-inline void LED_TIMING_START()
-{
-#if defined(LED_TIMING)
-#if !defined(NANOWII)
-  PORTB |= (1 << 5);
-#else
-  PORTD &= ~(1 << 5);
-#endif
-#endif
-}
-
-inline void LED_TIMING_STOP()
-{
-#if defined(LED_TIMING)
-#if !defined(NANOWII)
-  PORTB &= ~(1 << 5);
-#else
-  PORTD |= (1 << 5);
-#endif
+  switch (i ^ LED_XOR) {
+  case LED_ON: LED_PORT |= (1 << LED_BIT); break;
+  case LED_OFF: LED_PORT &= ~(1 << LED_BIT); break;
+  default: LED_PORT ^= (1 << LED_BIT); break;
+  }  
 #endif
 }
 
@@ -1699,9 +1684,10 @@ void dump_sensors()
 
 int8_t stick_zone(int16_t pwm)
 {
-  if (pwm <= 1200) return -1;
-  if (pwm >= 1300 && pwm <= 1700) return 0;
-  if (pwm >= 1800) return +1;
+  if (pwm <= 1200) return 0;
+  if (pwm >= 1300 && pwm <= 1700) return 1;
+  if (pwm >= 1800) return 2;
+  return -1;
 }
 
 // 0=mix_mode 1=ail_mode 2=roll_gain 3=pitch_gain 4=yaw_gain
@@ -1716,7 +1702,7 @@ int8_t param_yval[param_xcount] = {1, 1, 3, 3, 3};
 
 void stick_config()
 {
-  int8_t z0, z1=5;
+  int8_t z0, z1=5, zx=2, zy=2, tmp;
   int8_t x=0;
     
   while (true) {
@@ -1730,30 +1716,34 @@ void stick_config()
     // 1 2 3
     // 4 5 6
     // 7 8 9 
-    z0 = -stick_zone(ele_in2)*3+4 + stick_zone(ail_in2)+1; 
+    zx = (tmp = stick_zone(ail_in2)) >= 0 ? tmp : zx;
+    zy = (tmp = stick_zone(ele_in2)) >= 0 ? tmp : zy;
+    z0 = (2-zy)*3 + zx + 1; 
     if (z0 != z1) {
-      switch (z0) {
-        case 4: // left
+      int8_t z2z = z1 * 10 + z0;
+      switch (z2z) {
+        case 54: // left
           x = max(x - 1, 0);
           break;
-        case 6: // right
+        case 56: // right
           x = min(x + 1, param_xcount - 1);
           break;
-        case 2: // up
+        case 52: // up
           param_yval[x] = min(param_yval[x] + 1, param_ymax[x]);
           break;
-        case 8: // down
+        case 58: // down
           param_yval[x] = max(param_yval[x] - 1, param_ymin[x]);
           break;
         }
         
-      Serial.print("param "); 
-      Serial.print(z0); Serial.print(' ');
-      Serial.print(x); Serial.print(' ');
-      Serial.print(param_yval[x]); Serial.print(' ');
-      Serial.println();
-
-        
+      if (z0 != 5) {
+        Serial.print("param "); 
+        Serial.print(z1); Serial.print(' ');
+        Serial.print(z0); Serial.print(' ');
+        Serial.print(x); Serial.print(' ');
+        Serial.print(param_yval[x]); Serial.print(' ');
+        Serial.println();
+      }
       z1 = z0;
     }
   }
@@ -1887,8 +1877,8 @@ void setup()
     output[i] = 0;
   apply_mixer(); // init *_out2 vars
   
-  dump_sensors();
-  stick_config();
+  //dump_sensors();
+  //stick_config();
 
 #if defined(EEPROM_CFG_VER)
   struct eeprom_cfg cfg;
