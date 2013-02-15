@@ -964,8 +964,8 @@ void init_digital_in_rx()
   DDRE &= ~(1 << CPPM_PINBIT);
   PORTE |= (1 << CPPM_PINBIT);
 #else // NANOWII
-  // CPPM_PINREG must be PORTB
-  PCICR |= (1 << PCIE0);
+  // CPPM_PINREG must be PINB
+  PCICR |= (1 << PCIE0); // interrupt on pin change
   PCMSK0 |= (1 << CPPM_PINBIT);
   DDRB &= ~(1 << CPPM_PINBIT);
   PORTB |= (1 << CPPM_PINBIT);
@@ -975,7 +975,7 @@ void init_digital_in_rx()
 #endif // USE_CPPM
 
   // PORTB RX
-  PCICR |= (1 << PCIE0);
+  PCICR |= (1 << PCIE0); // interrupt on pin change
   for (int8_t i=0; i<8; i++) {
     if (rx_portb[i]) {
       PCMSK0 |= 1 << (PCINT0 + i);
@@ -983,7 +983,11 @@ void init_digital_in_rx()
       PORTB |= (1 << i); // enable internal pullup
     }
   }
-  rx_portb_ref = 1; // use ELE_IN as ref channel. both V1/V2 use it in all mix modes.
+#if defined(NANOWII)
+  rx_portb_ref = 3; // use ELE_IN (PB3) as ref channel. TODO: fix this hardcoding
+#else
+  rx_portb_ref = 1; // use ELE_IN (PB1) as ref channel. TODO: fix this hardcoding
+#endif
 
 #if defined(NANOWII)
   // PE6
@@ -993,7 +997,7 @@ void init_digital_in_rx()
   PORTE |= (1 << 6);
 #else // NANOWII
   // PORTD RX
-  PCICR |= (1 << PCIE2);
+  PCICR |= (1 << PCIE2); // interrupt on pin change
   for (int8_t i=0; i<8; i++) {
     if (rx_portd[i]) {
       PCMSK2 |= 1 << i;
