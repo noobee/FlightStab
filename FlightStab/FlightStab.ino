@@ -16,7 +16,6 @@
 //#define NANO_MPU6050
 
 //#define USE_CPPM // enable CPPM input on CPPM_IN_PIN
-//#define EEPROM_CFG_VER 1 // do not use at this time
 
 //#define USE_SERIAL // enable serial port
 //#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
@@ -76,19 +75,19 @@
 
 // <IMU>
 #define USE_ITG3200
-#define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = (y); gyro[1] = (x); gyro[2] = (z);}
 
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
-#define CPPM_VECT PCINT0_vect
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define F_I2C F_400KHZ // i2c bus speed
 #define SCL_PIN 19
 #define SDA_PIN 18
 
-#define LED_DDR DDRB // led register
+// led register
 #define LED_PORT PORTB
 #define LED_BIT 5
 #define LED_XOR 0 // active high
@@ -147,19 +146,19 @@
 
 // <IMU>
 #define USE_ITG3200
-#define GYRO_ORIENTATION(x, y, z) {gRoll = (y); gPitch = (x); gYaw = (z);}
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = (y); gyro[1] = (x); gyro[2] = (z);}
 
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
-#define CPPM_VECT PCINT0_vect
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define F_I2C F_400KHZ // i2c bus speed
 #define SCL_PIN 19
 #define SDA_PIN 18
 
-#define LED_DDR DDRB // led register
+// led register
 #define LED_PORT PORTB
 #define LED_BIT 5
 #define LED_XOR 0 // active high
@@ -169,6 +168,8 @@
 #warning MOD_PCINT0 defined
 #endif
 
+int8_t rx3s_v2_wing_dual_ailB;
+
 #endif
 /* RX3S_V2 *****************************************************************************************************/
 
@@ -177,18 +178,18 @@
 #warning NANOWII defined // emit device name
 /*
  NanoWii
- PB0 17         (PCINT0)            |                              | PD0  3 SCL (SCL)   |                      | PF0 23/A5    (ADC0)
- PB1 15  RUD_IN (SCK/PCINT1)        |                              | PD1  2 SDA (SDA)   |                      | PF1 22/A4    (ADC1)
- PB2 16  AIL_IN (MOSI/PCINT2)       |                              | PD2  0 RXD (RXD)   | PE2           (HWB_) |
- PB3 14  ELE_IN (MISO/PCINT3)       |                              | PD3  1 TXD (TXD)   |                      |
- PB4  8  AUX_IN (PCINT4)            |                              | PD4  4  SV (ADC8)  |                      | PF4 21/A3 SV (ADC4)
- PB5  9 AIL_OUT (PCINT5/OC1A/OC4B_) |                              | PD5        (TXLED) |                      | PF5 20/A2 SV (ADC5)
- PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5        M (OC3A/OC4A_) | PD6 12     (OC4D_) | PE6 7 AUX2_IN (INT6) | PF6 19/A1 SV (ADC6)
- PB7 11 RUD_OUT (PCINT7/OC0A/OC1C)  | PC7 13 AILR_OUT (OC4A)       | PD7  6   M (OC4D)  |                      | PF7 18/A0 SV (ADC7)
+ PB0 17         (PCINT0)            |                              | PD0  3 SCL (SCL)       |                          | PF0 23/A5    (ADC0)
+ PB1 15  RUD_IN (SCK/PCINT1)        |                              | PD1  2 SDA (SDA)       |                          | PF1 22/A4    (ADC1)
+ PB2 16  AIL_IN (MOSI/PCINT2)       |                              | PD2  0 RXD (RXD)       | PE2               (HWB_) |
+ PB3 14  ELE_IN (MISO/PCINT3)       |                              | PD3  1 TXD (TXD)       |                          |
+ PB4  8  AUX_IN (PCINT4)            |                              | PD4  4  SV (ADC8/ICP1) |                          | PF4 21/A3 SV (ADC4)
+ PB5  9 AIL_OUT (PCINT5/OC1A/OC4B_) |                              | PD5        (TXLED)     |                          | PF5 20/A2 SV (ADC5)
+ PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5        M (OC3A/OC4A_) | PD6 12     (OC4D_)     | PE6 7 THR/AUX2_IN (INT6) | PF6 19/A1 SV (ADC6)
+ PB7 11 RUD_OUT (PCINT7/OC0A/OC1C)  | PC7 13 AILR_OUT (OC4A/ICP3)  | PD7  6   M (OC4D)      |                          | PF7 18/A0 SV (ADC7)
  
  CPPM enabled
- PE6 7 CPPM_IN instead of AUX2_IN
- PC7 5 THR_OUT instead of NULL
+ PE6 7 CPPM_IN instead of THR/AUX2_IN
+ PC7 5 THR_OUT instead of M
 */
 
 // <VR> MUST BE ALL NULL
@@ -214,22 +215,24 @@
 
 // <IMU>
 #define USE_MPU6050
-#define GYRO_ORIENTATION(x, y, z) {gRoll = (-y); gPitch = (-x); gYaw = (z);}
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = (-y); gyro[1] = (-x); gyro[2] = (z);}
 
 // CPPM
 #define CPPM_PINREG PINE
 #define CPPM_PINBIT 6
-#define CPPM_VECT INT6_vect
 #define THR_OUT_PIN 5
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define F_I2C F_400KHZ // i2c bus speed
 #define SCL_PIN 3
 #define SDA_PIN 2
 
-#define LED_DDR DDRD // led register
+// led register
 #define LED_PORT PORTD
 #define LED_BIT 5
 #define LED_XOR 1 // active low
+
+#define EEPROM_CFG_VER 1 // enable eeprom
 
 #endif
 /* NANOWII ****************************************************************************************************/
@@ -241,13 +244,17 @@
 #warning NANO_MPU6050 defined // emit device name
 #undef USE_ITG3200
 #define USE_MPU6050
-#define GYRO_ORIENTATION(x, y, z) {gRoll = -(x); gPitch = (y); gYaw = (z);}
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = -(x); gyro[1] = (y); gyro[2] = (z);}
+#undef F_I2C
+#define F_I2C F_100KHZ // i2c bus speed
 #endif
 /* NANO_MPU6050 ************************************************************************************************/
 
 // standard frequency definitions
 #define F_8MHZ 8000000UL
 #define F_16MHZ 16000000UL
+#define F_100KHZ 100000UL
+#define F_400KHZ 400000UL
 
 // emit cpu frequency if not 16MHz
 #if F_CPU == F_8MHZ
@@ -289,7 +296,7 @@
   MPU6050 accelgyro;
 #elif defined(USE_ITG3200)
   #include "ITG3200.h"
-  ITG3200 gyro;
+  ITG3200 itg3205_gyro;
 #endif
 #endif
 
@@ -309,29 +316,36 @@
 #endif
 
 // adc
-volatile uint8_t ail_vr = 128;
-volatile uint8_t ele_vr = 128;
-volatile uint8_t rud_vr = 128;
+volatile uint8_t ail_vr = 255;
+volatile uint8_t ele_vr = 255;
+volatile uint8_t rud_vr = 255;
+
+ // for eeprom based config
+int8_t vr_notch_table[4+1+4] = {-128, -96, -64, -32, 0, 32, 64, 96, 127};
+int8_t vr_notch[3] = {4, 4, 4}; // range [-4, 4]
+
 // rx
 #define RX_WIDTH_MIN 900
 #define RX_WIDTH_LOW 1000
+#define RX_WIDTH_LOW_INITIAL 1250
 #define RX_WIDTH_MID 1500
+#define RX_WIDTH_HIGH_INITIAL 1750
 #define RX_WIDTH_HIGH 2000
 #define RX_WIDTH_MAX 2100
 
 volatile int16_t ail_in = RX_WIDTH_MID;
-volatile int16_t ailr_in = RX_WIDTH_MID;
 volatile int16_t ele_in = RX_WIDTH_MID;
 volatile int16_t rud_in = RX_WIDTH_MID;
+volatile int16_t ailr_in = RX_WIDTH_MID;
 volatile int16_t aux_in = RX_WIDTH_HIGH; // assume max gain if no aux_in
 volatile int16_t aux2_in = RX_WIDTH_MID;
 volatile int16_t thr_in = RX_WIDTH_LOW;
 int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2, aux2_in2, thr_in2;
 
 int16_t ail_in2_mid = RX_WIDTH_MID; // calibration sets stick-neutral-position offsets
-int16_t ailr_in2_mid = RX_WIDTH_MID; //
 int16_t ele_in2_mid = RX_WIDTH_MID; //
 int16_t rud_in2_mid = RX_WIDTH_MID; //
+int16_t ailr_in2_mid = RX_WIDTH_MID; //
 
 // switch
 int8_t ail_sw = false;
@@ -343,16 +357,20 @@ int8_t aux_sw = false;
 
 // servo
 volatile int16_t ail_out;
-volatile int16_t ailr_out;
 volatile int16_t ele_out;
 volatile int16_t rud_out;
+volatile int16_t ailr_out;
 volatile int16_t thr_out;
-int16_t ail_out2, ailr_out2, ele_out2, rud_out2, thr_out2;
+int16_t ail_out2, ele_out2, rud_out2, ailr_out2, thr_out2;
+
+int16_t mixer_out2_low_limit[4] = {RX_WIDTH_LOW_INITIAL, RX_WIDTH_LOW_INITIAL, RX_WIDTH_LOW_INITIAL, RX_WIDTH_LOW_INITIAL};
+int16_t mixer_out2_high_limit[4] = {RX_WIDTH_HIGH_INITIAL, RX_WIDTH_HIGH_INITIAL, RX_WIDTH_HIGH_INITIAL, RX_WIDTH_HIGH_INITIAL};
 
 // imu
-int16_t gRoll0=0, gPitch0=0, gYaw0=0; // calibration sets zero-movement-measurement offsets
-int16_t gRoll=0, gPitch=0, gYaw=0; // full scale = 16b signed = 2000 deg/sec 
-int16_t aRoll=0, aPitch=0, aYaw=0; // full scale = 16b signed = 16g? (TODO)
+int16_t gyro0[3] = {0, 0, 0}; // calibration sets zero-movement-measurement offsets
+int16_t gyro[3] = {0, 0, 0}; // full scale = 16b-signed = +/-2000 deg/sec
+int16_t accel[3] = {0, 0, 0}; // full scale = 16b-signed = 16g? (TODO)
+int32_t att[3] = {0, 0, 0}; // relative attitude
 
 // pid
 #define PID_KP_DEFAULT 500 // [0, 999] 11bits signed
@@ -362,28 +380,23 @@ int16_t aRoll=0, aPitch=0, aYaw=0; // full scale = 16b signed = 16g? (TODO)
 #define PID_RATE_I_THRESHOLD 2048
 #define PID_RATE_I_WINDUP (((int32_t)1 << 13) - 1)
 #define PID_RATE_OUTPUT_SHIFT 10
-// position pid thresholds
-#define PID_POS_I_THRESHOLD 2048
-#define PID_POS_I_WINDUP (((int32_t)1 << 13) - 1)
-#define PID_POS_OUTPUT_SHIFT 10
+// attitude pid thresholds
+#define PID_ATT_I_THRESHOLD 2048
+#define PID_ATT_I_WINDUP (((int32_t)1 << 13) - 1)
+#define PID_ATT_OUTPUT_SHIFT 10
 
-int16_t correction[3]; // final correction values
+int16_t correction[3] = {0, 0, 0}; // final correction values
 
-// mixer
-enum MIX_MODE {MIX_NORMAL, MIX_DELTA, MIX_VTAIL};
-enum MIX_MODE mix_mode;
-
-// aileron mode
-enum AIL_MODE {AIL_SINGLE, AIL_DUAL};
-enum AIL_MODE ail_mode;
+// wing mode
+enum WING_MODE {WING_NONE, WING_SINGLE_AIL, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
+enum WING_MODE wing_mode = WING_SINGLE_AIL;
 
 #define VR_GAIN_MAX (-128)
 #define STICK_GAIN_MAX 400 // 1900-1500 or 1500-1100 
 #define MASTER_GAIN_MAX 800 // 1900-1100
 
-
 /***************************************************************************************************************
- * TIMER1 and MISC
+ * TIMER1 AND MISC
  ***************************************************************************************************************/
 
 volatile uint16_t timer1_high = 0;
@@ -409,7 +422,7 @@ uint32_t micros1()
 #else
   // lock-free version. read twice, ensure low order counter did not overflow and 
   // high order bits remain unchanged
-  while (1) {
+  while (true) {
     tl = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
     th = timer1_high;
     to = timer1_ovf;
@@ -431,11 +444,98 @@ void delay1(uint32_t ms)
   while ((int32_t)(micros1() - t) < us);
 }
 
-int freeRam() 
+void init_clock()
+{
+  // set clock prescaler to /2 when (F_XTAL, F_CPU) = (16M, 8M) 
+#if F_XTAL == F_16MHZ && F_CPU == F_8MHZ
+  uint8_t saveSREG = SREG;
+  cli();
+  CLKPR = (1 << CLKPCE);
+  CLKPR = (1 << CLKPS0);
+  SREG = saveSREG;
+#endif
+}
+
+int get_free_sram() 
 {
   extern int __heap_start, *__brkval; 
   int v; 
-  return (int) &v - (__brkval == 0 ? (int) &__heap_start : (int) __brkval); 
+  return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval); 
+}
+
+/***************************************************************************************************************
+ * LED
+ ***************************************************************************************************************/
+/*
+  4 LED message slots
+  slot 0 for operation mode
+  slot 1 for operation mode
+  slot 2 for error condition
+  slot 3 for error condition
+
+  slot 0
+  1 LONG = MIX_NORMAL
+  2 LONG = MIX_DELTA
+  3 LONG = MIX_VTAIL
+
+  slot 1
+  1 SHORT = rx calibrating
+  2 SHORT = imu calibrating
+  3 SHORT = both calibrating
+
+  slot 2
+  5 SHORT = gyro init error
+  
+*/
+
+int8_t led_pulse_count[4];
+int16_t led_pulse_msec[4];
+
+void init_led()
+{
+  if (&LED_PORT == &PORTB) {
+    PORTB |= (1 << LED_BIT);
+  }  
+  if (&LED_PORT == &PORTD) {
+    PORTD |= (1 << LED_BIT);
+  }  
+}
+
+void set_led(int8_t i)
+{
+#if !defined(LED_TIMING)
+  switch (i ^ LED_XOR) {
+  case LED_ON: LED_PORT |= (1 << LED_BIT); break;
+  case LED_OFF: LED_PORT &= ~(1 << LED_BIT); break;
+  default: LED_PORT ^= (1 << LED_BIT); break;
+  }  
+#endif
+}
+
+void set_led_msg(int8_t slot, int8_t pulse_count, int16_t pulse_msec) {
+  led_pulse_count[slot] = pulse_count;
+  led_pulse_msec[slot] = pulse_msec;
+}
+
+void update_led(uint32_t now)
+{
+  static int8_t slot;
+  static int8_t step;
+  static uint32_t next_time;
+  
+  if ((int32_t)(next_time - now) > 0)
+    return;
+
+  if (step == 0) {
+    slot = (slot + 1) & 0x3;
+    step = led_pulse_count[slot] << 1;
+    next_time = now + 1000000;
+    return;
+  }
+
+  step--;
+  set_led(step & 0x1 ? LED_ON : LED_OFF);
+  next_time = now + ((uint32_t)led_pulse_msec[slot] << 10);
 }
 
 /***************************************************************************************************************
@@ -583,76 +683,6 @@ void itg3205_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
 }
 
 /***************************************************************************************************************
- * LED
- ***************************************************************************************************************/
-/*
-  4 LED message slots
-  slot 0 for operation mode
-  slot 1 for operation mode
-  slot 2 for error condition
-  slot 3 for error condition
-
-  slot 0
-  1 LONG = MIX_NORMAL
-  2 LONG = MIX_DELTA
-  3 LONG = MIX_VTAIL
-
-  slot 1
-  1 SHORT = rx calibrating
-  2 SHORT = imu calibrating
-  3 SHORT = both calibrating
-
-  slot 2
-  5 SHORT = gyro init error
-  
-*/
-
-int8_t led_pulse_count[4];
-int16_t led_pulse_msec[4];
-
-void init_led()
-{
-  LED_DDR |= (1 << LED_BIT);
-}
-
-void set_led(int8_t i)
-{
-#if !defined(LED_TIMING)
-  switch (i ^ LED_XOR) {
-  case LED_ON: LED_PORT |= (1 << LED_BIT); break;
-  case LED_OFF: LED_PORT &= ~(1 << LED_BIT); break;
-  default: LED_PORT ^= (1 << LED_BIT); break;
-  }  
-#endif
-}
-
-void set_led_msg(int8_t slot, int8_t pulse_count, int16_t pulse_msec) {
-  led_pulse_count[slot] = pulse_count;
-  led_pulse_msec[slot] = pulse_msec;
-}
-
-void update_led(uint32_t now)
-{
-  static int8_t slot;
-  static int8_t step;
-  static uint32_t next_time;
-  
-  if ((int32_t)(next_time - now) > 0)
-    return;
-
-  if (step == 0) {
-    slot = (slot + 1) & 0x3;
-    step = led_pulse_count[slot] << 1;
-    next_time = now + 1000000;
-    return;
-  }
-
-  step--;
-  set_led(step & 0x1 ? LED_ON : LED_OFF);
-  next_time = now + ((uint32_t)led_pulse_msec[slot] << 10);
-}
-
-/***************************************************************************************************************
  * ANALOG IN (VR)
  ***************************************************************************************************************/
 
@@ -749,9 +779,12 @@ volatile int16_t *rx_portb[] = RX_PORTB; // non CPPM
 volatile int16_t *rx_portd[] = RX_PORTD; // non CPPM
 
 #if defined(USE_CPPM)
-
-ISR(CPPM_VECT)
+#if defined(NANOWII)
+ISR(INT6_vect)
 {
+// TODO: need to align sync pulse with channel 0 and not just use rise_time = 0. otherwise, we could start channel 0 in the 
+// middle of first seen ppm frame. then any code that tracks min/max pulse widths will be using the wrong values.
+
   static uint16_t rise_time;
   static uint8_t last_pin;
   static uint8_t ch;
@@ -779,7 +812,33 @@ ISR(CPPM_VECT)
     }
   }
 }
-    
+#else
+ISR(TIMER1_CAPT_vect)
+{
+// TODO: need to align sync pulse with channel 0 and not just use rise_time = 0. otherwise, we could start channel 0 in the 
+// middle of first seen ppm frame. then any code that tracks min/max pulse widths will be using the wrong values.
+
+  static uint16_t rise_time;
+  static uint8_t ch;
+  uint16_t now;
+  uint16_t width;
+
+  now = ICR1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
+  sei();
+
+  width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+  rise_time = now;
+  if (width > 3000 || ch > 7) {
+    ch = 0;
+  } else if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+    *rx_chan[ch] = width;
+    if (rx_chan[ch] == rx_portb_pref)
+      rx_portb_sync = true;
+    ch++;
+  }
+}
+#endif
+
 #else // USE_CPPM
 
 #if defined(MOD_PCINT0)
@@ -853,7 +912,7 @@ ISR(PCINT0_vect)
   CHECK_CHANNEL(ELE_PORT_BIT, ele_rise, ele_in);
   CHECK_CHANNEL(RUD_PORT_BIT, rud_rise, rud_in);
   // In DUAL AILERON mode A, ailr_in replaces aux_in and there is no gain control
-  if (ail_mode == AIL_DUAL && ail_sw) {
+  if (wing_mode == WING_DUAL_AIL && !rx3s_v2_wing_dual_ailB) {
     CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, ailr_in); // DUAL AILERON mode A
   } else {
     CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, aux_in); // All other modes 
@@ -958,17 +1017,15 @@ void init_digital_in_rx()
 {
 #if defined(USE_CPPM)
 #if defined(NANOWII)
-  // (CPPM_PINREG, CPPM_PINBIT) must be (PINE, 6)
+  // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
   EICRB |= (1 << ISC60); // interrupt on pin change
   EIMSK |= (1 << INT6);
   DDRE &= ~(1 << CPPM_PINBIT);
   PORTE |= (1 << CPPM_PINBIT);
 #else // NANOWII
-  // CPPM_PINREG must be PINB
-  PCICR |= (1 << PCIE0); // interrupt on pin change
-  PCMSK0 |= (1 << CPPM_PINBIT);
-  DDRB &= ~(1 << CPPM_PINBIT);
-  PORTB |= (1 << CPPM_PINBIT);
+  // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINB, 0)  
+  TIMSK1 |= (1 << ICIE1); // enable interrupt on ICP
+  TCCR1B |= (1 << ICNC1) | (1 << ICES1); // enable noise canceler and interrupt on rising edge
 #endif // NANOWII
   rx_portb_pref = &ele_in; // CPPM isr needs to compare pointer to var
   return;
@@ -1057,12 +1114,13 @@ void init_digital_out()
  ***************************************************************************************************************/
 
 #define PID_PERIOD 10000
+// relative weights kp:ki:kd = 1/8 : 1/64 : 1/4 = 8 : 1 : 16
 #define PID_KP_SHIFT 3 
 #define PID_KI_SHIFT 6
 #define PID_KD_SHIFT 2
 
-struct pid {
-  int16_t kp[3]; // 11b
+struct _pid {
+  int16_t kp[3]; // [0, 500] 11b signed
   int16_t ki[3];
   int16_t kd[3];
   int16_t i_threshold;
@@ -1076,13 +1134,13 @@ struct pid {
   int16_t output[3]; //
 };
 
-struct pid pid_rate;
-struct pid pid_pos;
+struct _pid pid_rate;
+struct _pid pid_att;
 
-void compute_pid(struct pid *ppid) 
+void compute_pid(struct _pid *ppid) 
 {
-  int8_t i;
   int32_t err, diff;
+  int8_t i;
 
   for (i=0; i<3; i++) {
     err = ppid->input[i] - ppid->setpoint[i];
@@ -1116,16 +1174,26 @@ void compute_pid(struct pid *ppid)
  * EEPROM
  ***************************************************************************************************************/
 
-struct eeprom_cfg {
+struct _eeprom_cfg {
   uint8_t ver;
-  int16_t kp[3];
-  int16_t ki[3];
-  int16_t kd[3];
-  int16_t servo_frame_period;
+  enum WING_MODE wing_mode; 
+  int16_t pid_rate_i_threshold;
+  int32_t pid_rate_i_windup;
+  int8_t pid_rate_output_shift;
+  int16_t pid_rate_kp[3];
+  int16_t pid_rate_ki[3];
+  int16_t pid_rate_kd[3];
+  int16_t pid_att_i_threshold;
+  int32_t pid_att_i_windup;
+  int8_t pid_att_output_shift;
+  int16_t pid_att_kp[3];
+  int16_t pid_att_ki[3];
+  int16_t pid_att_kd[3];
+  int8_t vr_notch[3];
   uint8_t chksum;
 };
 
-uint8_t compute_chksum(void *buf, int8_t len) 
+uint8_t eeprom_compute_chksum(void *buf, int8_t len) 
 {
   uint8_t chksum = 0;
   for (int8_t i=0; i<len; i++)
@@ -1133,22 +1201,83 @@ uint8_t compute_chksum(void *buf, int8_t len)
   return (chksum ^ 0xff) + 1;
 }
 
-void write_eeprom(struct eeprom_cfg *pcfg) 
+void eeprom_write_cfg(struct _eeprom_cfg *pcfg) 
 {    
-  pcfg->chksum = compute_chksum(pcfg, sizeof(*pcfg)-1);
+  pcfg->chksum = eeprom_compute_chksum(pcfg, sizeof(*pcfg)-1);
   eeprom_write_block(pcfg, 0, sizeof(*pcfg));   
 }
 
-int8_t read_eeprom(struct eeprom_cfg *pcfg, uint8_t expect_ver) 
+int8_t eeprom_read_cfg(struct _eeprom_cfg *pcfg, uint8_t expect_ver) 
 {
   eeprom_read_block(pcfg, 0, sizeof(*pcfg));
   if (pcfg->ver != expect_ver) {
     return -1;
   }
-  if (compute_chksum(pcfg, sizeof(*pcfg)) != 0) {
+  if (eeprom_compute_chksum(pcfg, sizeof(*pcfg)) != 0) {
     return -2;
   }
   return 0;
+}
+
+void eeprom_copy_to_cfg(struct _eeprom_cfg *pcfg)
+{
+  int8_t i;
+        
+  pcfg->wing_mode = wing_mode;
+  
+  pcfg->pid_rate_i_threshold = pid_rate.i_threshold;
+  pcfg->pid_rate_i_windup = pid_rate.i_windup;
+  pcfg->pid_rate_output_shift = pid_rate.output_shift;
+  for (i=0; i<3; i++) {
+    pcfg->pid_rate_kp[i] = pid_rate.kp[i];
+    pcfg->pid_rate_ki[i] = pid_rate.ki[i];
+    pcfg->pid_rate_kd[i] = pid_rate.kd[i];
+  }
+  
+  pcfg->pid_att_i_threshold = pid_att.i_threshold;
+  pcfg->pid_att_i_windup = pid_att.i_windup;
+  pcfg->pid_att_output_shift = pid_att.output_shift;
+  for (i=0; i<3; i++) {
+    pcfg->pid_att_kp[i] = pid_att.kp[i];
+    pcfg->pid_att_ki[i] = pid_att.ki[i];
+    pcfg->pid_att_kd[i] = pid_att.kd[i];
+  }
+
+  for (i=0; i<3; i++) {   
+    pcfg->vr_notch[i] = vr_notch[i];
+  }
+}
+
+void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
+{
+  int8_t i;
+
+  wing_mode = pcfg->wing_mode;
+  
+  pid_rate.i_threshold = pcfg->pid_rate_i_threshold;
+  pid_rate.i_windup = pcfg->pid_rate_i_windup;
+  pid_rate.output_shift = pcfg->pid_rate_output_shift;
+  for (i=0; i<3; i++) {
+    pid_rate.kp[i] = pcfg->pid_rate_kp[i];
+    pid_rate.ki[i] = pcfg->pid_rate_ki[i];
+    pid_rate.kd[i] = pcfg->pid_rate_kd[i];
+  }
+
+  pid_att.i_threshold = pcfg->pid_att_i_threshold;
+  pid_att.i_windup = pcfg->pid_att_i_windup;
+  pid_att.output_shift = pcfg->pid_att_output_shift;
+  for (i=0; i<3; i++) {
+    pid_att.kp[i] = pcfg->pid_att_kp[i];
+    pid_att.ki[i] = pcfg->pid_att_ki[i];
+    pid_att.kd[i] = pcfg->pid_att_kd[i];
+  }
+
+  for (i=0; i<3; i++) {   
+    vr_notch[i] = pcfg->vr_notch[i];
+  }
+  ail_vr = vr_notch_table[vr_notch[0]];
+  ele_vr = vr_notch_table[vr_notch[1]];
+  rud_vr = vr_notch_table[vr_notch[2]];
 }
 
 
@@ -1161,10 +1290,9 @@ void read_imu()
   int16_t gx, gy, gz;  
 #if defined(USE_I2CDEVLIB)
 #if defined(USE_MPU6050)
-  //accelgyro.getMotion6(&aRoll, &aPitch, &aYaw, &gRoll, &gPitch, &gYaw);
   accelgyro.getRotation(&gx, &gy, &gz);
 #elif defined(USE_ITG3200)
-  gyro.getRotation(&gx, &gy, &gz);
+  itg3205_gyro.getRotation(&gx, &gy, &gz);
 #endif
 #endif
 
@@ -1193,12 +1321,12 @@ void init_imu()
   accelgyro.setClockSource(MPU6050_CLOCK_PLL_ZGYRO); 
 #elif defined(USE_ITG3200)
   Wire.begin();
-  gyro.initialize();
-  gyro.setClockSource(ITG3200_CLOCK_PLL_XGYRO); 
-  gyro.setFullScaleRange(ITG3200_FULLSCALE_2000); 
-  gyro.setDLPFBandwidth(ITG3200_DLPF_BW_5); 
+  itg3205_gyro.initialize();
+  itg3205_gyro.setClockSource(ITG3200_CLOCK_PLL_XGYRO); 
+  itg3205_gyro.setFullScaleRange(ITG3200_FULLSCALE_2000); 
+  itg3205_gyro.setDLPFBandwidth(ITG3200_DLPF_BW_5); 
 //  gyro.setDLPFBandwidth(ITG3200_DLPF_BW_256); 
-  if (!gyro.testConnection()) {
+  if (!itg3205_gyro.testConnection()) {
     set_led_msg(2, 5, LED_SHORT);
   }
 #endif
@@ -1206,12 +1334,12 @@ void init_imu()
 
 #if defined(USE_I2CLIGHT)
 #if defined(USE_MPU6050)
-  i2c_init(true, 100000L);
+  i2c_init(true, F_I2C);
   if (!mpu6050_init()) {
     set_led_msg(2, 5, LED_SHORT);
   }
 #elif defined(USE_ITG3200)
-  i2c_init(true, 400000L);
+  i2c_init(true, F_I2C);
   if (!itg3205_init()) {
     set_led_msg(2, 5, LED_SHORT);
   }
@@ -1224,6 +1352,7 @@ void init_imu()
  ***************************************************************************************************************/
 
 struct _calibration {
+  int8_t done;
   int16_t num_elements; // 3 for imu, 4 for rx
   int16_t low[4];
   int16_t high[4];
@@ -1232,17 +1361,13 @@ struct _calibration {
   int16_t num_samples;
 };
 
-struct _calibration rx_cal;
-struct _calibration imu_cal;
-int8_t rx_calibrating;
-int8_t imu_calibrating;
-
-void calibrate_set_led() {
-  set_led_msg(1, rx_calibrating ? (imu_calibrating ? 3 : 1) : (imu_calibrating ? 2 : 0), LED_SHORT);
+void calibrate_set_led(struct _calibration *prx_cal, struct _calibration *pimu_cal) {
+  set_led_msg(1, !prx_cal->done ? (!pimu_cal->done ? 3 : 1) : (!pimu_cal->done ? 2 : 0), LED_SHORT);
 } 
 
 void calibrate_init_stat(struct _calibration *pcal, int8_t num_elements) 
 {
+  pcal->done = false;
   pcal->num_elements = num_elements;
   for (int8_t i=0; i < pcal->num_elements; i++) {
     pcal->low[i] = 32767;
@@ -1290,58 +1415,58 @@ void calibrate_print_stat(struct _calibration *pcal)
 }
 #endif
 
-void calibrate_rx()
+void calibrate_rx(struct _calibration *prx_cal)
 {
   int16_t sample[4];
+  int8_t is_calibrating = true;
   
   sample[0] = ail_in2;
-  sample[1] = ailr_in2;
-  sample[2] = ele_in2;
-  sample[3] = rud_in2;
-  calibrate_update_stat(&rx_cal, sample);
+  sample[1] = ele_in2;
+  sample[2] = rud_in2;
+  sample[3] = ailr_in2;
+  calibrate_update_stat(prx_cal, sample);
   
-  if (++rx_cal.num_samples == 100) {
-    if (calibrate_check_stat(&rx_cal, 20)) {
-      calibrate_compute_mean(&rx_cal);
-      ail_in2_mid = rx_cal.mean[0];
-      ailr_in2_mid = rx_cal.mean[1];
-      ele_in2_mid = rx_cal.mean[2];
-      rud_in2_mid = rx_cal.mean[3];
+  if (++prx_cal->num_samples == 100) {
+    if (calibrate_check_stat(prx_cal, 20)) {
+      calibrate_compute_mean(prx_cal);
+      ail_in2_mid = prx_cal->mean[0];
+      ele_in2_mid = prx_cal->mean[1];
+      rud_in2_mid = prx_cal->mean[2];
+      ailr_in2_mid = prx_cal->mean[3];
 #if defined(USE_SERIAL)
       Serial.println("RX");
-      calibrate_print_stat(&rx_cal);
+      calibrate_print_stat(prx_cal);
 #endif
-      rx_calibrating = false;
-      calibrate_set_led();
+      prx_cal->done = true; // done
     } else {
-      calibrate_init_stat(&rx_cal, 4);
+      calibrate_init_stat(prx_cal, 4); // reset and try again
     }
   }
 }
 
-void calibrate_imu()
+void calibrate_imu(struct _calibration *pimu_cal)
 {  
   int16_t sample[3];
+  int8_t is_calibrating = true;
 
-  sample[0] = gRoll;
-  sample[1] = gPitch;
-  sample[2] = gYaw;
-  calibrate_update_stat(&imu_cal, sample);
+  sample[0] = gyro[0];
+  sample[1] = gyro[1];
+  sample[2] = gyro[2];
+  calibrate_update_stat(pimu_cal, sample);
   
-  if (++imu_cal.num_samples == 100) {
-    if (calibrate_check_stat(&imu_cal, 50)) {
-      calibrate_compute_mean(&imu_cal);
-      gRoll0 = imu_cal.mean[0];
-      gPitch0 = imu_cal.mean[1];
-      gYaw0 = imu_cal.mean[2];
+  if (++pimu_cal->num_samples == 100) {
+    if (calibrate_check_stat(pimu_cal, 50)) {
+      calibrate_compute_mean(pimu_cal);
+      gyro0[0] = pimu_cal->mean[0];
+      gyro0[1] = pimu_cal->mean[1];
+      gyro0[2] = pimu_cal->mean[2];
 #if defined(USE_SERIAL)
       Serial.println("GY");
-      calibrate_print_stat(&imu_cal);
+      calibrate_print_stat(pimu_cal);
 #endif
-      imu_calibrating = false;
-      calibrate_set_led();
+      pimu_cal->done = true; // done
     } else {
-      calibrate_init_stat(&imu_cal, 3);
+      calibrate_init_stat(pimu_cal, 3); // reset and try again
     }
   }
 }
@@ -1569,55 +1694,75 @@ void copy_rx_in()
   // lock-free method to copy isr-owned *_in vars to *_in2 vars
   int16_t tmp;
   ail_in2 = (tmp = ail_in) == ail_in ? tmp : ail_in2;
-  ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
   ele_in2 = (tmp = ele_in) == ele_in ? tmp : ele_in2;
   rud_in2 = (tmp = rud_in) == rud_in ? tmp : rud_in2;
+  ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
   aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
   aux2_in2 = (tmp = aux2_in) == aux2_in ? tmp : aux2_in2;
   thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
   
-  if (ail_mode == AIL_SINGLE)
+  if (wing_mode == WING_SINGLE_AIL)
     ailr_in2 = ail_in2;
 }
 
-void apply_mixer() 
+void apply_mixer0(int16_t *change) 
 {
   // *_in2 => [correction] => *_out2
   
   // mixer
   int16_t tmp0, tmp1, tmp2;
-  switch (mix_mode) {
-  case MIX_NORMAL:
-    ail_out2 = ail_in2 + correction[0];
-    ailr_out2 = ailr_in2 + correction[0];
-    ele_out2 = ele_in2 + correction[1];
-    rud_out2 = rud_in2 + correction[2];
+  switch (wing_mode) {
+  case WING_SINGLE_AIL:
+  case WING_DUAL_AIL:
+    ail_out2 = ail_in2 + change[0];
+    ailr_out2 = ailr_in2 + change[0];
+    ele_out2 = ele_in2 + change[1];
+    rud_out2 = rud_in2 + change[2];
     break;
-  case MIX_DELTA:
-    tmp0 =  ail_in2 + correction[0];
-    tmp1 =  ele_in2 + correction[1];
+  case WING_DELTA:
+    tmp0 =  ail_in2 + change[0];
+    tmp1 =  ele_in2 + change[1];
     ail_out2 = (tmp0 + tmp1) >> 1;
     ele_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
-    rud_out2 = rud_in2 + correction[2];
+    rud_out2 = rud_in2 + change[2];
     break;
-  case MIX_VTAIL:
-    ail_out2 = ail_in2 + correction[0];
-    ailr_out2 = ailr_in2 + correction[0];
-    tmp1 =  ele_in2 + correction[1];
-    tmp2 =  rud_in2 + correction[2];
+  case WING_VTAIL:
+    ail_out2 = ail_in2 + change[0];
+    ailr_out2 = ailr_in2 + change[0];
+    tmp1 =  ele_in2 + change[1];
+    tmp2 =  rud_in2 + change[2];
     ele_out2 = (tmp2 + tmp1) >> 1;
     rud_out2 = ((tmp2 - tmp1) >> 1) + RX_WIDTH_MID;
     break;
   }
 
-  // clamp final servo output
-  ail_out2 = constrain(ail_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-  ailr_out2 = constrain(ailr_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-  ele_out2 = constrain(ele_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-  rud_out2 = constrain(rud_out2, RX_WIDTH_LOW, RX_WIDTH_HIGH);
-
   // throttle pass through
   thr_out2 = thr_in2;  
+}
+
+
+void apply_mixer() 
+{
+  // *_in2 => [correction] => *_out2
+  
+    // apply mixer with zero correction values (pass through) to track servo limits from rx alone
+  int16_t zero_correction[4] = {0, 0, 0, 0};
+  apply_mixer0(zero_correction);
+  mixer_out2_low_limit[0] = min(ail_out2, mixer_out2_low_limit[0]);
+  mixer_out2_low_limit[1] = min(ele_out2, mixer_out2_low_limit[1]);
+  mixer_out2_low_limit[2] = min(rud_out2, mixer_out2_low_limit[2]);
+  mixer_out2_low_limit[3] = min(ailr_out2, mixer_out2_low_limit[3]);
+  mixer_out2_high_limit[0] = max(ail_out2, mixer_out2_high_limit[0]);
+  mixer_out2_high_limit[1] = max(ele_out2, mixer_out2_high_limit[1]);
+  mixer_out2_high_limit[2] = max(rud_out2, mixer_out2_high_limit[2]);
+  mixer_out2_high_limit[3] = max(ailr_out2, mixer_out2_high_limit[3]);
+  
+  // apply mixer with actual correction values and clamp servo output to limits
+  apply_mixer0(correction);
+  ail_out2 = constrain(ail_out2, mixer_out2_low_limit[0], mixer_out2_high_limit[0]);
+  ele_out2 = constrain(ele_out2, mixer_out2_low_limit[1], mixer_out2_high_limit[1]);
+  rud_out2 = constrain(rud_out2, mixer_out2_low_limit[2], mixer_out2_high_limit[2]);
+  ailr_out2 = constrain(ailr_out2, mixer_out2_low_limit[3], mixer_out2_high_limit[3]);
 }
 
 void start_servo_frame()
@@ -1626,9 +1771,9 @@ void start_servo_frame()
   servo_busy = true;
   ATOMIC_BLOCK(ATOMIC_RESTORESTATE) {
     ail_out = ail_out2;
-    ailr_out = ailr_out2;
     ele_out = ele_out2;
     rud_out = rud_out2;
+    ailr_out = ailr_out2;
     thr_out = thr_out2;
     
     TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
@@ -1662,9 +1807,9 @@ void dump_sensors()
 
     Serial.print("RX "); 
     Serial.print(ail_in2); Serial.print(' ');
-    Serial.print(ailr_in2); Serial.print(' ');
     Serial.print(ele_in2); Serial.print(' ');
     Serial.print(rud_in2); Serial.print(' ');
+    Serial.print(ailr_in2); Serial.print(' ');
     Serial.print(aux_in2); Serial.print(' ');
     Serial.print(aux2_in2); Serial.print(' ');
     Serial.print(thr_in2); Serial.print('\t');
@@ -1691,17 +1836,17 @@ void dump_sensors()
   
     read_imu();
     Serial.print("GY "); 
-    Serial.print(gRoll); Serial.print('\t');
-    Serial.print(gPitch); Serial.print('\t');
-    Serial.print(gYaw); Serial.print('\t');
+    Serial.print(gyro[0]); Serial.print('\t');
+    Serial.print(gyro[1]); Serial.print('\t');
+    Serial.print(gyro[2]); Serial.print('\t');
 
     servo_out += servo_dir;
     if (servo_out < 1000 || servo_out > 2000) {
       servo_out = constrain(servo_out, 1000, 2000);
       servo_dir = -servo_dir;
     }
-    ail_out2 = ailr_out2 = ele_out2 = rud_out2 = thr_out2 = servo_out;
-//    ail_out2 = ailr_out2 = ele_out2 = rud_out2 = thr_out2 = 1500;
+    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = servo_out;
+//    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = 1500;
     if (servo_sync && !servo_busy) {
       servo_sync = false;
       start_servo_frame();
@@ -1709,9 +1854,8 @@ void dump_sensors()
 
     Serial.print("MISC "); 
     Serial.print(i2c_errors); Serial.print(' ');
-    Serial.print(mix_mode); Serial.print(' ');
-    Serial.print(ail_mode); Serial.print(' ');
-    Serial.print(freeRam()); Serial.print(' ');
+    Serial.print(wing_mode); Serial.print(' ');
+    Serial.print(get_free_sram()); Serial.print(' ');
     Serial.print(servo_out); Serial.print(' ');
     Serial.println();
 
@@ -1725,6 +1869,12 @@ void dump_sensors()
  * STICK CONFIGURATION
  ***************************************************************************************************************/
 
+ struct _stick_zone {
+  int8_t zx, zy;
+  uint8_t curr, prev; // zone [1-9] telephone pad mapping
+  uint8_t move; // 0x<prev><curr>
+ };
+ 
 int8_t stick_zone(int16_t pwm)
 {
   if (pwm <= 1200) return 0;
@@ -1733,61 +1883,123 @@ int8_t stick_zone(int16_t pwm)
   return -1;
 }
 
-// 0=mix_mode 1=ail_mode 2=roll_gain 3=pitch_gain 4=yaw_gain
-// mix_mode 1=normal 2=delta 3=vtail
-// ail_mode 1=single 2=dual
-// roll|pitch|yaw_gain [-5,5] = [-5,5]
-
-const int8_t param_xcount = 5;
-const int8_t param_ymin[param_xcount] = {1, 1, -5, -5, -5};
-const int8_t param_ymax[param_xcount] = {3, 2, +5, +5, +5};
-int8_t param_yval[param_xcount] = {1, 1, 3, 3, 3};
-
-void stick_config()
+int8_t stick_zone_update(struct _stick_zone *psz)
 {
-  int8_t z0, z1=5, zx=2, zy=2, tmp;
-  int8_t x=0;
-    
-  while (true) {
+  int8_t tmp, moved;
+  // telephone pad mapping
+  // 1 2 3
+  // 4 5 6
+  // 7 8 9 
+  psz->prev = psz->curr;
+  psz->zx = (tmp = stick_zone(ail_in2)) >= 0 ? tmp : psz->zx;
+  psz->zy = (tmp = stick_zone(ele_in2)) >= 0 ? tmp : psz->zy;
+  psz->curr = (2 - psz->zy) * 3 + psz->zx + 1;
+  if (psz->curr != psz->prev) {
+    psz->move = (psz->prev << 4) | psz->curr;
+    moved = true;
+#if 1
+      Serial.print("stick_zone "); 
+      Serial.println(psz->move, HEX);
+#endif
+  } else {
+    moved = false;
+  }
+  return moved;
+}
 
+void stick_config(struct _stick_zone *psz)
+{
+// 0=wing_mode 1=roll_gain 2=pitch_gain 3=yaw_gain 4=write_eeprom
+// wing_mode: see enum WING_MODE
+// [roll|pitch|yaw]_gain: see vr_notch_table[] 
+
+  const int8_t param_ymin[] = {1, -4, -4, -4, 1};
+  const int8_t param_ymax[] = {4, +4, +4, +4, 1};
+  int8_t param_yval[] = {1, 4, 4, 4, 1};
+  const int8_t param_xcount = sizeof(param_yval)/sizeof(param_yval[0]);
+
+  const int16_t servo_swing = 300;
+  const int32_t servo_interval[] = {100000L, 400000L};
+
+  int8_t x=0;
+  int8_t update_x = 1 << 1;
+  int8_t update_y = param_yval[x] << 1;
+  int8_t servo_sync = false;
+  uint32_t last_servo_update_time;
+  int32_t wait_interval = servo_interval[1];
+  ail_out2 = RX_WIDTH_MID;
+  ele_out2 = RX_WIDTH_MID;  
+
+  struct _eeprom_cfg cfg;
+  
+  eeprom_read_cfg(&cfg, EEPROM_CFG_VER);
+  param_yval[0] = (int8_t) cfg.wing_mode;
+  param_yval[1] = cfg.vr_notch[0];
+  param_yval[2] = cfg.vr_notch[1];
+  param_yval[3] = cfg.vr_notch[2];
+
+  
+  while (true) {
+    uint32_t t = micros1();
+  
+    if ((int32_t)(t - last_servo_update_time) > wait_interval) {
+      if (update_x > 0) {
+        ele_out2 = RX_WIDTH_MID + (update_x & 1 ? 0 : servo_swing);
+        ail_out2 = RX_WIDTH_MID;
+        wait_interval = servo_interval[update_x & 1];
+        update_x--;
+      } else {
+        if (update_y != 0) {
+          int8_t sign_y = update_y > 0 ? 1 : -1;
+          ail_out2 = RX_WIDTH_MID + (update_y & 1 ? 0 : servo_swing) * sign_y;
+          wait_interval = servo_interval[update_y & 1];
+          update_y -= sign_y;
+         }
+       }
+      last_servo_update_time = t;
+    }
+    
     if (rx_portb_sync) {
       rx_portb_sync = false;
       copy_rx_in();
+      servo_sync = true;
     }
+    if (servo_sync && !servo_busy) {
+      servo_sync = false;
+      start_servo_frame();
+    } 
 
-    // telephone pad mapping
-    // 1 2 3
-    // 4 5 6
-    // 7 8 9 
-    zx = (tmp = stick_zone(ail_in2)) >= 0 ? tmp : zx;
-    zy = (tmp = stick_zone(ele_in2)) >= 0 ? tmp : zy;
-    z0 = (2-zy)*3 + zx + 1; 
-    if (z0 != z1) {
-      int8_t z2z = z1 * 10 + z0;
-      switch (z2z) {
-        case 54: // left
-          x = max(x - 1, 0);
-          break;
-        case 56: // right
-          x = min(x + 1, param_xcount - 1);
-          break;
-        case 52: // up
-          param_yval[x] = min(param_yval[x] + 1, param_ymax[x]);
-          break;
-        case 58: // down
-          param_yval[x] = max(param_yval[x] - 1, param_ymin[x]);
-          break;
-        }
-        
-      if (z0 != 5) {
-        Serial.print("param "); 
-        Serial.print(z1); Serial.print(' ');
-        Serial.print(z0); Serial.print(' ');
-        Serial.print(x); Serial.print(' ');
-        Serial.print(param_yval[x]); Serial.print(' ');
-        Serial.println();
+    if (update_x == 0 && update_y == 0 && stick_zone_update(psz)) {
+      switch (psz->move) {
+        case 0x54: x = max(x - 1, 0); update_x = (x + 1) << 1; break; // left
+        case 0x56: x = min(x + 1, param_xcount - 1); update_x = (x + 1) << 1; break; // right
+        case 0x52: param_yval[x] = min(param_yval[x] + 1, param_ymax[x]); update_y = param_yval[x] << 1; break; // up
+        case 0x58: param_yval[x] = max(param_yval[x] - 1, param_ymin[x]); update_y = param_yval[x] << 1; break; // down
       }
-      z1 = z0;
+
+      if (psz->move == 0x56 && x == param_xcount - 1) {
+        // write eeprom;
+        Serial.println("writing to eeprom");
+        cfg.wing_mode = (enum WING_MODE) param_yval[0];
+        cfg.vr_notch[0] = param_yval[1];
+        cfg.vr_notch[1] = param_yval[2];
+        cfg.vr_notch[2] = param_yval[3];
+        eeprom_write_cfg(&cfg);
+      }
+
+      // if updating index servo then updating parameter servo as well
+      if (update_x > 0)
+        update_y = param_yval[x] << 1;
+        
+        
+  #if 1
+      Serial.print("param "); 
+      Serial.print(psz->prev, HEX); Serial.print(' ');
+      Serial.print(psz->curr, HEX); Serial.print(' ');
+      Serial.print(x); Serial.print(' ');
+      Serial.print(param_yval[x]); Serial.print(' ');
+      Serial.println();
+  #endif      
     }
   }
 }
@@ -1800,60 +2012,84 @@ void setup()
 {
   int8_t i;
 
-  // set clock prescaler to /2 when (F_XTAL, F_CPU) = (16M, 8M) 
-#if F_XTAL == F_16MHZ && F_CPU == F_8MHZ
-  uint8_t saveSREG = SREG;
-  cli();
-  CLKPR = (1 << CLKPCE);
-  CLKPR = (1 << CLKPS0);
-  SREG = saveSREG;
-#endif
+  init_clock();
+  init_led();
+  if (get_free_sram() < 128)
+    set_led_msg(3, 40, LED_VERY_SHORT); 
 
 #if defined(USE_SERIAL)
   Serial.begin(115200L);
 #endif
-
-  init_led();
-
+    
   // init TIMER1
   TCCR1A = 0; // normal counting mode
   TCCR1B = (1 << CS11); // clkio/8
   TIMSK1 = (1 << TOIE1); // enable overflow interrupt
-//  TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
+  // TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
 
   // disable TIMER0
   TCCR0B &= ~((1 << CS00) | (1 << CS01) | (1 << CS02)); // clock stopped
-//  TIMSK0 &= ~(1 << TOIE0); // disable overflow interrupt
+  // TIMSK0 &= ~(1 << TOIE0); // disable overflow interrupt
+
+  // set up default pid parameters
+  pid_rate.i_threshold = PID_RATE_I_THRESHOLD;
+  pid_rate.i_windup = PID_RATE_I_WINDUP;
+  pid_rate.output_shift = PID_RATE_OUTPUT_SHIFT;
+  for (i=0; i<3; i++) {
+    pid_rate.kp[i] = PID_KP_DEFAULT;
+    pid_rate.ki[i] = PID_KI_DEFAULT;
+    pid_rate.kd[i] = PID_KD_DEFAULT;
+  }
+  
+  pid_att.i_threshold = PID_ATT_I_THRESHOLD;
+  pid_att.i_windup = PID_ATT_I_WINDUP;
+  pid_att.output_shift = PID_ATT_OUTPUT_SHIFT;
+  for (i=0; i<3; i++) {
+    pid_att.kp[i] = PID_KP_DEFAULT;
+    pid_att.ki[i] = PID_KI_DEFAULT;
+    pid_att.kd[i] = PID_KD_DEFAULT;
+  }
+  
+#if defined(EEPROM_CFG_VER)
+  struct _eeprom_cfg cfg;
+  if (eeprom_read_cfg(&cfg, EEPROM_CFG_VER) == 0) {
+    // copy from eeprom cfg
+    eeprom_copy_from_cfg(&cfg);
+  } else {
+    // init eeprom with default parameters
+    cfg.ver = EEPROM_CFG_VER;
+    eeprom_copy_to_cfg(&cfg);
+    eeprom_write_cfg(&cfg);
+  }
+#endif
 
   // init digital in for dip switches to read config settings
   init_digital_in_sw(); // sw
   read_switches();
-  mix_mode = MIX_NORMAL;
-  ail_mode = AIL_SINGLE;
   
   // device-specific modes and pin assignment differences
 
 #if defined(RX3S_V1)
   switch ((ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)) {
   case 0: // ele rev/0, rud rev/0
-    ail_mode = AIL_DUAL;
+    wing_mode = WING_DUAL_AIL;
     break; 
   case 1: // ele rev/0, rud norm/1
-    mix_mode = MIX_VTAIL;
+    wing_mode = WING_VTAIL;
     break; 
   case 2: // ele norm/1, rud rev/0
-    mix_mode = MIX_DELTA;
+    wing_mode = WING_DELTA;
     break; 
   }
 
-  if (ail_mode == AIL_SINGLE) {
+  if (wing_mode == WING_SINGLE_AIL) {
     // PD7 7 AUX_IN instead of AILR_OUT
     pwm_out_var[3] = NULL; // disable ailr_out
     pwm_out_pin[3] = -1; //
     rx_portd[7] = &aux_in; // enable aux_in
   }
 
-  if (ail_mode == AIL_DUAL) {
+  if (wing_mode == WING_DUAL_AIL) {
     // PB3 11 AUX_IN instead of MOSI
     // PB4 12 AILR_IN instead of MISO
     rx_portb[3] = &aux_in; // enable aux_in
@@ -1868,32 +2104,33 @@ void setup()
   pwm_out_var[4] = &thr_out; // enable thr_out
   pwm_out_pin[4] = THR_OUT_PIN; //
 #endif // USE_CPPM
-
 #endif // RX3S_V1
 
 #if defined(RX3S_V2)
   switch ((vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)) {
   case 0: // vtail on/0, delta on/0
-    ail_mode = AIL_DUAL;
+    wing_mode = WING_DUAL_AIL;
     break; 
   case 1: // vtail on/0, delta off/1
-    mix_mode = MIX_VTAIL;
+    wing_mode = WING_VTAIL;
     break; 
   case 2: // vtail off/1, delta on/0
-    mix_mode = MIX_DELTA;
+    wing_mode = WING_DELTA;
     break; 
   }
 
-  if (ail_mode == AIL_DUAL) {
+  if (wing_mode == WING_DUAL_AIL) {
     if (ail_sw) {
-      // AIL_DUAL mode A
+      // WING_DUAL_AIL mode A
       // PB3 11 AILR_IN instead of AUX_IN
       rx_portb[3] = &ailr_in; // replace aux_in
+      rx3s_v2_wing_dual_ailB = false;
     } else {
-      // AIL_DUAL mode B
+      // WING_DUAL_AIL mode B
       // PD2 2 AILR_IN instead of ELE_SW
       din_portd[2] = NULL; // disable ele_sw
       rx_portd[2] = &ailr_in; // enable ailr_in
+      rx3s_v2_wing_dual_ailB = true;
     }
   }
 
@@ -1905,10 +2142,9 @@ void setup()
   pwm_out_var[4] = &thr_out; // enable thr_out
   pwm_out_pin[4] = THR_OUT_PIN; //
 #endif // USE_CPPM
-
 #endif // RX3S_V2
 
-  set_led_msg(0, mix_mode + 1, LED_LONG);
+  set_led_msg(0, wing_mode + 1, LED_LONG);
 
   init_analog_in(); // vr
   init_digital_in_rx(); // rx
@@ -1921,44 +2157,8 @@ void setup()
   apply_mixer(); // init *_out2 vars
   
   //dump_sensors();
-  //stick_config();
-
-  // set up rate pid paramaters
-  pid_rate.i_threshold = PID_RATE_I_THRESHOLD;
-  pid_rate.i_windup = PID_RATE_I_WINDUP;
-  pid_rate.output_shift = PID_RATE_OUTPUT_SHIFT;
-  for (i=0; i<3; i++) {
-    pid_rate.kp[i] = PID_KP_DEFAULT;
-    pid_rate.ki[i] = PID_KI_DEFAULT;
-    pid_rate.kd[i] = PID_KD_DEFAULT;
-  }
-  
-#if defined(EEPROM_CFG_VER)
-  struct eeprom_cfg cfg;
-  if (read_eeprom(&cfg, EEPROM_CFG_VER) < 0) {
-    // init eeprom config parameters
-    cfg.ver = EEPROM_CFG_VER;
-    for (i=0; i<3; i++) {
-      cfg.kp[i] = kp[i];
-      cfg.ki[i] = ki[i];
-      cfg.kd[i] = kd[i];
-    }
-    cfg.servo_frame_period = servo_frame_period;
-    write_eeprom(&cfg);
-  } else {
-    // copy from eeprom cfg
-    for (i=0; i<3; i++) {
-      kp[i] = cfg.kp[i];
-      ki[i] = cfg.ki[i];
-      kd[i] = cfg.kd[i];
-    }
-    servo_frame_period = cfg.servo_frame_period;
-  }
-#endif
-
-  // low sram check
-  if (freeRam() < 128)
-    set_led_msg(3, 40, LED_VERY_SHORT); 
+  //struct _stick_zone sz;
+  //stick_config(&sz);
 
   loop(); // invoke loop, which never returns
 }
@@ -1969,23 +2169,32 @@ void setup()
 
 void loop() 
 { 
-  uint32_t t;
-  uint32_t last_rx_time = 0;
-  uint32_t last_imu_time = 0;
-  uint32_t last_pid_time = 0;
-  uint32_t last_vr_time = 0;
+  int8_t i;
+  uint32_t t = micros1();
+  uint32_t last_rx_time = t;
+  uint32_t last_imu_time = t;
+  uint32_t last_pid_time = t;
+  uint32_t last_vr_time = t;
+  uint32_t stick_config_check_time = t;
   int8_t servo_sync = false;
 
-  int16_t vr_gain[3] = {VR_GAIN_MAX, VR_GAIN_MAX, VR_GAIN_MAX};
+  int16_t vr_gain[3]= {VR_GAIN_MAX, VR_GAIN_MAX, VR_GAIN_MAX};
   int16_t stick_gain[3] = {STICK_GAIN_MAX, STICK_GAIN_MAX, STICK_GAIN_MAX};
   int16_t master_gain = MASTER_GAIN_MAX;
+  int8_t att_hold = false;
 
+  struct _calibration rx_cal;
+  struct _calibration imu_cal;
+  
+  struct _stick_zone stick_zone;
+  uint8_t stick_config_seq[] = {0x78, 0x89, 0x98, 0x87, 0x78, 0x89, 0x98, 0x87, 0x00}; // 7-9-7-9-7
+  int8_t stick_config_seq_i = 0;
+  int8_t stick_configurable = true;
+  
   // calibration setup  
   calibrate_init_stat(&rx_cal, 4);
-  rx_calibrating = true;
   calibrate_init_stat(&imu_cal, 3);
-  imu_calibrating = true;
-  calibrate_set_led();
+  calibrate_set_led(&rx_cal, &imu_cal);
 
 again:
   t = micros1();
@@ -1995,8 +2204,8 @@ again:
   if (rx_portb_sync || (int32_t)(t - last_rx_time) > 30000) {
     rx_portb_sync = false;
     copy_rx_in();
-    if (rx_calibrating)
-      calibrate_rx();
+    if (!rx_cal.done)
+      calibrate_rx(&rx_cal);
     servo_sync = true;    
     last_rx_time = t;
   }
@@ -2011,49 +2220,118 @@ again:
     // takes around 1ms at 100khz
     if ((int32_t)(t - last_imu_time) > PID_PERIOD) {
       read_imu();
-      if (imu_calibrating)
-        calibrate_imu();
-      gRoll -= gRoll0;
-      gPitch -= gPitch0;
-      gYaw -= gYaw0;
+      if (!imu_cal.done)
+        calibrate_imu(&imu_cal);
+      // apply calibration offsets
+      gyro[0] -= gyro0[0];
+      gyro[1] -= gyro0[1];
+      gyro[2] -= gyro0[2];
+      // compute approximate attitude
+      att[0] += gyro[0];
+      att[1] += gyro[1];
+      att[2] += gyro[2];
+
       last_imu_time = t;
     }
-  } 
-
-  // short circuit rest of the loop if still calibrating, do not compute correction[]
-  if (rx_calibrating || imu_calibrating) {
+  }   
+  
+  if (stick_configurable && stick_zone_update(&stick_zone)) {
+    stick_config_seq_i = (stick_zone.move == stick_config_seq[stick_config_seq_i]) ? stick_config_seq_i + 1 : 0;
+    if (stick_config_seq[stick_config_seq_i] == 0x00) {
+      stick_config(&stick_zone); // enter stick config mode
+      // RESET SYSTEM ON RETURN, at least if mix mode has changed
+    }
+      
+    if ((int32_t)(t - stick_config_check_time) > 10000000L) // 10 sec to enter config mode
+      stick_configurable = false;
+  }
+    
+  // short circuit rest of the loop if calibration not done, do not compute correction[]
+  if (!rx_cal.done || !imu_cal.done) {
+    calibrate_set_led(&rx_cal, &imu_cal);
     goto again;
   }
-  
+   
   if ((int32_t)(t - last_pid_time) > PID_PERIOD) {
-    int8_t i;
-
-    // commanded rate of rotation (could be from [ail|ele|rud]_in2, note direction/sign)
-    pid_rate.setpoint[0] = 0;
-    pid_rate.setpoint[1] = 0;
-    pid_rate.setpoint[2] = 0;
-
-    // measured rate of rotation (from the gyro)
-    pid_rate.input[0] = constrain(gRoll, -8192, 8191);
-    pid_rate.input[1] = constrain(gPitch, -8192, 8191);
-    pid_rate.input[2] = constrain(gYaw, -8192, 8191);
-
-    compute_pid(&pid_rate);
-
-    // stick_gain[] [1100, <ail*|ele|rud>_in2_mid, 1900] => [0%, 100%, 0%] = [0, STICK_GAIN_MAX, 0]
+    // determine how much sticks are off center (neutral)
     int16_t ail_stick_pos = abs(((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1);
+    int16_t ele_stick_pos = abs(ele_in2 - ele_in2_mid);
+    int16_t rud_stick_pos = abs(rud_in2 - rud_in2_mid);
+
+    // vr_gain[] [-128, 128] from VRs or config
+    
+    // stick_gain[] [1100, <ail*|ele|rud>_in2_mid, 1900] => [0%, 100%, 0%] = [0, STICK_GAIN_MAX, 0]
     stick_gain[0] = STICK_GAIN_MAX - constrain(ail_stick_pos, 0, STICK_GAIN_MAX);
-    stick_gain[1] = STICK_GAIN_MAX - constrain(abs(ele_in2 - ele_in2_mid), 0, STICK_GAIN_MAX);
-    stick_gain[2] = STICK_GAIN_MAX - constrain(abs(rud_in2 - rud_in2_mid), 0, STICK_GAIN_MAX);
+    stick_gain[1] = STICK_GAIN_MAX - constrain(ele_stick_pos, 0, STICK_GAIN_MAX);
+    stick_gain[2] = STICK_GAIN_MAX - constrain(rud_stick_pos, 0, STICK_GAIN_MAX);
 
     // master_gain [1100, 1900] => [0%, 100%] = [0, MASTER_GAIN_MAX]
     master_gain = constrain(aux_in2 - 1100, 0, MASTER_GAIN_MAX); 
     
-    for (i=0; i<3; i++) {
-      // vr_gain/128, stick_gain/256, master_gain/512
-      correction[i] = ((((int32_t)pid_rate.output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
+    // attitude hold check
+    if (aux_in2 > 1700) {
+      // if stick not in center, reset relative attitude
+      if (ail_stick_pos > 100 || ele_stick_pos > 100) {
+        att[0] = 0;
+        att[1] = 0;
+      }   
+      if (rud_stick_pos > 100) {
+        att[2] = 0;
+      }
+    } else {
+      att[0] = 0;
+      att[1] = 0;
+      att[2] = 0;
     }
+      
+    // attitude control
+    // commanded attitude = (0, 0, 0) which is when attitude hold was engaged
+    pid_att.setpoint[0] = 0;
+    pid_att.setpoint[1] = 0;
+    pid_att.setpoint[2] = 0;
+
+    // measured attitude
+    pid_att.input[0] = constrain(att[0] >> 4, -8192, 8191);
+    pid_att.input[1] = constrain(att[1] >> 4, -8192, 8191);
+    pid_att.input[2] = constrain(att[2] >> 4, -8192, 8191);
+
+    compute_pid(&pid_att);
+
+#if defined(USE_SERIAL) && 0
+    for (i=0; i<3; i++) {
+      Serial.print(att[i] >> 4); Serial.print('\t');
+    }
+//    for (i=0; i<3; i++) {
+//      Serial.print(pid_att.output[i]); Serial.print('\t');
+//    }
+#endif
+  
+    // angular rate control
+    // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
+#if 0    
+    // max stick == 400, if << 4 then 6400 == 6400/8192*500 = 391deg/s
+    pid_rate.setpoint[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (4-1);
+    pid_rate.setpoint[1] = (ele_in2 - ele_in2_mid) << 4;
+    pid_rate.setpoint[2] = (rud_in2 - rud_in2_mid) << 4;
+#else
+    pid_rate.setpoint[0] = 0;
+    pid_rate.setpoint[1] = 0;
+    pid_rate.setpoint[2] = 0;
+#endif
+    // measured angular rate (from the gyro)
+    pid_rate.input[0] = constrain(gyro[0], -8192, 8191);
+    pid_rate.input[1] = constrain(gyro[1], -8192, 8191);
+    pid_rate.input[2] = constrain(gyro[2], -8192, 8191);
+
+    compute_pid(&pid_rate);
     
+
+    // combine output of pid control loops 
+    for (i=0; i<3; i++) {
+      int32_t output = (int32_t)pid_att.output[i] + (int32_t)pid_rate.output[i] * 0;
+      // vr_gain [-128,127]/128, stick_gain [-400,400]/256, master_gain [0,800]/512
+      correction[i] = (((output * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
+    }
 #if defined(USE_SERIAL) && 0
     Serial.print(correction[0]); Serial.print('\t');
     Serial.print(correction[1]); Serial.print('\t');
@@ -2061,7 +2339,7 @@ again:
 #endif
     last_pid_time = t;
   }
-
+  
   if ((int32_t)(t - last_vr_time) > 100123) {
     // sample all adc channels
     uint8_t ail_vr2, ele_vr2, rud_vr2;
