@@ -2,12 +2,13 @@
 
 #include <Arduino.h>
 #include <avr/eeprom.h>
+#include <avr/wdt.h>
 #include <util/atomic.h>
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 /***************************************************************************************************************
- * device definitions (todo: move to separate files)
+ * device definitions (TODO: move to separate files)
  ***************************************************************************************************************/
 
 //#define RX3S_V1
@@ -92,6 +93,9 @@
 #define LED_BIT 5
 #define LED_XOR 0 // active high
 
+// eeprom
+#define EEPROM_CFG_VER (-1) // do not enable eeprom
+
 #endif 
 /* RX3S_V1 *****************************************************************************************************/
 
@@ -163,6 +167,9 @@
 #define LED_BIT 5
 #define LED_XOR 0 // active high
 
+// eeprom
+#define EEPROM_CFG_VER (-1) // do not enable eeprom
+
 //#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2
 #if defined(MOD_PCINT0)
 #warning MOD_PCINT0 defined
@@ -232,7 +239,8 @@ int8_t rx3s_v2_wing_dual_ailB;
 #define LED_BIT 5
 #define LED_XOR 1 // active low
 
-#define EEPROM_CFG_VER 1 // enable eeprom
+// eeprom
+#define EEPROM_CFG_VER (1) // do enable eeprom
 
 #endif
 /* NANOWII ****************************************************************************************************/
@@ -300,6 +308,7 @@ int8_t rx3s_v2_wing_dual_ailB;
 #endif
 #endif
 
+
 // LED set
 #define LED_OFF 0
 #define LED_ON 1
@@ -311,8 +320,8 @@ int8_t rx3s_v2_wing_dual_ailB;
 #define LED_VERY_SHORT 30
 
 #if defined(LED_TIMING)
-#define LED_TIMING_START do {LED_PORT |= (1 << LED_BIT);} while (0)
-#define LED_TIMING_STOP do {LED_PORT &= ~(1 << LED_BIT);} while (0)
+#define LED_TIMING_START do {LED_PORT |= (1 << LED_BIT);} while (false)
+#define LED_TIMING_STOP do {LED_PORT &= ~(1 << LED_BIT);} while (false)
 #endif
 
 // adc
@@ -388,10 +397,10 @@ int32_t att[3] = {0, 0, 0}; // relative attitude
 int16_t correction[3] = {0, 0, 0}; // final correction values
 
 // wing mode
-enum WING_MODE {WING_NONE, WING_SINGLE_AIL, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
+enum WING_MODE {WING_SINGLE_AIL, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
 enum WING_MODE wing_mode = WING_SINGLE_AIL;
 
-#define VR_GAIN_MAX (-128)
+#define VR_GAIN_MAX 127
 #define STICK_GAIN_MAX 400 // 1900-1500 or 1500-1100 
 #define MASTER_GAIN_MAX 800 // 1900-1100
 
@@ -493,12 +502,7 @@ int16_t led_pulse_msec[4];
 
 void init_led()
 {
-  if (&LED_PORT == &PORTB) {
-    PORTB |= (1 << LED_BIT);
-  }  
-  if (&LED_PORT == &PORTD) {
-    PORTD |= (1 << LED_BIT);
-  }  
+  LED_PORT |= (1 << LED_BIT);
 }
 
 void set_led(int8_t i)
@@ -770,21 +774,19 @@ void read_switches()
  * DIGITAL IN (RX)
  ***************************************************************************************************************/
 
-int8_t rx_portb_ref; // for non cppm
-volatile int16_t *rx_portb_pref; // for cppm
-volatile int8_t rx_portb_sync; // true if rx_portb_ref/rx_portb_pref pulse has occurred
-
-volatile int16_t *rx_chan[] = {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, NULL}; // open9x RETA1a2
-volatile int16_t *rx_portb[] = RX_PORTB; // non CPPM
-volatile int16_t *rx_portd[] = RX_PORTD; // non CPPM
+volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
+int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[<n>] var for CPPM
+volatile int16_t *rx_portb[] = RX_PORTB;
+volatile int16_t *rx_portd[] = RX_PORTD;
 
 #if defined(USE_CPPM)
+volatile int16_t *rx_chan[] = {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, NULL}; // open9x RETA1a2
+const int8_t rx_chan_len = sizeof(rx_chan)/sizeof(rx_chan[0]);
+
 #if defined(NANOWII)
 ISR(INT6_vect)
 {
-// TODO: need to align sync pulse with channel 0 and not just use rise_time = 0. otherwise, we could start channel 0 in the 
-// middle of first seen ppm frame. then any code that tracks min/max pulse widths will be using the wrong values.
-
+  static int8_t ch0_synced = false;
   static uint16_t rise_time;
   static uint8_t last_pin;
   static uint8_t ch;
@@ -802,22 +804,21 @@ ISR(INT6_vect)
   if (rise & (1 << CPPM_PINBIT)) {
     uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
     rise_time = now;
-    if (width > 3000 || ch > 7) {
+    if (width > 3000) {
       ch = 0;
-    } else if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+      ch0_synced = true;
+    } else if (ch0_synced && ch < rx_chan_len && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
       *rx_chan[ch] = width;
-      if (rx_chan[ch] == rx_portb_pref)
-        rx_portb_sync = true;
+      if (ch == rx_frame_sync_ref)
+        rx_frame_sync = true;
       ch++;
     }
   }
 }
-#else
+#else // NANOWII
 ISR(TIMER1_CAPT_vect)
 {
-// TODO: need to align sync pulse with channel 0 and not just use rise_time = 0. otherwise, we could start channel 0 in the 
-// middle of first seen ppm frame. then any code that tracks min/max pulse widths will be using the wrong values.
-
+  static int8_t ch0_synced = false;
   static uint16_t rise_time;
   static uint8_t ch;
   uint16_t now;
@@ -828,12 +829,13 @@ ISR(TIMER1_CAPT_vect)
 
   width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
   rise_time = now;
-  if (width > 3000 || ch > 7) {
+  if (width > 3000) {
     ch = 0;
-  } else if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+    ch0_synced = true;
+  } else if (ch0_synced && ch < rx_chan_len && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
     *rx_chan[ch] = width;
-    if (rx_chan[ch] == rx_portb_pref)
-      rx_portb_sync = true;
+    if (ch == rx_frame_sync_ref)
+      rx_frame_sync = true;
     ch++;
   }
 }
@@ -880,8 +882,8 @@ ISR(TIMER1_CAPT_vect)
       width = (now - RISE_VAR) >> (F_CPU == F_16MHZ ? 1 : 0); \
       if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) { \
         PORT_VAR = width; \
-        if (rx_portb_ref == PORT_BIT) \
-          rx_portb_sync = true; \
+        if (rx_frame_sync_ref == PORT_BIT) \
+          rx_frame_sync = true; \
       } \
     } \
   }
@@ -946,8 +948,8 @@ ISR(PCINT0_vect)
         uint16_t width = (now - rise_time[i]) >> (F_CPU == F_16MHZ ? 1 : 0);
         if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
           *rx_portb[i] = width;
-          if (i == rx_portb_ref)
-            rx_portb_sync = true;
+          if (i == rx_frame_sync_ref)
+            rx_frame_sync = true;
         }
       }
     }
@@ -1027,9 +1029,11 @@ void init_digital_in_rx()
   TIMSK1 |= (1 << ICIE1); // enable interrupt on ICP
   TCCR1B |= (1 << ICNC1) | (1 << ICES1); // enable noise canceler and interrupt on rising edge
 #endif // NANOWII
-  rx_portb_pref = &ele_in; // CPPM isr needs to compare pointer to var
+  rx_frame_sync_ref = 3; // sync when rx_chan[3] updated
   return;
 #endif // USE_CPPM
+
+
 
   // PORTB RX
   PCICR |= (1 << PCIE0); // interrupt on pin change
@@ -1041,9 +1045,9 @@ void init_digital_in_rx()
     }
   }
 #if defined(NANOWII)
-  rx_portb_ref = 3; // use ELE_IN (PB3) as ref channel. TODO: fix this hardcoding
+  rx_frame_sync_ref = 3; // use ELE_IN (PB3) as ref channel. TODO: fix this hardcoding
 #else
-  rx_portb_ref = 1; // use ELE_IN (PB1) as ref channel. TODO: fix this hardcoding
+  rx_frame_sync_ref = 1; // use ELE_IN (PB1) as ref channel. TODO: fix this hardcoding
 #endif
 
 #if defined(NANOWII)
@@ -1177,18 +1181,6 @@ void compute_pid(struct _pid *ppid)
 struct _eeprom_cfg {
   uint8_t ver;
   enum WING_MODE wing_mode; 
-  int16_t pid_rate_i_threshold;
-  int32_t pid_rate_i_windup;
-  int8_t pid_rate_output_shift;
-  int16_t pid_rate_kp[3];
-  int16_t pid_rate_ki[3];
-  int16_t pid_rate_kd[3];
-  int16_t pid_att_i_threshold;
-  int32_t pid_att_i_windup;
-  int8_t pid_att_output_shift;
-  int16_t pid_att_kp[3];
-  int16_t pid_att_ki[3];
-  int16_t pid_att_kd[3];
   int8_t vr_notch[3];
   uint8_t chksum;
 };
@@ -1221,28 +1213,8 @@ int8_t eeprom_read_cfg(struct _eeprom_cfg *pcfg, uint8_t expect_ver)
 
 void eeprom_copy_to_cfg(struct _eeprom_cfg *pcfg)
 {
-  int8_t i;
-        
+  int8_t i;        
   pcfg->wing_mode = wing_mode;
-  
-  pcfg->pid_rate_i_threshold = pid_rate.i_threshold;
-  pcfg->pid_rate_i_windup = pid_rate.i_windup;
-  pcfg->pid_rate_output_shift = pid_rate.output_shift;
-  for (i=0; i<3; i++) {
-    pcfg->pid_rate_kp[i] = pid_rate.kp[i];
-    pcfg->pid_rate_ki[i] = pid_rate.ki[i];
-    pcfg->pid_rate_kd[i] = pid_rate.kd[i];
-  }
-  
-  pcfg->pid_att_i_threshold = pid_att.i_threshold;
-  pcfg->pid_att_i_windup = pid_att.i_windup;
-  pcfg->pid_att_output_shift = pid_att.output_shift;
-  for (i=0; i<3; i++) {
-    pcfg->pid_att_kp[i] = pid_att.kp[i];
-    pcfg->pid_att_ki[i] = pid_att.ki[i];
-    pcfg->pid_att_kd[i] = pid_att.kd[i];
-  }
-
   for (i=0; i<3; i++) {   
     pcfg->vr_notch[i] = vr_notch[i];
   }
@@ -1251,27 +1223,7 @@ void eeprom_copy_to_cfg(struct _eeprom_cfg *pcfg)
 void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
 {
   int8_t i;
-
   wing_mode = pcfg->wing_mode;
-  
-  pid_rate.i_threshold = pcfg->pid_rate_i_threshold;
-  pid_rate.i_windup = pcfg->pid_rate_i_windup;
-  pid_rate.output_shift = pcfg->pid_rate_output_shift;
-  for (i=0; i<3; i++) {
-    pid_rate.kp[i] = pcfg->pid_rate_kp[i];
-    pid_rate.ki[i] = pcfg->pid_rate_ki[i];
-    pid_rate.kd[i] = pcfg->pid_rate_kd[i];
-  }
-
-  pid_att.i_threshold = pcfg->pid_att_i_threshold;
-  pid_att.i_windup = pcfg->pid_att_i_windup;
-  pid_att.output_shift = pcfg->pid_att_output_shift;
-  for (i=0; i<3; i++) {
-    pid_att.kp[i] = pcfg->pid_att_kp[i];
-    pid_att.ki[i] = pcfg->pid_att_ki[i];
-    pid_att.kd[i] = pcfg->pid_att_kd[i];
-  }
-
   for (i=0; i<3; i++) {   
     vr_notch[i] = pcfg->vr_notch[i];
   }
@@ -1362,7 +1314,7 @@ struct _calibration {
 };
 
 void calibrate_set_led(struct _calibration *prx_cal, struct _calibration *pimu_cal) {
-  set_led_msg(1, !prx_cal->done ? (!pimu_cal->done ? 3 : 1) : (!pimu_cal->done ? 2 : 0), LED_SHORT);
+  set_led_msg(1, (pimu_cal->done ? 0 : 2) + (prx_cal->done ? 0 : 1), LED_SHORT);
 } 
 
 void calibrate_init_stat(struct _calibration *pcal, int8_t num_elements) 
@@ -1403,7 +1355,6 @@ int8_t calibrate_check_stat(struct _calibration *pcal, int16_t range)
   return (good == pcal->num_elements);
 }
 
-#if defined(USE_SERIAL)
 void calibrate_print_stat(struct _calibration *pcal)
 {
   Serial.println(pcal->num_samples);
@@ -1413,7 +1364,6 @@ void calibrate_print_stat(struct _calibration *pcal)
     Serial.println(pcal->high[i]);
   }
 }
-#endif
 
 void calibrate_rx(struct _calibration *prx_cal)
 {
@@ -1740,12 +1690,19 @@ void apply_mixer0(int16_t *change)
   thr_out2 = thr_in2;  
 }
 
+void set_mixer_limits(int16_t low, int16_t high)
+{
+  for (int8_t i=0; i<4; i++) {
+    mixer_out2_low_limit[i] = low;
+    mixer_out2_high_limit[i] = high;
+  }
+}
 
 void apply_mixer() 
 {
   // *_in2 => [correction] => *_out2
   
-    // apply mixer with zero correction values (pass through) to track servo limits from rx alone
+  // apply mixer with zero correction values (pass through) to track servo limits from rx alone
   int16_t zero_correction[4] = {0, 0, 0, 0};
   apply_mixer0(zero_correction);
   mixer_out2_low_limit[0] = min(ail_out2, mixer_out2_low_limit[0]);
@@ -1798,8 +1755,8 @@ void dump_sensors()
   while (true) {
     t = micros1();
     
-    if (rx_portb_sync || (int32_t)(t - last_rx_time) > 30000) {
-      rx_portb_sync = false;
+    if (rx_frame_sync || (int32_t)(t - last_rx_time) > 30000) {
+      rx_frame_sync = false;
       copy_rx_in();
       servo_sync = true;
       last_rx_time = t;
@@ -1914,14 +1871,14 @@ void stick_config(struct _stick_zone *psz)
 // [roll|pitch|yaw]_gain: see vr_notch_table[] 
 
   const int8_t param_ymin[] = {1, -4, -4, -4, 1};
-  const int8_t param_ymax[] = {4, +4, +4, +4, 1};
+  const int8_t param_ymax[] = {4, +4, +4, +4, 2};
   int8_t param_yval[] = {1, 4, 4, 4, 1};
   const int8_t param_xcount = sizeof(param_yval)/sizeof(param_yval[0]);
 
   const int16_t servo_swing = 300;
   const int32_t servo_interval[] = {100000L, 400000L};
 
-  int8_t x=0;
+  int8_t x = 0;
   int8_t update_x = 1 << 1;
   int8_t update_y = param_yval[x] << 1;
   int8_t servo_sync = false;
@@ -1929,15 +1886,13 @@ void stick_config(struct _stick_zone *psz)
   int32_t wait_interval = servo_interval[1];
   ail_out2 = RX_WIDTH_MID;
   ele_out2 = RX_WIDTH_MID;  
-
   struct _eeprom_cfg cfg;
   
   eeprom_read_cfg(&cfg, EEPROM_CFG_VER);
-  param_yval[0] = (int8_t) cfg.wing_mode;
+  param_yval[0] = (int8_t) cfg.wing_mode + 1;
   param_yval[1] = cfg.vr_notch[0];
   param_yval[2] = cfg.vr_notch[1];
   param_yval[3] = cfg.vr_notch[2];
-
   
   while (true) {
     uint32_t t = micros1();
@@ -1959,8 +1914,8 @@ void stick_config(struct _stick_zone *psz)
       last_servo_update_time = t;
     }
     
-    if (rx_portb_sync) {
-      rx_portb_sync = false;
+    if (rx_frame_sync) {
+      rx_frame_sync = false;
       copy_rx_in();
       servo_sync = true;
     }
@@ -1977,14 +1932,15 @@ void stick_config(struct _stick_zone *psz)
         case 0x58: param_yval[x] = max(param_yval[x] - 1, param_ymin[x]); update_y = param_yval[x] << 1; break; // down
       }
 
-      if (psz->move == 0x56 && x == param_xcount - 1) {
+      if (x == (param_xcount - 1) && param_yval[x] == 2) {
         // write eeprom;
         Serial.println("writing to eeprom");
-        cfg.wing_mode = (enum WING_MODE) param_yval[0];
+        cfg.wing_mode = (enum WING_MODE) (param_yval[0] - 1);
         cfg.vr_notch[0] = param_yval[1];
         cfg.vr_notch[1] = param_yval[2];
         cfg.vr_notch[2] = param_yval[3];
         eeprom_write_cfg(&cfg);
+        return;
       }
 
       // if updating index servo then updating parameter servo as well
@@ -2003,6 +1959,7 @@ void stick_config(struct _stick_zone *psz)
     }
   }
 }
+
 
 /***************************************************************************************************************
  * SETUP
@@ -2050,7 +2007,7 @@ void setup()
     pid_att.kd[i] = PID_KD_DEFAULT;
   }
   
-#if defined(EEPROM_CFG_VER)
+#if EEPROM_CFG_VER > 0
   struct _eeprom_cfg cfg;
   if (eeprom_read_cfg(&cfg, EEPROM_CFG_VER) == 0) {
     // copy from eeprom cfg
@@ -2062,6 +2019,9 @@ void setup()
     eeprom_write_cfg(&cfg);
   }
 #endif
+
+  // set mixer limits based on configuration (1000/2000, 1100/1900, 1250/1750+follow)
+  set_mixer_limits(RX_WIDTH_LOW_INITIAL, RX_WIDTH_HIGH_INITIAL);
 
   // init digital in for dip switches to read config settings
   init_digital_in_sw(); // sw
@@ -2187,25 +2147,26 @@ void loop()
   struct _calibration imu_cal;
   
   struct _stick_zone stick_zone;
-  uint8_t stick_config_seq[] = {0x78, 0x89, 0x98, 0x87, 0x78, 0x89, 0x98, 0x87, 0x00}; // 7-9-7-9-7
+  uint8_t stick_config_seq[] = {0x78, 0x89, 0x98, 0x87, 0x78, 0x89, 0x98, 0x87, 0xff}; // 7-9-7-9-7
   int8_t stick_config_seq_i = 0;
   int8_t stick_configurable = true;
   
   // calibration setup  
   calibrate_init_stat(&rx_cal, 4);
   calibrate_init_stat(&imu_cal, 3);
-  calibrate_set_led(&rx_cal, &imu_cal);
 
 again:
   t = micros1();
   update_led(t);
 
   // update rx frame data with rx ISR received reference channel or after timeout
-  if (rx_portb_sync || (int32_t)(t - last_rx_time) > 30000) {
-    rx_portb_sync = false;
+  if (rx_frame_sync || (int32_t)(t - last_rx_time) > 30000) {
+    rx_frame_sync = false;
     copy_rx_in();
-    if (!rx_cal.done)
+    if (!rx_cal.done) {
       calibrate_rx(&rx_cal);
+      calibrate_set_led(&rx_cal, &imu_cal);
+    }
     servo_sync = true;    
     last_rx_time = t;
   }
@@ -2220,8 +2181,10 @@ again:
     // takes around 1ms at 100khz
     if ((int32_t)(t - last_imu_time) > PID_PERIOD) {
       read_imu();
-      if (!imu_cal.done)
+      if (!imu_cal.done) {
         calibrate_imu(&imu_cal);
+        calibrate_set_led(&rx_cal, &imu_cal);
+       }
       // apply calibration offsets
       gyro[0] -= gyro0[0];
       gyro[1] -= gyro0[1];
@@ -2235,25 +2198,26 @@ again:
     }
   }   
   
+ #if EEPROM_CFG_VER > 0
   if (stick_configurable && stick_zone_update(&stick_zone)) {
     stick_config_seq_i = (stick_zone.move == stick_config_seq[stick_config_seq_i]) ? stick_config_seq_i + 1 : 0;
-    if (stick_config_seq[stick_config_seq_i] == 0x00) {
-      stick_config(&stick_zone); // enter stick config mode
-      // RESET SYSTEM ON RETURN, at least if mix mode has changed
-    }
-      
+    if (stick_config_seq[stick_config_seq_i] == 0xff) {
+      stick_config(&stick_zone); // completed sequence, enter stick config mode
+      // RESET SYSTEM ON RETURN, or at least if mix mode has changed
+      wdt_enable(WDTO_1S);
+    }      
     if ((int32_t)(t - stick_config_check_time) > 10000000L) // 10 sec to enter config mode
       stick_configurable = false;
   }
+#endif
     
   // short circuit rest of the loop if calibration not done, do not compute correction[]
   if (!rx_cal.done || !imu_cal.done) {
-    calibrate_set_led(&rx_cal, &imu_cal);
     goto again;
   }
    
   if ((int32_t)(t - last_pid_time) > PID_PERIOD) {
-    // determine how much sticks are off center (neutral)
+    // determine how much sticks are off center (from neutral)
     int16_t ail_stick_pos = abs(((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1);
     int16_t ele_stick_pos = abs(ele_in2 - ele_in2_mid);
     int16_t rud_stick_pos = abs(rud_in2 - rud_in2_mid);
