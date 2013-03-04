@@ -17,6 +17,15 @@
 # install C:\Program Files\arduino-1.0.3 (this exact path is important!)
 # ensure PATH includes C:\Program Files\arduino-1.0.3\hardware\tools\avr\utils\bin
 
+# other useful commands
+# =====================
+# avr-readelf -a <filename>.elf
+# avr-objdump -dS <filename>.elf
+# avr-nm -Cn <filename>.elf
+# avr-size [-C] <filename>.elf
+# avr-strings <filename>.elf
+# avrdude -C "C:\Program Files\arduino-1.0.3\hardware\tools\avr\etc\avrdude.conf" -c usbasp -p m168p -U flash:r:<filename>.hex
+
 set(CMAKE_TOOLCHAIN_FILE cmake/ArduinoToolchain.cmake)
 cmake_minimum_required(VERSION 2.8)
 project(FlightStab C CXX)
@@ -65,7 +74,7 @@ endif (NOT TODAY)
 
 # NANOWII
 add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
-add_arduino_firmware(TEST_NANOWII_CPPM FlightStab leonardo "NANOWII;USE_CPPM")
+add_arduino_firmware(TEST_NANOWII_NOCPPM FlightStab leonardo "NANOWII;DISABLE_CPPM")
 add_arduino_firmware(TEST_NANOWII_SERIAL FlightStab leonardo "NANOWII;USE_SERIAL")
 add_arduino_firmware(TEST_NANOWII_I2CDEVLIB FlightStab leonardo "NANOWII;USE_I2CDEVLIB")
 
@@ -77,9 +86,9 @@ add_arduino_firmware(${TODAY}_RX3S_V2 FlightStab pro5v "RX3S_V2")
 add_arduino_firmware(${TODAY}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
 add_arduino_firmware(${TODAY}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
 
-# RX3S_* CPPM enabled
-add_arduino_firmware(${TODAY}_RX3S_V1_CPPM FlightStab pro5v "RX3S_V1;USE_CPPM")
-add_arduino_firmware(${TODAY}_RX3S_V2_CPPM FlightStab pro5v "RX3S_V2;USE_CPPM")
+# RX3S_* CPPM disabled
+add_arduino_firmware(${TODAY}_RX3S_V1_NOCPPM FlightStab pro5v "RX3S_V1;DISABLE_CPPM")
+add_arduino_firmware(${TODAY}_RX3S_V2_NOCPPM FlightStab pro5v "RX3S_V2;DISABLE_CPPM")
          
 # RX3S_V2 test permutations          
 add_arduino_firmware(TEST_RX3S_V2_MOD_PCINT0 FlightStab pro5v "RX3S_V2;MOD_PCINT0")
