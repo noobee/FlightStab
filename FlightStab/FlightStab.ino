@@ -18,7 +18,7 @@
 
 //#define USE_SERIAL // enable serial port
 //#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
-//#define DISABLE_CPPM // disable cppm
+//#define DISABLE_CPPM // remove cppm code to reduce firmware size
 
 //#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 //#define USE_I2CLIGHT // poll-based i2c access routines
@@ -93,8 +93,8 @@
 #define LED_XOR 0 // active high
 
 // eeprom clear pins. shorted on init means to clear eeprom
-#define EEPROM_CLEAR_PIN1 4
-#define EEPROM_CLEAR_PIN2 5
+#define EEPROM_RESET_OUT_PIN 4
+#define EEPROM_RESET_IN_PIN 5
 
 #endif 
 /* RX3S_V1 *****************************************************************************************************/
@@ -168,8 +168,8 @@
 #define LED_XOR 0 // active high
 
 // eeprom clear pins. shorted on init means to clear eeprom
-#define EEPROM_CLEAR_PIN1 4
-#define EEPROM_CLEAR_PIN2 5
+#define EEPROM_RESET_OUT_PIN 4
+#define EEPROM_RESET_IN_PIN 5
 
 //#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2
 #if defined(MOD_PCINT0)
@@ -241,8 +241,8 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define LED_XOR 1 // active low
 
 // eeprom clear pins. shorted on init means to clear eeprom
-#define EEPROM_CLEAR_PIN1 6
-#define EEPROM_CLEAR_PIN2 5
+#define EEPROM_RESET_OUT_PIN 6
+#define EEPROM_RESET_IN_PIN 5 // also used for thr_out in cppm mode
 
 #endif
 /* NANOWII ****************************************************************************************************/
@@ -321,9 +321,9 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #endif
 
 // adc
-volatile uint8_t ail_vr;// = 255;
-volatile uint8_t ele_vr;// = 255;
-volatile uint8_t rud_vr;// = 255;
+volatile uint8_t ail_vr; // initialized with vr_notch_table[vr_notch[0]] = 255
+volatile uint8_t ele_vr; //
+volatile uint8_t rud_vr; //
 
  // for eeprom config
 int8_t vr_notch_table[4+1+4] = {0, 32, 64, 96, 128, 160, 192, 224, 255};
@@ -371,8 +371,8 @@ volatile int16_t ailr_out;
 volatile int16_t thr_out;
 int16_t ail_out2, ele_out2, rud_out2, ailr_out2, thr_out2;
 
-int16_t mixer_out2_low_limit[4] = {RX_WIDTH_LOW_FULL, RX_WIDTH_LOW_FULL, RX_WIDTH_LOW_FULL, RX_WIDTH_LOW_FULL};
-int16_t mixer_out2_high_limit[4] = {RX_WIDTH_HIGH_FULL, RX_WIDTH_HIGH_FULL, RX_WIDTH_HIGH_FULL, RX_WIDTH_HIGH_FULL};
+int16_t mixer_out2_low_limit[4];
+int16_t mixer_out2_high_limit[4];
 
 // imu
 int16_t gyro0[3] = {0, 0, 0}; // calibration sets zero-movement-measurement offsets
@@ -405,6 +405,11 @@ enum MIXER_EPA_MODE mixer_epa_mode = MIXER_EPA_FULL;
 // cppm mode
 enum CPPM_MODE {CPPM_NONE=0, CPPM_OPEN9X=1, CPPM_UNDEF};
 enum CPPM_MODE cppm_mode = CPPM_OPEN9X;
+#if defined(DISABLE_CPPM)
+#define CPPM_END CPPM_NONE
+#else
+#define CPPM_END CPPM_OPEN9X
+#endif
 
 //#define CPPM_ENABLE
 
@@ -492,7 +497,7 @@ int get_free_sram()
   return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval); 
 }
 
-int8_t boot_check(int8_t out_pin, int8_t in_pin)
+int8_t boot_check(int8_t in_pin, int8_t out_pin)
 {
   pinMode(in_pin, INPUT);
   pinMode(out_pin, OUTPUT);
@@ -507,10 +512,6 @@ int8_t boot_check(int8_t out_pin, int8_t in_pin)
     }
   }
   pinMode(out_pin, INPUT);
-#if defined(USE_SERIAL)
-  Serial.print("boot_check ");
-  Serial.println(result);
-#endif
   return result;
 }
 
@@ -537,6 +538,10 @@ int8_t boot_check(int8_t out_pin, int8_t in_pin)
 
   slot 2
   5 SHORT = gyro init error
+  20 VERY SHORT = low sram
+  
+  slot 3
+  100 VERY SHORT = eeprom reset
   
 */
 
@@ -860,7 +865,7 @@ inline void pcint0_vect()
 // isr armed only if cppm enabled
 ISR(TIMER1_CAPT_vect)
 {
-#if defined(CPPM_ENABLE)
+#if !defined(DISABLE_CPPM)
   static int8_t ch0_synced = false;
   static uint16_t rise_time;
   static uint8_t ch;
@@ -882,7 +887,7 @@ ISR(TIMER1_CAPT_vect)
       rx_frame_sync = true;
     ch++;
   }
-#endif // CPPM_ENABLE
+#endif // !DISABLE_CPPM
 }
 
 #if !(defined(RX3S_V2) && defined(MOD_PCINT0))
@@ -1032,7 +1037,7 @@ inline void int6_vect_non_cppm()
 // PE6 = cppm_in
 inline void int6_vect_cppm() 
 {
-#if defined(CPPM_ENABLE)
+#if !defined(DISABLE_CPPM)
   static int8_t ch0_synced = false;
   static uint16_t rise_time;
   static uint8_t last_pin;
@@ -1062,7 +1067,7 @@ inline void int6_vect_cppm()
       ch++;
     }
   }
-#endif // CPPM_ENABLE
+#endif // !DISABLE_CPPM
 }
 
 ISR(INT6_vect) 
@@ -1071,7 +1076,6 @@ ISR(INT6_vect)
     int6_vect_cppm();
   else
     int6_vect_non_cppm();
-
 }
  
 ISR(PCINT0_vect) 
@@ -1083,7 +1087,7 @@ ISR(PCINT0_vect)
 
 void init_digital_in_rx()
 {
-#if defined(CPPM_ENABLE)
+#if !defined(DISABLE_CPPM)
   if (cppm_mode > 0) {
 #if defined(NANOWII)
     // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
@@ -1099,7 +1103,7 @@ void init_digital_in_rx()
     rx_frame_sync_ref = 3; // sync when rx_chan[3] updated
     return;
   }
-#endif // defined(CPPM_ENABLE)
+#endif // !DISABLE_CPPM
 
   // PORTB RX
   PCICR |= (1 << PCIE0); // interrupt on pin change
@@ -1481,9 +1485,8 @@ void calibrate_imu(struct _calibration *pimu_cal)
   if (++pimu_cal->num_samples == 100) {
     if (calibrate_check_stat(pimu_cal, 50)) {
       calibrate_compute_mean(pimu_cal);
-      gyro0[0] = pimu_cal->mean[0];
-      gyro0[1] = pimu_cal->mean[1];
-      gyro0[2] = pimu_cal->mean[2];
+      for (int8_t i=0; i<3; i++)
+        gyro0[i] = pimu_cal->mean[i];
 #if defined(USE_SERIAL)
       Serial.println("GY");
       calibrate_print_stat(pimu_cal);
@@ -1919,23 +1922,22 @@ int8_t stick_zone(int16_t pwm)
 int8_t stick_zone_update(struct _stick_zone *psz)
 {
   int8_t tmp, moved;
+
+  psz->prev = psz->curr;
+  psz->zx = (tmp = stick_zone(ail_in2)) >= 0 ? tmp : psz->zx; // hysteresis
+  psz->zy = (tmp = stick_zone(ele_in2)) >= 0 ? tmp : psz->zy;
+  psz->curr = (2 - psz->zy) * 3 + psz->zx + 1;
   // telephone pad mapping
   // 1 2 3
   // 4 5 6
   // 7 8 9 
-  psz->prev = psz->curr;
-  psz->zx = (tmp = stick_zone(ail_in2)) >= 0 ? tmp : psz->zx;
-  psz->zy = (tmp = stick_zone(ele_in2)) >= 0 ? tmp : psz->zy;
-  psz->curr = (2 - psz->zy) * 3 + psz->zx + 1;
-  if (psz->curr != psz->prev) {
-    psz->move = (psz->prev << 4) | psz->curr;
-    moved = true;
+  moved = (psz->curr != psz->prev);
+  if (moved) {
+    psz->move = (psz->prev << 4) | psz->curr; // move = 0x[prev digit][curr digit]
 #if defined(USE_SERIAL)
       Serial.print("stick_zone "); 
       Serial.println(psz->move, HEX);
 #endif
-  } else {
-    moved = false;
   }
   return moved;
 }
@@ -1948,17 +1950,17 @@ void stick_config(struct _stick_zone *psz)
 // mixer_epa_mode: see enum MIXER_EPA_MODE
 // cppm_mode: see enum CPPM_MODE
 
-  const int8_t param_ymin[] = {1, -4, -4, -4, 1, 1, 1};
-  const int8_t param_ymax[] = {4, +4, +4, +4, 3, 2, 2};
-  int8_t param_yval[]       = {1,  4,  4,  4, 1, 1, 1};
-  const int8_t param_xcount = sizeof(param_yval)/sizeof(param_yval[0]);
+// note: be careful about off-by-one errors in this function
+
+  const int8_t param_ymin[] = {WING_SINGLE_AIL+1, -4, -4, -4, MIXER_EPA_FULL+1 , CPPM_NONE+1, 1};
+  const int8_t param_ymax[] = {WING_DUAL_AIL+1  , +4, +4, +4, MIXER_EPA_TRACK+1, CPPM_END+1 , 2};
+  const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
+  int8_t param_yval[param_xcount];
 
   const int16_t servo_swing = 300;
   const int32_t servo_interval[] = {100000L, 400000L};
 
   int8_t x = 0; // 0-based, x=0 => wing_mode
-  int8_t update_x = (x + 1) << 1;
-  int8_t update_y = param_yval[x] << 1;
   int8_t servo_sync = false;
   uint32_t last_servo_update_time=0;
   int32_t wait_interval = servo_interval[1];
@@ -1971,7 +1973,10 @@ void stick_config(struct _stick_zone *psz)
   param_yval[3] = eeprom_cfg.vr_notch[2] - 4;
   param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode + 1;
   param_yval[5] = (int8_t) eeprom_cfg.cppm_mode + 1;
-
+  param_yval[6] = 1; // exit option
+  
+  int8_t update_x = (x + 1) << 1;
+  int8_t update_y = param_yval[x] << 1;
   while (true) {
     uint32_t t = micros1();
   
@@ -1983,10 +1988,11 @@ void stick_config(struct _stick_zone *psz)
         update_x--;
       } else {
         if (update_y != 0) {
-          int8_t sign_y = update_y > 0 ? 1 : -1;
-          ail_out2 = RX_WIDTH_MID + (update_y & 1 ? 0 : servo_swing) * sign_y;
+          int8_t sign = update_y > 0 ? 1 : -1;
+          int16_t signed_change = sign > 0 ? servo_swing : -servo_swing;
+          ail_out2 = RX_WIDTH_MID + (update_y & 1 ? 0 : signed_change);
           wait_interval = servo_interval[update_y & 1];
-          update_y -= sign_y;
+          update_y -= sign;
          }
        }
       last_servo_update_time = t;
@@ -2051,7 +2057,7 @@ void setup()
   init_clock();
   init_led();
   if (get_free_sram() < 128)
-    set_led_msg(3, 40, LED_VERY_SHORT); 
+    set_led_msg(2, 20, LED_VERY_SHORT); 
 
 #if defined(USE_SERIAL)
   Serial.begin(115200L);
@@ -2086,9 +2092,9 @@ void setup()
     pid_att.kd[i] = PID_KD_DEFAULT;
   }
 
+  int8_t eeprom_reset = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN);
   struct _eeprom_cfg eeprom_cfg;
-  if (boot_check(EEPROM_CLEAR_PIN1, EEPROM_CLEAR_PIN2) || 
-      eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver) != 0) {
+  if (eeprom_reset || eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver) != 0) {
     // reset/write eeprom with default parameters
     eeprom_cfg.ver = eeprom_cfg_ver;
     eeprom_copy_to_cfg(&eeprom_cfg);
@@ -2096,6 +2102,14 @@ void setup()
   }
   eeprom_copy_from_cfg(&eeprom_cfg);
 
+  if (eeprom_reset) {
+    set_led_msg(3, 100, LED_VERY_SHORT); // 6 sec
+    do {
+      update_led(micros1());    
+    } while (true);
+      
+  }
+  
   // set mixer limits based on configuration
   switch (mixer_epa_mode) {
   case MIXER_EPA_FULL: // 1000-2000
@@ -2146,6 +2160,7 @@ void setup()
     att_hold = true;
   }
     
+#if !defined(DISABLE_CPPM)
   if (cppm_mode > 0) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB2 10 THR_OUT instead of RUD_IN
@@ -2154,6 +2169,7 @@ void setup()
     pwm_out_var[4] = &thr_out; // enable thr_out
     pwm_out_pin[4] = THR_OUT_PIN; //
   }
+#endif // !DISABLE_CPPM
 #endif // RX3S_V1
 
 #if defined(RX3S_V2)
@@ -2188,6 +2204,7 @@ void setup()
     att_hold = true;
   }
 
+#if !defined(DISABLE_CPPM)
   if (cppm_mode > 0) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB2 10 THR_OUT instead of RUD_IN
@@ -2196,15 +2213,18 @@ void setup()
     pwm_out_var[4] = &thr_out; // enable thr_out
     pwm_out_pin[4] = THR_OUT_PIN; //
   }
+#endif // !DISABLE_CPPM
 #endif // RX3S_V2
 
 #if defined(NANOWII)
+#if !defined(DISABLE_CPPM)
   if (cppm_mode > 0) {
     // PE6 7 CPPM_IN instead of THR/AUX2_IN
     // PC6 5 THR_OUT instead of M
     pwm_out_var[4] = &thr_out; // enable thr_out
     pwm_out_pin[4] = THR_OUT_PIN; //
   }
+#endif // !DISABLE_CPPM
 #endif // NANOWII
 
   set_led_msg(0, wing_mode + 1, LED_LONG);
