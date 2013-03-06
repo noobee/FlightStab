@@ -404,7 +404,7 @@ enum MIXER_EPA_MODE mixer_epa_mode = MIXER_EPA_FULL;
 
 // cppm mode
 enum CPPM_MODE {CPPM_NONE=0, CPPM_OPEN9X=1, CPPM_UNDEF};
-enum CPPM_MODE cppm_mode = CPPM_OPEN9X;
+enum CPPM_MODE cppm_mode = CPPM_NONE;
 #if defined(DISABLE_CPPM)
 #define CPPM_END CPPM_NONE
 #else
@@ -1100,7 +1100,7 @@ void init_digital_in_rx()
     TIMSK1 |= (1 << ICIE1); // enable interrupt on ICP
     TCCR1B |= (1 << ICNC1) | (1 << ICES1); // enable noise canceler and interrupt on rising edge
 #endif // NANOWII
-    rx_frame_sync_ref = 3; // sync when rx_chan[3] updated
+    rx_frame_sync_ref = 3; // sync on rx_chan[][3] first, but isr will track the sync gap
     return;
   }
 #endif // !DISABLE_CPPM
@@ -1164,12 +1164,12 @@ ISR(TIMER1_COMPA_vect)
     if (!pwm_out_var[++rise_ch] && !pwm_out_var[++rise_ch]) {
       rise_ch = -1;
     }
+    OCR1A = tcnt1 + wait;
   } else {
     rise_ch = 0;
     servo_busy = false;
     TIMSK1 &= ~(1 << OCIE1A); // disable further interrupt on TCNT1 == OCR1A
   }
-  OCR1A = tcnt1 + wait;
 }
 
 void init_digital_out()
@@ -1861,12 +1861,12 @@ void dump_sensors()
     
     read_switches();
     Serial.print("SW "); 
-    Serial.print(ail_sw); Serial.print(' ');
-    Serial.print(ele_sw); Serial.print(' ');
-    Serial.print(rud_sw); Serial.print(' ');
-    Serial.print(vtail_sw); Serial.print(' ');
-    Serial.print(delta_sw); Serial.print(' ');
-    Serial.print(aux_sw); Serial.print('\t');
+    Serial.print((bool)ail_sw); Serial.print(' ');
+    Serial.print((bool)ele_sw); Serial.print(' ');
+    Serial.print((bool)rud_sw); Serial.print(' ');
+    Serial.print((bool)vtail_sw); Serial.print(' ');
+    Serial.print((bool)delta_sw); Serial.print(' ');
+    Serial.print((bool)aux_sw); Serial.print('\t');
   
     read_imu();
     Serial.print("GY "); 
@@ -2262,7 +2262,6 @@ void setup()
   int16_t vr_gain[3]= {VR_GAIN_MAX, VR_GAIN_MAX, VR_GAIN_MAX};
   int16_t stick_gain[3] = {STICK_GAIN_MAX, STICK_GAIN_MAX, STICK_GAIN_MAX};
   int16_t master_gain = MASTER_GAIN_MAX;
-  int8_t att_hold = false;
 
   struct _stick_zone stick_zone;
   const uint8_t stick_config_seq[] = {0x78, 0x89, 0x98, 0x87, 0x78, 0x89, 0x98, 0x87, 0xff}; // 7-9-7-9-7
