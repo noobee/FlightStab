@@ -49,6 +49,7 @@
  
  CPPM enabled
  PB0 8 CPPM_IN instead of AIL_IN
+ PB1 9 FLP_OUT instead of ELE_IN
  PB2 10 THR_OUT instead of RUD_IN
 */
 
@@ -70,8 +71,8 @@
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
 
 // <IMU>
 #define USE_ITG3200
@@ -80,6 +81,7 @@
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
+#define FLP_OUT_PIN 9
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
@@ -124,6 +126,7 @@
  
  CPPM enabled
  PB0 8 CPPM_IN instead of AIL_IN
+ PB1 9 FLP_OUT instead of ELE_IN
  PB2 10 THR_OUT instead of RUD_IN
 */
 
@@ -145,8 +148,8 @@
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
 
 // <IMU>
 #define USE_ITG3200
@@ -155,6 +158,7 @@
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
+#define FLP_OUT_PIN 9
 #define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
@@ -198,6 +202,7 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
  CPPM enabled
  PE6 7 CPPM_IN instead of THR/AUX2_IN
  PC6 5 THR_OUT instead of M
+ PD7 6 FLP_OUT instead of M
 */
 
 // <VR> MUST BE ALL NULL
@@ -218,8 +223,8 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define RUD_OUT_PIN 11
 #define AILR_OUT_PIN 13 // dual aileron mode only
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1}
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
 
 // <IMU>
 #define USE_MPU6050
@@ -229,6 +234,7 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define CPPM_PINREG PINE
 #define CPPM_PINBIT 6
 #define THR_OUT_PIN 5
+#define FLP_OUT_PIN 6
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
@@ -241,7 +247,7 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define LED_XOR 1 // active low
 
 // eeprom clear pins. shorted on init means to clear eeprom
-#define EEPROM_RESET_OUT_PIN 6
+#define EEPROM_RESET_OUT_PIN 6 // also used for flap_out in cppm mode
 #define EEPROM_RESET_IN_PIN 5 // also used for thr_out in cppm mode
 
 #endif
@@ -347,8 +353,9 @@ volatile int16_t ailr_in = RX_WIDTH_MID;
 volatile int16_t aux_in = RX_WIDTH_HIGH_FULL; // assume max gain if no aux_in
 volatile int16_t aux2_in = RX_WIDTH_MID;
 volatile int16_t thr_in = RX_WIDTH_LOW_FULL;
+volatile int16_t flp_in = RX_WIDTH_MID;
 volatile int16_t tmp_in = RX_WIDTH_MID;
-int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2, aux2_in2, thr_in2;
+int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2, aux2_in2, thr_in2, flp_in2;
 
 int16_t ail_in2_mid = RX_WIDTH_MID; // calibration sets stick-neutral-position offsets
 int16_t ele_in2_mid = RX_WIDTH_MID; //
@@ -369,7 +376,8 @@ volatile int16_t ele_out;
 volatile int16_t rud_out;
 volatile int16_t ailr_out;
 volatile int16_t thr_out;
-int16_t ail_out2, ele_out2, rud_out2, ailr_out2, thr_out2;
+volatile int16_t flp_out;
+int16_t ail_out2, ele_out2, rud_out2, ailr_out2, thr_out2, flp_out2;
 
 int16_t mixer_out2_low_limit[4];
 int16_t mixer_out2_high_limit[4];
@@ -415,7 +423,7 @@ enum CPPM_MODE cppm_mode = CPPM_NONE;
 
 const int8_t rx_chan_list_size = 8;
 volatile int16_t *rx_chan[][rx_chan_list_size] = {
-  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &tmp_in}, // open9x RETA1a2x
+  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // open9x RETA1a2F
   {&tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in} // reserved undef
 };
 
@@ -1727,6 +1735,7 @@ void copy_rx_in()
   aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
   aux2_in2 = (tmp = aux2_in) == aux2_in ? tmp : aux2_in2;
   thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
+  flp_in2 = (tmp = flp_in) == flp_in ? tmp : flp_in2;
   
   if (wing_mode == WING_SINGLE_AIL)
     ailr_in2 = ail_in2;
@@ -1734,7 +1743,7 @@ void copy_rx_in()
 
 void apply_mixer_change(int16_t *change) 
 {
-  // *_in2 => [rx + change] => *_out2
+  // *_in2 => [change] => *_out2
   
   // mixer
   int16_t tmp0, tmp1, tmp2;
@@ -1763,8 +1772,9 @@ void apply_mixer_change(int16_t *change)
     break;
   }
 
-  // throttle pass through
+  // throttle and flap pass through
   thr_out2 = thr_in2;  
+  flp_out2 = flp_in2;  
 }
 
 void set_mixer_limits(int16_t low, int16_t high)
@@ -1777,7 +1787,7 @@ void set_mixer_limits(int16_t low, int16_t high)
 
 void apply_mixer() 
 {
-  // *_in2 => [rx + correction] => *_out2
+  // *_in2 => [correction] => *_out2
   
   static int16_t * const pout2[]  = {&ail_out2, &ele_out2, &rud_out2, &ailr_out2};
   int8_t i;
@@ -1809,6 +1819,7 @@ void start_servo_frame()
     rud_out = rud_out2;
     ailr_out = ailr_out2;
     thr_out = thr_out2;
+    flp_out = flp_out2;
     
     TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
     TIFR1 |= (1 << OCF1A); // clear any pending interrupt
@@ -1839,14 +1850,15 @@ void dump_sensors()
       last_rx_time = t;
     }
 
-    Serial.print("RX "); 
+    Serial.print("  RX "); 
     Serial.print(ail_in2); Serial.print(' ');
     Serial.print(ele_in2); Serial.print(' ');
     Serial.print(rud_in2); Serial.print(' ');
     Serial.print(ailr_in2); Serial.print(' ');
     Serial.print(aux_in2); Serial.print(' ');
     Serial.print(aux2_in2); Serial.print(' ');
-    Serial.print(thr_in2); Serial.print('\t');
+    Serial.print(thr_in2); Serial.print(' ');
+    Serial.print(flp_in2); Serial.print('\t');
   
     uint8_t ail_vr2, ele_vr2, rud_vr2;
     ail_vr2 = ail_vr;
@@ -1879,8 +1891,8 @@ void dump_sensors()
       servo_out = constrain(servo_out, RX_WIDTH_LOW_FULL, RX_WIDTH_HIGH_FULL);
       servo_dir = -servo_dir;
     }
-    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = servo_out;
-//    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = RX_WIDTH_MID;
+    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = flp_out2 = servo_out;
+//    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = flp_out2 = RX_WIDTH_MID;
     if (servo_sync && !servo_busy) {
       servo_sync = false;
       start_servo_frame();
@@ -2163,11 +2175,15 @@ void setup()
 #if !defined(DISABLE_CPPM)
   if (cppm_mode > 0) {
     // PB0 8 CPPM_IN instead of AIL_IN
+    // PB2 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
     rx_portb[0] = NULL; // disable ail_in
+    rx_portb[1] = NULL; // disable ele_in
     rx_portb[2] = NULL; // disable rud_in
     pwm_out_var[4] = &thr_out; // enable thr_out
     pwm_out_pin[4] = THR_OUT_PIN; //
+    pwm_out_var[5] = &flp_out; // enable flp_out
+    pwm_out_pin[5] = FLP_OUT_PIN; //
   }
 #endif // !DISABLE_CPPM
 #endif // RX3S_V1
@@ -2209,9 +2225,12 @@ void setup()
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB2 10 THR_OUT instead of RUD_IN
     rx_portb[0] = NULL; // disable ail_in
+    rx_portb[1] = NULL; // disable ele_in
     rx_portb[2] = NULL; // disable rud_in
     pwm_out_var[4] = &thr_out; // enable thr_out
     pwm_out_pin[4] = THR_OUT_PIN; //
+    pwm_out_var[5] = &flp_out; // enable flp_out
+    pwm_out_pin[5] = FLP_OUT_PIN; //
   }
 #endif // !DISABLE_CPPM
 #endif // RX3S_V2
@@ -2221,8 +2240,11 @@ void setup()
   if (cppm_mode > 0) {
     // PE6 7 CPPM_IN instead of THR/AUX2_IN
     // PC6 5 THR_OUT instead of M
+    // PD7 6 FLP_OUT instead of M
     pwm_out_var[4] = &thr_out; // enable thr_out
     pwm_out_pin[4] = THR_OUT_PIN; //
+    pwm_out_var[5] = &flp_out; // enable flp_out
+    pwm_out_pin[5] = FLP_OUT_PIN; //
   }
 #endif // !DISABLE_CPPM
 #endif // NANOWII
