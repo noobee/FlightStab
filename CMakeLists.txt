@@ -6,8 +6,8 @@
 # ==============================
 # cd ./Builds
 # optional: rd /s .  (to wipe out all intermediate files)
-# cmake [-Dtoday=yyyymmdd] -G"MSYS Makefiles" ..
-#   (cmake will use the system date if -Dtoday is not specified)
+# cmake [-DTODAY=yyyymmdd] -G"MSYS Makefiles" ..
+#   (cmake will use the system date if -DTODAY is not specified)
 # make [VERBOSE=1]
 
 # install instructions for windows

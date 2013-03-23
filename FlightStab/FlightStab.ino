@@ -2074,7 +2074,13 @@ void setup()
 #if defined(USE_SERIAL)
   Serial.begin(115200L);
 #endif
-    
+  
+#if defined(RX3S_V1) || defined(RX3S_V2)
+  // clear wd reset bit and disable wdt in case it was enabled due to stick config reboot
+  MCUSR &= ~(1 << WDRF);
+  wdt_disable();
+#endif // RX3S_V1 || RX3S_V2
+
   // init TIMER1
   TCCR1A = 0; // normal counting mode
   TCCR1B = (1 << CS11); // clkio/8
@@ -2151,6 +2157,9 @@ void setup()
     break; 
   case 2: // ele norm/1, rud rev/0
     wing_mode = WING_DELTA;
+    break;
+  case 3: // ele norm/1, rud norm/1
+    wing_mode = WING_SINGLE_AIL;
     break; 
   }
 
@@ -2198,6 +2207,9 @@ void setup()
     break; 
   case 2: // vtail off/1, delta on/0
     wing_mode = WING_DELTA;
+    break; 
+  case 3: // vtail off/1, delta off/1
+    wing_mode = WING_SINGLE_AIL;
     break; 
   }
 
@@ -2340,8 +2352,9 @@ again:
     stick_config_seq_i = (stick_zone.move == stick_config_seq[stick_config_seq_i]) ? stick_config_seq_i + 1 : 0;
     if (stick_config_seq[stick_config_seq_i] == 0xff) {
       stick_config(&stick_zone); // completed sequence, enter stick config mode
-      // RESET SYSTEM ON RETURN, or at least if mix mode has changed
+      // RESET SYSTEM ON RETURN    
       wdt_enable(WDTO_1S);
+      while (true);
     }      
     if ((int32_t)(t - stick_config_check_time) > 15000000L) // 15 sec to enter config mode
       stick_configurable = false;
