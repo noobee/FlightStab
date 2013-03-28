@@ -1,0 +1,2 @@
+@ECHO OFF
+"C:\Programme\Atmel\AVR Tools\AvrAssembler2\avrasm2.exe" -S "C:\Programme\Atmel\AVRootloader\AVR\labels.tmp" -fI -W+ie -o "C:\Programme\Atmel\AVRootloader\AVR\AVRootloader.hex" -d "C:\Programme\Atmel\AVRootloader\AVR\AVRootloader.obj" -e "C:\Programme\Atmel\AVRootloader\AVR\AVRootloader.eep" -w -m "C:\Programme\Atmel\AVRootloader\AVR\AVRootloader.map" -l "C:\Programme\Atmel\AVRootloader\AVR\AVRootloader.lst" "C:\Programme\Atmel\AVRootloader\AVR\AVRootloader.asm"
