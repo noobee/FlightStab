@@ -27,9 +27,12 @@
   <abd><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>297</LINE></abd>
   <BootMsg><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>787</LINE></BootMsg>
   <BootSign><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>786</LINE></BootSign>
-  <id1><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>339</LINE></id1>
+  <ab1><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>309</LINE></ab1>
+  <ab2><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>312</LINE></ab2>
   <id2><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>343</LINE></id2>
+  <ab3><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>317</LINE></ab3>
   <exit><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>407</LINE></exit>
+  <id1><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>339</LINE></id1>
   <id3><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>344</LINE></id3>
   <getx><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>746</LINE></getx>
   <getw><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>738</LINE></getw>
@@ -63,19 +66,13 @@
   <veri><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>564</LINE></veri>
   <ver1><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>565</LINE></ver1>
   <ver2><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>566</LINE></ver2>
+  <maiY><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>700</LINE></maiY>
   <mai7><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>682</LINE></mai7>
-  <ee1><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>601</LINE></ee1>
-  <ee2><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>603</LINE></ee2>
-  <ee3><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>611</LINE></ee3>
+  <ee1><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>634</LINE></ee1>
   <putp><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>709</LINE></putp>
-  <ee5><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>625</LINE></ee5>
-  <ee4><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>615</LINE></ee4>
-  <maiZ><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>701</LINE></maiZ>
-  <ee6><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>629</LINE></ee6>
   <putw><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>706</LINE></putw>
   <mai8><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>697</LINE></mai8>
-  <sram><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>689</LINE></sram>
-  <maiY><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>700</LINE></maiY>
+  <maiZ><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>701</LINE></maiZ>
   <put1><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>711</LINE></put1>
   <put2><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>716</LINE></put2>
   <waitf><FILE>C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm</FILE><LINE>770</LINE></waitf>

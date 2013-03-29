@@ -155,7 +155,7 @@
 .equ	UseWDR				= 0			; Watchdog support (2 sec timeout, remember to deactivate WDT in your application if not needed)
 .equ	UseSaveMCUSR		= 0			; save MCUSR on stack (RAMEND) for access by application (on UseWDR=1 MCUSR must be cleared)
 
-.equ	UseE2Write			= 1			; EEPROM write command (have implicit verify)
+.equ	UseE2Write			= 0			; EEPROM write command (have implicit verify)
 .equ	UseE2Read			= 1			; EEPROM read command
 
 .equ	UseCrypt			= 0			; cryptography (crypt.inc)
@@ -164,7 +164,7 @@
 
 .equ	UseVerify			= 1			; Verify FLASH command (FLASH write/erase have implicit verify, can be deactivated)
 .equ	UseVersioning		= 0			; Versioning for application software (stored 4/6 bytes before BootStart)
-.equ	UseSRAM				= 1			; SRAM read/write commands (attention! can be a security risk)
+.equ	UseSRAM				= 0			; SRAM read/write commands (attention! can be a security risk)
 
 .equ	UseSpecialBootVect	= 0			; use a rjmp BootStart at end of FLASH to start bootloader from application code
 .equ	UseSpecialWrite 	= 0			; special function "write_flash" to reprogram FLASH
@@ -173,7 +173,7 @@
 .equ	UseSpecialMsg		= 0			; special function to return address and size of BootMsg
 										; look into AVRootloader.h and M162 test project in folder \test\ for use of special funcs
 
-.equ	UseAutobaud			= 0			; Baudrate detection
+.equ	UseAutobaud			= 1			; Baudrate detection
 .equ	UseResetDelay		= 0			; Reset the boot delay everytime if any activity is detected on RX pin.
 										; First after BootDelay milliseconds inactivity the application is called.
 										; Otherwise the timeout BootDelay defines an overall timeout for connection.
@@ -196,7 +196,7 @@
 .set	BootDelay			= XTAL/2	; about 250ms (don't set to fast to avoid connection problems)
 .set	BootBaudrate		= 115200	; only used if no Baudrate detection activated, XTAL is than important
 .set	BootVersion			= 6			; Version 6 (must be not changed)
-.set	BootCodeSize		= 510		; set to 0, compile and set to value in [.cseg] Used, compile again
+.set	BootCodeSize		= 492		; set to 0, compile and set to value in [.cseg] Used, compile again
 										; after this step cseg used is +2 bytes greater, ignore it (AVRStudio 4.16 bugfix)
 												
 ;.equ	RWWSRE				= 4			; activate for ATmega162 in ATmega161 compatibility mode

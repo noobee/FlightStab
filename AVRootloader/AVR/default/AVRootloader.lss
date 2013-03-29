@@ -1,5 +1,5 @@
 
-AVRASM ver. 2.1.52  C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm Wed Mar 27 18:25:58 2013
+AVRASM ver. 2.1.52  C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm Thu Mar 28 17:33:55 2013
 
 [builtin](2): Including file 'C:\Program Files (x86)\Atmel\Atmel Studio 6.0\extensions\Atmel\AVRAssembler\2.1.51.64\AvrAssembler/Include\m168padef.inc'
 C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.asm(22): Including file 'C:\Program Files (x86)\Atmel\Atmel Studio 6.0\extensions\Atmel\AVRAssembler\2.1.51.64\AvrAssembler/Include\m168PAdef.inc'
@@ -1051,44 +1051,65 @@ C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.inc(116): Please 
                  .endif
 001f0e 0145      		movw	crcl, zerol
 001f0f e01a      		ldi		parah, (BootMsg - BootSign) * 2
-001f10 eee2      		ldi		zl, byte1(BootSign * 2)
+001f10 ede0      		ldi		zl, byte1(BootSign * 2)
 001f11 e3ff      		ldi		zh,	byte2(BootSign * 2)
                  
                  .if UseAutobaud
+                 ; baudrate detection
+                 ; autobaud based on P.Dannegger with some optimization
+                 ; detects 0x0A,0x0B,0x0D,0x0F,0x85,0x87,0xC3,0xE1
+001f12 01e5      		movw	yl, zerol					; scan for 1x baudrate low to high followed with 4x baudrate low
+001f13 0fcc      ab1:	add		yl, yl
+001f14 1fdd      		adc		yh, yh
+001f15 01c5      		movw	cntl, zerol
+001f16 9711      ab2:	sbiw	xl, 1					
+001f17 096a      		sbc		cmdl, zerol
+001f18 9918      		rx_0
+001f19 f7e1      		brne    ab2
+001f1a f089      		breq    id2				; exit
+001f1b 9721      ab3:	sbiw    yl, 1
+001f1c 9602      		adiw    cntl, 2					
+001f1d f1a8      		brcs    exit
+001f1e 9b18      		rx_1
+001f1f cffb      		rjmp    ab3
+001f20 95c5      		asr		yl
+001f21 9723      		sbiw    yl, BaudTolerance
+001f22 9626      		adiw    yl, BaudTolerance * 2
+001f23 01ec      		movw	yl, cntl
+001f24 f770      		brcc    ab1
+001f25 974d      		sbiw	cntl, UartLoop 
+001f26 f360      		brcs	ab1
+001f27 016c      		movw    baudl, cntl
                  .else
-                 ; fixed baudrate
-001f12 e6cd      		ldi		yl, byte1(Baudrate)
-001f13 e0d0      		ldi		yh, byte2(Baudrate)
-001f14 016e      		movw	baudl, yl
                  .endif ; .if UseAutobaud
                  
                  ; identifier (BootSign) scanning with timeout and checksum
                  
-001f15 9711      id1:	sbiw	xl, 1								; UART getc with timeouts
-001f16 096a      		sbc		cmdl, zerol
-001f17 9b18      		rx_1
-001f18 f7e1      		brne	id1
-001f19 f131      id2:	breq	exit
-001f1a 9711      id3:	sbiw	xl, 1
-001f1b 096a      		sbc		cmdl, zerol
-001f1c 9918      		rx_0
-001f1d f7e1      		brne	id3
-001f1e f109      		breq	exit
-001f1f d0b1      		rcall	getx
-001f20 9005      		xlpm	r0, z+
-001f21 1600      		cp		r0, paral
-001f22 f759      		brne	abd
-001f23 951a      		dec		parah
-001f24 f781      		brne	id1
-001f25 d0a5      		rcall	getw
-001f26 f739      		brne	abd
+001f28 9711      id1:	sbiw	xl, 1								; UART getc with timeouts
+001f29 096a      		sbc		cmdl, zerol
+001f2a 9b18      		rx_1
+001f2b f7e1      		brne	id1
+001f2c f131      id2:	breq	exit
+001f2d 9711      id3:	sbiw	xl, 1
+001f2e 096a      		sbc		cmdl, zerol
+001f2f 9918      		rx_0
+001f30 f7e1      		brne	id3
+001f31 f109      		breq	exit
+001f32 d095      		rcall	getx
+001f33 9005      		xlpm	r0, z+
+001f34 1600      		cp		r0, paral
+001f35 f6c1      		brne	abd
+001f36 951a      		dec		parah
+001f37 f781      		brne	id1
+001f38 d089      		rcall	getw
+001f39 f6a1      		brne	abd
                  	
                  ; send info about chip/bootloader (BootMsg + BootInfo)
-001f27 e014      info:	ldi		parah, (BootInfo - BootMsg) * 2 +4
-001f28 9105      in1:	xlpm	paral, z+
-001f29 d094      		rcall	putc
-001f2a 951a      		dec		parah
-001f2b f7e1      		brne	in1
+001f3a e014      info:	ldi		parah, (BootInfo - BootMsg) * 2 +4
+001f3b 9105      in1:	xlpm	paral, z+
+001f3c d078      		rcall	putc
+001f3d 951a      		dec		parah
+001f3e f7e1      		brne	in1
                  
                  .if UseVersioning
                  .endif ; .if UseVersioning
@@ -1098,204 +1119,181 @@ C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.inc(116): Please 
                  ; 0=run/restart 
                  ; 1=program flash, 2=erase flash, 3=verify flash, 4=e2read, 5=e2write, 6=read SRAM
                  ; 0xFF=set address, 0xFE=set buffer and decryption, 0xFD=keep alive
-001f2c e300      main:	ldi		paral, SUCCESS
-001f2d d090      mai1:	rcall	putc
-001f2e 0145      		movw	crcl, zerol
-001f2f d09b      		rcall	getw
-001f30 01b8      		movw	cmdl, paral
-001f31 3f7e      		cpi		cmdh, 0xFE
-001f32 f020      		brlo	mai2
-001f33 d097      		rcall	getw
-001f34 01e8      		movw	yl, paral
-001f35 fd70      		sbrc	cmdh, 0
-001f36 01f8      		movw	zl, paral
+001f3f e300      main:	ldi		paral, SUCCESS
+001f40 d074      mai1:	rcall	putc
+001f41 0145      		movw	crcl, zerol
+001f42 d07f      		rcall	getw
+001f43 01b8      		movw	cmdl, paral
+001f44 3f7e      		cpi		cmdh, 0xFE
+001f45 f020      		brlo	mai2
+001f46 d07b      		rcall	getw
+001f47 01e8      		movw	yl, paral
+001f48 fd70      		sbrc	cmdh, 0
+001f49 01f8      		movw	zl, paral
                  .if BigMega
                  .endif ; .if BigMega
                  
-001f37 d093      mai2:	rcall	getw
-001f38 ec02      mai3:	ldi		paral, ERRORCRC
-001f39 f799      		brne	mai1
-001f3a 3f7e      		cpi		cmdh, 0xFE
-001f3b f039      		breq	setbuf
-001f3c f778      		brsh	main
-001f3d 117a      		cpse	cmdh, zerol
-001f3e c010      		rjmp	mai4
+001f4a d077      mai2:	rcall	getw
+001f4b ec02      mai3:	ldi		paral, ERRORCRC
+001f4c f799      		brne	mai1
+001f4d 3f7e      		cpi		cmdh, 0xFE
+001f4e f039      		breq	setbuf
+001f4f f778      		brsh	main
+001f50 117a      		cpse	cmdh, zerol
+001f51 c00d      		rjmp	mai4
                  ; run application/restart bootloader
-001f3f 116a      		cpse	cmdl, zerol
-001f40 940c 2000 exit:	jmpapp
-001f42 cfbd      		rjmp	init
+001f52 116a      		cpse	cmdl, zerol
+001f53 940c 2000 exit:	jmpapp
+001f55 cfaa      		rjmp	init
                  
                  ; set buffer
                  setbuf:	
                  .if UseCrypt										
                  .endif ; .if UseCrypt
                  
-001f43 e1a0      set3:	ldi		xl, byte1(SRAM_START + 16)
-001f44 e0b1      		ldi		xh, byte2(SRAM_START + 16)
-001f45 017d      		movw	sraml, xl
+001f56 e1a0      set3:	ldi		xl, byte1(SRAM_START + 16)
+001f57 e0b1      		ldi		xh, byte2(SRAM_START + 16)
+001f58 017d      		movw	sraml, xl
                  .if UseSRAM
-001f46 3061      		cpi		cmdl, 1
-001f47 f409      		brne	set4
-001f48 01df      		movw	xl, zl
                  .endif ; .if UseSRAM
                  
-001f49 d083      set4:	rcall	getc
-001f4a 930d      		st		x+, paral
-001f4b 9721      		sbiw	yl, 1
-001f4c f7e1      		brne	set4
+001f59 d06a      set4:	rcall	getc
+001f5a 930d      		st		x+, paral
+001f5b 9721      		sbiw	yl, 1
+001f5c f7e1      		brne	set4
                  .if !UseCrypt
-001f4d 9573      		inc		cmdh
-001f4e cfe8      		rjmp	mai2
+001f5d 9573      		inc		cmdh
+001f5e cfeb      		rjmp	mai2
                  .else
                  .endif ; .if !UseCrypt
                  
-001f4f 3073      mai4:	cpi		cmdh, 3
-001f50 f560      		brsh	mai5
+001f5f 3073      mai4:	cpi		cmdh, 3
+001f60 f560      		brsh	mai5
                  ; program/erase
-001f51 fb70      		bst		cmdh, 0
-001f52 ec05      prog:	ldi		paral, ERRORPROG
+001f61 fb70      		bst		cmdh, 0
+001f62 ec05      prog:	ldi		paral, ERRORPROG
                  .if UseCrypt
                  .if UseCryptFLASH
                  .else
                  .endif ; .if UseCryptFLASH
                  .endif ; .if UseCrypt
                  
-001f53 01e7      pro1:	movw	yl, sraml
-001f54 30e0      pro2:	cpi		zl, byte1(BootStart *2)
-001f55 e31e      		ldi		parah, byte2(BootStart *2)
-001f56 07f1      		cpc		zh, parah
+001f63 01e7      pro1:	movw	yl, sraml
+001f64 30e0      pro2:	cpi		zl, byte1(BootStart *2)
+001f65 e31e      		ldi		parah, byte2(BootStart *2)
+001f66 07f1      		cpc		zh, parah
                  .if BigMega
                  .endif ; .if BigMega
-001f57 f4d0      		brsh	pro8
+001f67 f4d0      		brsh	pro8
                  
-001f58 e083      		ldi		cntl, (1 << PGERS) | (1 << SPMEN)	; erase page
+001f68 e083      		ldi		cntl, (1 << PGERS) | (1 << SPMEN)	; erase page
                  .if BLS
-001f59 d09e      		rcall	dospm
+001f69 d085      		rcall	dospm
                  .else
                  .endif ; .if BLS
                  
-001f5a f476      		brtc	pro5
+001f6a f476      		brtc	pro5
                  
-001f5b e081      		ldi		cntl, (1 << SPMEN)
-001f5c e440      		ldi		cnt, pagesize
-001f5d 9009      pro4:	ld		r0, y+
-001f5e 9019      		ld		r1, y+
+001f6b e081      		ldi		cntl, (1 << SPMEN)
+001f6c e440      		ldi		cnt, pagesize
+001f6d 9009      pro4:	ld		r0, y+
+001f6e 9019      		ld		r1, y+
                  .if BLS
-001f5f d098      		rcall	dospm
+001f6f d07f      		rcall	dospm
                  .else
                  .endif ; .if BLS
                  
-001f60 9632      		adiw	zl, 2
-001f61 954a      		dec		cnt
-001f62 f7d1      		brne	pro4
+001f70 9632      		adiw	zl, 2
+001f71 954a      		dec		cnt
+001f72 f7d1      		brne	pro4
                  
-001f63 58e0      		subi	zl, byte1(PageSize *2)
-001f64 40f0      		sbci	zh, byte2(PageSize *2)
-001f65 58c0      		subi	yl, byte1(PageSize *2)
-001f66 40d0      		sbci	yh, byte2(PageSize *2)
+001f73 58e0      		subi	zl, byte1(PageSize *2)
+001f74 40f0      		sbci	zh, byte2(PageSize *2)
+001f75 58c0      		subi	yl, byte1(PageSize *2)
+001f76 40d0      		sbci	yh, byte2(PageSize *2)
                  
-001f67 e085      		ldi		cntl, (1 << PGWRT) | (1 << SPMEN)	; program page
+001f77 e085      		ldi		cntl, (1 << PGWRT) | (1 << SPMEN)	; program page
                  .if BLS
-001f68 d08f      		rcall	dospm
+001f78 d076      		rcall	dospm
                  .else
                  .endif ; .if BLS
                  
                  pro5:
                  .if BLS
                  .ifdef RWWSRE
-001f69 e181      		ldi		cntl, (1 << RWWSRE) | (1 << SPMEN)	; unlock section
-001f6a d08d      		rcall	dospm
+001f79 e181      		ldi		cntl, (1 << RWWSRE) | (1 << SPMEN)	; unlock section
+001f7a d074      		rcall	dospm
                  .endif ; .if RWWSRE
                  .endif ; .if BLS
                  
                  .if PageSize * 2 > 256
                  .endif
                  
-001f6b e840      		ldi		cnt, byte1(pagesize * 2)
-001f6c ec00      		ldi		paral, ERRORVERIFY
-001f6d ef1f      		ldi		parah, 0xFF
-001f6e 9005      pro6:	xlpm	r0, z+
-001f6f f40e      		brtc	pro7
-001f70 9119      		ld		parah, y+
-001f71 1110      pro7:	cpse	parah, r0
-001f72 cfba      pro8:	rjmp	mai1
-001f73 954a      		dec		cnt
-001f74 f7c9      		brne	pro6 
+001f7b e840      		ldi		cnt, byte1(pagesize * 2)
+001f7c ec00      		ldi		paral, ERRORVERIFY
+001f7d ef1f      		ldi		parah, 0xFF
+001f7e 9005      pro6:	xlpm	r0, z+
+001f7f f40e      		brtc	pro7
+001f80 9119      		ld		parah, y+
+001f81 1110      pro7:	cpse	parah, r0
+001f82 cfbd      pro8:	rjmp	mai1
+001f83 954a      		dec		cnt
+001f84 f7c9      		brne	pro6 
                  
                  .if BigMega		
                  .endif ; .if BigMega 
                  
-001f75 f426      pro9:	brtc	proA
-001f76 17ca      		cp		yl, xl
-001f77 07db      		cpc		yh,	xh
-001f78 f2d8      		brlo	pro2
-001f79 f7c1      		brne	pro8
-001f7a 956a      proA:	dec		cmdl
-001f7b f6b1      		brne	prog
-001f7c cfaf      proB:	rjmp	main
+001f85 f426      pro9:	brtc	proA
+001f86 17ca      		cp		yl, xl
+001f87 07db      		cpc		yh,	xh
+001f88 f2d8      		brlo	pro2
+001f89 f7c1      		brne	pro8
+001f8a 956a      proA:	dec		cmdl
+001f8b f6b1      		brne	prog
+001f8c cfb2      proB:	rjmp	main
                  
                  mai5:	
                  .if !UseVerify && (UseE2Write || UseE2Read || UseSRAM)
                  .elif UseVerify
-001f7d f461      		brne	mai6
-001f7e ec00      veri:	ldi		paral, ERRORVERIFY
-001f7f 01e7      ver1:	movw	yl, sraml
-001f80 9009      ver2:	ld		r0, y+
+001f8d f461      		brne	mai6
+001f8e ec00      veri:	ldi		paral, ERRORVERIFY
+001f8f 01e7      ver1:	movw	yl, sraml
+001f90 9009      ver2:	ld		r0, y+
                  .if BigMega
                  .else
-001f81 9015      		xlpm	r1, z+
+001f91 9015      		xlpm	r1, z+
                  .endif ; .if BigMega
-001f82 1001      		cpse	r0, r1
-001f83 cfa9      		rjmp	mai1
-001f84 17ca      		cp		yl, xl
-001f85 07db      		cpc		yh, xh
-001f86 f7c9      		brne	ver2
-001f87 956a      		dec		cmdl
-001f88 f7b1      		brne	ver1
-001f89 cfa2      		rjmp	main
+001f92 1001      		cpse	r0, r1
+001f93 cfac      		rjmp	mai1
+001f94 17ca      		cp		yl, xl
+001f95 07db      		cpc		yh, xh
+001f96 f7c9      		brne	ver2
+001f97 956a      		dec		cmdl
+001f98 f7b1      		brne	ver1
+001f99 cfa5      		rjmp	main
                  .endif ; .if UseVerify
                  
                  mai6:
                  .if UseE2Read && UseE2Write
-001f8a 3076      		cpi		cmdh, 6
-001f8b f4e8      		brsh	mai7
-001f8c fb70      		bst		cmdh, 0
                  .if UseCrypt
                  .if UseCryptE2
                  .else
                  .endif ; .if UseCryptE2
                  .endif ; .if UseCrypt
-                 
-001f8d ec00      ee1:	ldi		paral, ERRORVERIFY
-001f8e 01e7      		movw	yl, sraml
-001f8f bde1      ee2:	xout	EEARL, zl
-001f90 bdf2      		xout	EEARH, zh
-001f91 9631      		adiw	zl, 1
-001f92 f026      		brts	ee3		
-001f93 9af8      		sbi 	EECR, EERE
-001f94 b500      		in 		paral, EEDR
-001f95 d01f      		rcall	putp
-001f96 c00d      		rjmp	ee5
-001f97 9009      ee3:	ld		r0, y+
-001f98 bc00      		xout	EEDR, r0
-001f99 9afa      		sbi 	EECR, EEMWE
-001f9a 9af9      		sbi 	EECR, EEWE
-                 ee4:	xwdr
-001f9b 99f9      		sbic 	EECR, EEWE
-001f9c cffe      		rjmp 	ee4
-001f9d 9af8      		sbi 	EECR, EERE
-001f9e b410      		in 		r1, EEDR
-001f9f 1010      		cpse	r1, r0
-001fa0 c010      		rjmp	maiZ
-001fa1 17ca      		cp		yl, xl
-001fa2 07db      		cpc		yh, xh
-001fa3 f759      		brne	ee2
-001fa4 956a      ee5:	dec		cmdl
-001fa5 f739      		brne	ee1
-001fa6 f00e      		brts	ee6
-001fa7 d00a      		rcall	putw	
-001fa8 cf83      ee6:	rjmp	main
                  .elif UseE2Read
+001f9a 3075      		cpi		cmdh, 5
+001f9b f059      		breq	maiY
+001f9c f450      		brsh	mai7	
+001f9d bde1      ee1:	xout	EEARL, zl
+001f9e bdf2      		xout	EEARH, zh
+001f9f 9631      		adiw	zl, 1
+001fa0 9af8      		sbi 	EECR, EERE
+001fa1 b500      		in 		paral, EEDR
+001fa2 d009      		rcall	putp
+001fa3 956a      		dec		cmdl
+001fa4 f7c1      		brne	ee1
+001fa5 d003      		rcall	putw	
+001fa6 cf98      		rjmp	main
                  .elif UseE2Write
                  .if UseCrypt
                  .if UseCryptE2
@@ -1308,112 +1306,104 @@ C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.inc(116): Please 
                  .if UseSRAM
                  .if !UseE2Read || !UseE2Write
                  .endif ; .if !UseE2Read || !UseE2Write
-                 
-001fa9 f431      		brne	mai8
-001faa 9101      sram:	ld		paral, z+
-001fab d009      		rcall	putp
-001fac 956a      		dec		cmdl
-001fad f7e1      		brne	sram
-001fae d003      		rcall	putw
-001faf cf7c      		rjmp	main
                  .endif ; .if UseSRAM
                  
                  mai8:
                  ;	here new command #7
                  
-001fb0 ec01      maiY:	ldi		paral, ERRORCOMMAND
-001fb1 cf7b      maiZ:	rjmp	mai1
+001fa7 ec01      maiY:	ldi		paral, ERRORCOMMAND
+001fa8 cf97      maiZ:	rjmp	mai1
                  
                  
                  ; send char with crc
                  .if UseE2Read || UseSRAM
-001fb2 0184      putw:	movw	paral, crcl
-001fb3 d00a      		rcall	putc
-001fb4 2f01      		mov		paral, parah
-001fb5 2680      putp:	eor		crcl, paral		 	
-001fb6 e048      		ldi		cnt, 8
-001fb7 9496      put1:	lsr		crch
-001fb8 9487      		ror		crcl
-001fb9 f410      		brcc	put2
-001fba 2693      		eor		crch, polyh
-001fbb 2682      		eor		crcl, polyl
-001fbc 954a      put2:	dec		cnt
-001fbd f7c9      		brne	put1
+001fa9 0184      putw:	movw	paral, crcl
+001faa d00a      		rcall	putc
+001fab 2f01      		mov		paral, parah
+001fac 2680      putp:	eor		crcl, paral		 	
+001fad e048      		ldi		cnt, 8
+001fae 9496      put1:	lsr		crch
+001faf 9487      		ror		crcl
+001fb0 f410      		brcc	put2
+001fb1 2693      		eor		crch, polyh
+001fb2 2682      		eor		crcl, polyl
+001fb3 954a      put2:	dec		cnt
+001fb4 f7c9      		brne	put1
                  .endif ; .if UseE2Read || UseSRAM
                  
                  ; send char
                  putc:	xwdr
                  		de_1
-001fbe d028      		rcall	waitf
-001fbf d027      		rcall	waitf
-001fc0 e04a      		ldi		cnt, 10
-001fc1 9500      		com		paral
-001fc2 b994      put3:	tx_out										; 1
-001fc3 d023      		rcall	waitf								; 15
-001fc4 9506      		lsr		paral								; 1
-001fc5 f008      		brcs	put4								; 1
-001fc6 e090      		tx_0										; 1
-001fc7 d002      put4:	rcall	put5								; 7
-001fc8 954a      		dec		cnt									; 1
-001fc9 f7c1      		brne	put3								; 2 = 29 + baud
-001fca 9508      put5:	ret
+001fb5 d028      		rcall	waitf
+001fb6 d027      		rcall	waitf
+001fb7 e04a      		ldi		cnt, 10
+001fb8 9500      		com		paral
+001fb9 b994      put3:	tx_out										; 1
+001fba d023      		rcall	waitf								; 15
+001fbb 9506      		lsr		paral								; 1
+001fbc f008      		brcs	put4								; 1
+001fbd e090      		tx_0										; 1
+001fbe d002      put4:	rcall	put5								; 7
+001fbf 954a      		dec		cnt									; 1
+001fc0 f7c1      		brne	put3								; 2 = 29 + baud
+001fc1 9508      put5:	ret
                  
                  ; receive char/word
-001fcb d001      getw:	rcall	getc
-001fcc 2f10      getm:	mov		parah, paral
+001fc2 d001      getw:	rcall	getc
+001fc3 2f10      getm:	mov		parah, paral
                  getc:	xwdr
                  		de_0
-001fcd 9b18      get5:	rx_1
-001fce cffe      		rjmp	get5
-001fcf 9918      get1:	rx_0
-001fd0 cffe      		rjmp	get1
-001fd1 e048      getx:	ldi		cnt, 8
-001fd2 01c6      		movw	cntl, baudl
-001fd3 9596      		lsr		cnth
-001fd4 9587      		ror		cntl
-001fd5 d012      		rcall	waith
-001fd6 d010      get2:	rcall	waitf								; 15 + baud
-001fd7 9506      		lsr		paral								; 1
-001fd8 9918      		rx_0										; 1
-001fd9 6800      		ori		paral, 0x80							; 1
-001fda fd07      		sbrc	paral, 7							; 1
-001fdb 2682      		eor		crcl, polyl							; 1
-001fdc 9496      		lsr		crch								; 1
-001fdd 9487      		ror		crcl								; 1
-001fde f408      		brcc	get3								; 1
-001fdf 2693      		eor		crch, polyh							; 1
-001fe0 f408      get3:	brcc	get4								; 1
-001fe1 2682      		eor		crcl, polyl							; 1
-001fe2 954a      get4:	dec		cnt									; 1
-001fe3 f791      		brne	get2								; 2 = 29 + baud
-001fe4 2489      		eor		crcl, crch
-001fe5 2489      		eor		crcl, crch
-001fe6 9508      		ret
+001fc4 9b18      get5:	rx_1
+001fc5 cffe      		rjmp	get5
+001fc6 9918      get1:	rx_0
+001fc7 cffe      		rjmp	get1
+001fc8 e048      getx:	ldi		cnt, 8
+001fc9 01c6      		movw	cntl, baudl
+001fca 9596      		lsr		cnth
+001fcb 9587      		ror		cntl
+001fcc d012      		rcall	waith
+001fcd d010      get2:	rcall	waitf								; 15 + baud
+001fce 9506      		lsr		paral								; 1
+001fcf 9918      		rx_0										; 1
+001fd0 6800      		ori		paral, 0x80							; 1
+001fd1 fd07      		sbrc	paral, 7							; 1
+001fd2 2682      		eor		crcl, polyl							; 1
+001fd3 9496      		lsr		crch								; 1
+001fd4 9487      		ror		crcl								; 1
+001fd5 f408      		brcc	get3								; 1
+001fd6 2693      		eor		crch, polyh							; 1
+001fd7 f408      get3:	brcc	get4								; 1
+001fd8 2682      		eor		crcl, polyl							; 1
+001fd9 954a      get4:	dec		cnt									; 1
+001fda f791      		brne	get2								; 2 = 29 + baud
+001fdb 2489      		eor		crcl, crch
+001fdc 2489      		eor		crcl, crch
+001fdd 9508      		ret
                  
                  ; UART delays										; by P.Dannegger
-001fe7 01c6      waitf:	movw	cntl, baudl							; 1
-001fe8 9704      waith:	sbiw	cntl, 4								; 2
-001fe9 f7f0      		brcc	waith								; 2/1
-001fea 3f8d      		cpi		cntl, 0xFD							; 1
-001feb f018      		brcs	wait1								; 2/1 (2)
-001fec f011      		breq	wait1								; 2/1 (3)
-001fed 3f8f      		cpi		cntl, 0xFF							; 1
-001fee f001      		breq	wait1								; 2/1 (4/5)
-001fef e091      wait1:	tx_1										; 1
-001ff0 9508      		ret											; 4 + 3 (rcall) = 15
+001fde 01c6      waitf:	movw	cntl, baudl							; 1
+001fdf 9704      waith:	sbiw	cntl, 4								; 2
+001fe0 f7f0      		brcc	waith								; 2/1
+001fe1 3f8d      		cpi		cntl, 0xFD							; 1
+001fe2 f018      		brcs	wait1								; 2/1 (2)
+001fe3 f011      		breq	wait1								; 2/1 (3)
+001fe4 3f8f      		cpi		cntl, 0xFF							; 1
+001fe5 f001      		breq	wait1								; 2/1 (4/5)
+001fe6 e091      wait1:	tx_1										; 1
+001fe7 9508      		ret											; 4 + 3 (rcall) = 15
                  
                  .if UseCrypt
                  .endif ; .if UseCrypt
                  
                  
-001ff1 4f42
-001ff2 544f
-001ff3 4f4c
-001ff4 4441
-001ff5 5245      BootSign:	.db		"BOOTLOADER"											; iff you change it then change sign in AVRootloader.ini
+001fe8 4f42
+001fe9 544f
+001fea 4f4c
+001feb 4441
+001fec 5245      BootSign:	.db		"BOOTLOADER"											; iff you change it then change sign in AVRootloader.ini
                  BootMsg:	;.db		"RX3S"											; your own message here, must be shorter as 253 chars
-001ff6 0b94
-001ff7 0406      BootInfo:	.db		SIGNATURE_001, SIGNATURE_002, BootVersion, BootPages 	; must be not changed
+001fed 0b94
+001fee 0406      BootInfo:	.db		SIGNATURE_001, SIGNATURE_002, BootVersion, BootPages 	; must be not changed
                  
                  .if UseCrypt
                  .endif ; .if UseCrypt
@@ -1460,14 +1450,14 @@ C:\Users\z570\Desktop\FlightStab\AVRootloader\AVR\AVRootloader.inc(116): Please 
                  ; SPM helper function, put in here to support updates of bootloader code, programmed into last FLASH page
                  ; r25=cnth destroyed, r24=cntl unchanged
                  .if BLS
-001ff8 bf87      dospm:	xout	SPMCSR, r24
-001ff9 95e8      		spm
+001fef bf87      dospm:	xout	SPMCSR, r24
+001ff0 95e8      		spm
                  .ifdef SPMspecial
                  .endif
-001ffa b797      dspm1:	xin		r25, SPMCSR
-001ffb fd90      		sbrc	r25, SPMEN
-001ffc cffd      		rjmp	dspm1
-001ffd 9508      		ret
+001ff1 b797      dspm1:	xin		r25, SPMCSR
+001ff2 fd90      		sbrc	r25, SPMEN
+001ff3 cffd      		rjmp	dspm1
+001ff4 9508      		ret
                  .endif ; .if BLS
                  
                  
@@ -1497,39 +1487,39 @@ counted separately from r26..r31 here.
 .dseg memory usage only counts static data declared with .byte
 
 "ATmega168PA" register use summary:
-r0 :  10 r1 :   5 r2 :   0 r3 :   0 r4 :   0 r5 :   0 r6 :   0 r7 :   0 
-r8 :  11 r9 :   6 r10:   7 r11:   1 r12:   3 r13:   0 r14:   4 r15:   0 
-r16:  24 r17:  11 r18:   4 r19:   3 r20:  10 r21:   0 r22:  14 r23:   9 
-r24:  11 r25:   6 r26:   9 r27:   5 r28:  11 r29:   5 r30:   8 r31:   4 
-x  :   1 y  :   5 z  :   5 
+r0 :   7 r1 :   3 r2 :   0 r3 :   0 r4 :   0 r5 :   0 r6 :   0 r7 :   0 
+r8 :  11 r9 :   6 r10:  10 r11:   1 r12:   3 r13:   0 r14:   3 r15:   0 
+r16:  22 r17:  11 r18:   4 r19:   3 r20:  10 r21:   0 r22:  13 r23:   8 
+r24:  16 r25:   6 r26:   8 r27:   4 r28:  15 r29:   5 r30:   7 r31:   4 
+x  :   1 y  :   4 z  :   4 
 Registers used: 26 out of 35 (74.3%)
 
 "ATmega168PA" instruction use summary:
-.lds  :   0 .sts  :   0 adc   :   0 add   :   0 adiw  :   2 and   :   0 
-andi  :   0 asr   :   0 bclr  :   0 bld   :   0 brbc  :   0 brbs  :   0 
-brcc  :   4 brcs  :   2 break :   0 breq  :   5 brge  :   0 brhc  :   0 
+.lds  :   0 .sts  :   0 adc   :   1 add   :   1 adiw  :   4 and   :   0 
+andi  :   0 asr   :   1 bclr  :   0 bld   :   0 brbc  :   0 brbs  :   0 
+brcc  :   5 brcs  :   4 break :   0 breq  :   7 brge  :   0 brhc  :   0 
 brhs  :   0 brid  :   0 brie  :   0 brlo  :   2 brlt  :   0 brmi  :   0 
-brne  :  23 brpl  :   0 brsh  :   4 brtc  :   3 brts  :   2 brvc  :   0 
-brvs  :   0 bset  :   0 bst   :   2 call  :   0 cbi   :   2 cbr   :   0 
+brne  :  20 brpl  :   0 brsh  :   4 brtc  :   3 brts  :   0 brvc  :   0 
+brvs  :   0 bset  :   0 bst   :   1 call  :   0 cbi   :   2 cbr   :   0 
 clc   :   0 clh   :   0 cli   :   1 cln   :   0 clr   :   2 cls   :   0 
-clt   :   0 clv   :   0 clz   :   0 com   :   1 cp    :   4 cpc   :   4 
-cpi   :   8 cpse  :   5 dec   :  11 eor   :   8 fmul  :   0 fmuls :   0 
-fmulsu:   0 icall :   0 ijmp  :   0 in    :   3 inc   :   1 jmp   :   1 
-ld    :   6 ldd   :   0 ldi   :  35 lds   :   0 lpm   :   4 lsl   :   0 
-lsr   :   5 mov   :   2 movw  :  14 mul   :   0 muls  :   0 mulsu :   0 
-neg   :   0 nop   :   0 or    :   0 ori   :   1 out   :   7 pop   :   0 
-push  :   0 rcall :  24 ret   :   4 reti  :   0 rjmp  :  16 rol   :   0 
-ror   :   3 sbc   :   2 sbci  :   2 sbi   :   4 sbic  :   4 sbis  :   2 
-sbiw  :   4 sbr   :   0 sbrc  :   3 sbrs  :   0 sec   :   0 seh   :   0 
+clt   :   0 clv   :   0 clz   :   0 com   :   1 cp    :   3 cpc   :   3 
+cpi   :   7 cpse  :   4 dec   :  10 eor   :   8 fmul  :   0 fmuls :   0 
+fmulsu:   0 icall :   0 ijmp  :   0 in    :   2 inc   :   1 jmp   :   1 
+ld    :   4 ldd   :   0 ldi   :  32 lds   :   0 lpm   :   4 lsl   :   0 
+lsr   :   5 mov   :   2 movw  :  15 mul   :   0 muls  :   0 mulsu :   0 
+neg   :   0 nop   :   0 or    :   0 ori   :   1 out   :   6 pop   :   0 
+push  :   0 rcall :  22 ret   :   4 reti  :   0 rjmp  :  13 rol   :   0 
+ror   :   3 sbc   :   3 sbci  :   2 sbi   :   1 sbic  :   4 sbis  :   3 
+sbiw  :   8 sbr   :   0 sbrc  :   3 sbrs  :   0 sec   :   0 seh   :   0 
 sei   :   0 sen   :   0 ser   :   0 ses   :   0 set   :   0 sev   :   0 
 sez   :   0 sleep :   0 spm   :   2 st    :   1 std   :   0 sts   :   0 
 sub   :   0 subi  :   2 swap  :   0 tst   :   0 wdr   :   0 
-Instructions used: 45 out of 113 (39.8%)
+Instructions used: 47 out of 113 (41.6%)
 
 "ATmega168PA" memory use summary [bytes]:
 Segment   Begin    End      Code   Data   Used    Size   Use%
 ---------------------------------------------------------------
-[.cseg] 0x000000 0x003ffc    494     16    510   16384   3.1%
+[.cseg] 0x000000 0x003fea    476     16    492   16384   3.0%
 [.dseg] 0x000100 0x000100      0      0      0    1024   0.0%
 [.eseg] 0x000000 0x000000      0      0      0     512   0.0%
 
