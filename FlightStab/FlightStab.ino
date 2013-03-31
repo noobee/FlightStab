@@ -90,6 +90,7 @@
 #define SDA_PIN 18
 
 // led register
+#define LED_DDR DDRB
 #define LED_PORT PORTB
 #define LED_BIT 5
 #define LED_XOR 0 // active high
@@ -167,6 +168,7 @@
 #define SDA_PIN 18
 
 // led register
+#define LED_DDR DDRB
 #define LED_PORT PORTB
 #define LED_BIT 5
 #define LED_XOR 0 // active high
@@ -242,6 +244,7 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define SDA_PIN 2
 
 // led register
+#define LED_DDR DDRD
 #define LED_PORT PORTD
 #define LED_BIT 5
 #define LED_XOR 1 // active low
@@ -558,7 +561,7 @@ int16_t led_pulse_msec[4];
 
 void init_led()
 {
-  LED_PORT |= (1 << LED_BIT);
+  LED_DDR |= (1 << LED_BIT);
 }
 
 void set_led(int8_t i)
