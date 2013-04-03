@@ -2452,7 +2452,18 @@ again:
       // vr_gain [-128,127]/128, stick_gain [-400,400]/256, master_gain [0,800]/512
       correction[i] = (((output * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
     }
-#if defined(USE_SERIAL) && 0
+
+    // calibration wag on all surfaces if needed
+    if (calibration_wag > 0) {
+      if ((int32_t)(t - last_calibration_wag_time) > 200000L) {
+        calibration_wag--;
+        last_calibration_wag_time = t;
+      }
+      for (i=0; i<3; i++)
+        correction[i] += (calibration_wag & 1) ? 150 : -150;    
+    }    
+    
+    #if defined(USE_SERIAL) && 0
     Serial.print(correction[0]); Serial.print('\t');
     Serial.print(correction[1]); Serial.print('\t');
     Serial.print(correction[2]); Serial.println('\t');
@@ -2460,15 +2471,6 @@ again:
     last_pid_time = t;
   }
 
-  // calibration wag on all surfaces if needed
-  if (calibration_wag > 0) {
-    if ((int32_t)(t - last_calibration_wag_time) > 200000L) {
-      calibration_wag--;
-      last_calibration_wag_time = t;
-    }
-    for (i=0; i<3; i++)
-      correction[i] += (calibration_wag & 1) ? 100 : -100;    
-  }
   
   if ((int32_t)(t - last_vr_time) > 500123) {
     // sample all adc channels
