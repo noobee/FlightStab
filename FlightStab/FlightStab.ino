@@ -1981,6 +1981,7 @@ void stick_config(struct _stick_zone *psz)
   int32_t wait_interval = servo_interval[1];
   struct _eeprom_cfg eeprom_cfg;
   
+  // read eeprom
   eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver);
   param_yval[0] = (int8_t) eeprom_cfg.wing_mode + 1;
   param_yval[1] = eeprom_cfg.vr_notch[0] - 4;
@@ -2031,21 +2032,14 @@ void stick_config(struct _stick_zone *psz)
         case 0x58: param_yval[x] = max(param_yval[x] - 1, param_ymin[x]); update_y = param_yval[x] << 1; break; // down
       }
 
-      if (x == (param_xcount - 1) && param_yval[x] == 2) {
-        // write eeprom;
-        eeprom_cfg.wing_mode = (enum WING_MODE) (param_yval[0] - 1);
-        eeprom_cfg.vr_notch[0] = param_yval[1] + 4;
-        eeprom_cfg.vr_notch[1] = param_yval[2] + 4;
-        eeprom_cfg.vr_notch[2] = param_yval[3] + 4;
-        eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) (param_yval[4] - 1);
-        eeprom_cfg.cppm_mode = (enum CPPM_MODE) (param_yval[5] - 1);
-        eeprom_write_cfg(&eeprom_cfg);
-        return;
-      }
-
       // if updating x (index) servo then update y (value) servo as well
       if (update_x > 0) {
         update_y = param_yval[x] << 1;
+      }
+
+      // check for exit option
+      if (x == (param_xcount - 1) && param_yval[x] == 2) {
+        break;
       }
  
   #if defined(USE_SERIAL) && 1
@@ -2058,6 +2052,15 @@ void stick_config(struct _stick_zone *psz)
   #endif      
     }
   }
+
+  // write eeprom;
+  eeprom_cfg.wing_mode = (enum WING_MODE) (param_yval[0] - 1);
+  eeprom_cfg.vr_notch[0] = param_yval[1] + 4;
+  eeprom_cfg.vr_notch[1] = param_yval[2] + 4;
+  eeprom_cfg.vr_notch[2] = param_yval[3] + 4;
+  eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) (param_yval[4] - 1);
+  eeprom_cfg.cppm_mode = (enum CPPM_MODE) (param_yval[5] - 1);
+  eeprom_write_cfg(&eeprom_cfg);
 }
 
 
@@ -2293,17 +2296,20 @@ void setup()
   uint32_t last_imu_time = t;
   uint32_t last_pid_time = t;
   uint32_t last_vr_time = t;
-  uint32_t stick_config_check_time = t;
   int8_t servo_sync = false;
 
   int16_t vr_gain[3]= {VR_GAIN_MAX, VR_GAIN_MAX, VR_GAIN_MAX};
   int16_t stick_gain[3] = {STICK_GAIN_MAX, STICK_GAIN_MAX, STICK_GAIN_MAX};
   int16_t master_gain = MASTER_GAIN_MAX;
 
+  uint32_t stick_config_check_time = t;
   struct _stick_zone stick_zone;
   const uint8_t stick_config_seq[] = {0x78, 0x89, 0x98, 0x87, 0x78, 0x89, 0x98, 0x87, 0xff}; // 7-9-7-9-7
   int8_t stick_config_seq_i = 0;
   int8_t stick_configurable = true;
+  
+  uint32_t last_calibration_wag_time = t;
+  int8_t calibration_wag = 3;
   
   struct _calibration rx_cal;
   struct _calibration imu_cal;
@@ -2452,6 +2458,16 @@ again:
     Serial.print(correction[2]); Serial.println('\t');
 #endif
     last_pid_time = t;
+  }
+
+  // calibration wag on all surfaces if needed
+  if (calibration_wag > 0) {
+    if ((int32_t)(t - last_calibration_wag_time) > 200000L) {
+      calibration_wag--;
+      last_calibration_wag_time = t;
+    }
+    for (i=0; i<3; i++)
+      correction[i] += (calibration_wag & 1) ? 100 : -100;    
   }
   
   if ((int32_t)(t - last_vr_time) > 500123) {
