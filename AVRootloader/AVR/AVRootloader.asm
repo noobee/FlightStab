@@ -182,10 +182,10 @@
 .equ	UseRS485			= 0			; activate RS-485 Data Enable pin
 .equ	UseRS485Invert		= 0			; inverted logic of RS-485 DE pin (HIHGH for receive, LOW for transmit)
 
-.equ	RX_PORT				= PORTB		; Receive port and pin
-.equ	RX					= PB0
-.equ	TX_PORT				= PORTB		; Transmit port and pin
-.equ	TX					= PB0
+.equ	RX_PORT				= PORTD		; Receive port and pin
+.equ	RX					= PD7
+.equ	TX_PORT				= PORTD		; Transmit port and pin
+.equ	TX					= PD7
 
 .if UseRS485
 .equ	DE_PORT				= PORTB		; DE enable pin of RS-485 
