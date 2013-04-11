@@ -152,7 +152,7 @@
 										; 5 = start only by call from application (not recommended)
 										; with these bootmodes you can shorten startup time for application
 
-.equ	UseWDR				= 0			; Watchdog support (2 sec timeout, remember to deactivate WDT in your application if not needed)
+.equ	UseWDR				= 1			; Watchdog support (2 sec timeout, remember to deactivate WDT in your application if not needed)
 .equ	UseSaveMCUSR		= 0			; save MCUSR on stack (RAMEND) for access by application (on UseWDR=1 MCUSR must be cleared)
 
 .equ	UseE2Write			= 0			; EEPROM write command (have implicit verify)
