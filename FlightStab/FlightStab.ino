@@ -422,7 +422,9 @@ enum CPPM_MODE cppm_mode = CPPM_NONE;
 #define CPPM_END CPPM_OPEN9X
 #endif
 
-//#define CPPM_ENABLE
+// side mounting 
+enum MOUNT_ORIENT {MOUNT_NORMAL, MOUNT_ROLL_90_LEFT, MOUNT_ROLL_90_RIGHT};
+enum MOUNT_ORIENT mount_orient = MOUNT_NORMAL;
 
 const int8_t rx_chan_list_size = 8;
 volatile int16_t *rx_chan[][rx_chan_list_size] = {
@@ -432,9 +434,6 @@ volatile int16_t *rx_chan[][rx_chan_list_size] = {
 
 // hold mode
 int8_t att_hold = false;
-
-// eeprom
-const int8_t eeprom_cfg_ver = 1;
 
 #define VR_GAIN_MAX 127
 #define STICK_GAIN_MAX 400 // 1900-1500 or 1500-1100 
@@ -1259,12 +1258,16 @@ void compute_pid(struct _pid *ppid)
  * EEPROM
  ***************************************************************************************************************/
 
+// eeprom
+const int8_t eeprom_cfg_ver = 2;
+ 
 struct _eeprom_cfg {
   uint8_t ver;
   enum WING_MODE wing_mode; 
   int8_t vr_notch[3];
   enum MIXER_EPA_MODE mixer_epa_mode;
   enum CPPM_MODE cppm_mode; 
+  enum MOUNT_ORIENT mount_orient;
   uint8_t chksum;
 };
 
@@ -1303,6 +1306,7 @@ void eeprom_copy_to_cfg(struct _eeprom_cfg *pcfg)
   }
   pcfg->mixer_epa_mode = mixer_epa_mode;
   pcfg->cppm_mode = cppm_mode;
+  pcfg->mount_orient = mount_orient;
 }
 
 void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
@@ -1317,6 +1321,7 @@ void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
   rud_vr = vr_notch_table[vr_notch[2]];
   mixer_epa_mode = pcfg->mixer_epa_mode;
   cppm_mode = pcfg->cppm_mode;
+  mount_orient = pcfg->mount_orient;
 }
 
 
@@ -1326,7 +1331,7 @@ void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
 
 void read_imu()
 {
-  int16_t gx, gy, gz;  
+  int16_t gx, gy, gz, tmp; 
 #if defined(USE_I2CDEVLIB)
 #if defined(USE_MPU6050)
   accelgyro.getRotation(&gx, &gy, &gz);
@@ -1342,7 +1347,20 @@ void read_imu()
   itg3205_read_gyro(&gx, &gy, &gz);
 #endif
 #endif
-  GYRO_ORIENTATION(gx, gy, gz);  
+  GYRO_ORIENTATION(gx, gy, gz);
+  switch (mount_orient) {
+  case MOUNT_NORMAL: break;
+  case MOUNT_ROLL_90_LEFT: 
+    tmp = gyro[1];
+    gyro[1] = gyro[2];
+    gyro[2] = -tmp;
+    break;    
+  case MOUNT_ROLL_90_RIGHT: 
+    tmp = gyro[1];
+    gyro[1] = -gyro[2];
+    gyro[2] = tmp;
+    break;    
+  }
 }
 
 void init_imu() 
@@ -1737,6 +1755,7 @@ void copy_rx_in()
   ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
   aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
   aux2_in2 = (tmp = aux2_in) == aux2_in ? tmp : aux2_in2;
+//  aux2_in2 = (tmp = ailr_in) == ailr_in ? tmp : aux2_in2; // johnrb
   thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
   flp_in2 = (tmp = flp_in) == flp_in ? tmp : flp_in2;
   
@@ -1906,6 +1925,7 @@ void dump_sensors()
     Serial.print(wing_mode); Serial.print(' ');
     Serial.print(mixer_epa_mode); Serial.print(' ');
     Serial.print(cppm_mode); Serial.print(' ');
+    Serial.print(mount_orient); Serial.print(' ');
     Serial.print(get_free_sram()); Serial.print(' ');
     Serial.print(servo_out); Serial.print(' ');
     Serial.println();
@@ -1916,32 +1936,71 @@ void dump_sensors()
 #endif
 }
 
- /***************************************************************************************************************
- * STICK CONFIGURATION
- ***************************************************************************************************************/
+/***************************************************************************************************************
+* STICK CONFIGURATION
+***************************************************************************************************************/
+// telephone pad mapping
+// 1 2 3
+// 4 5 6
+// 7 8 9 
 
  struct _stick_zone {
   int8_t zx, zy;
   uint8_t curr, prev; // zone [1-9] telephone pad mapping
   uint8_t move; // 0x<prev><curr>
- };
+  bool zx_rev, zy_rev;
+  bool zx_sided, zy_sided;
+};
  
-int8_t stick_zone(int16_t pwm)
+void stick_zone_init(struct _stick_zone *psz)
 {
-  if (pwm <= 1200) return 0;
-  if (pwm >= 1300 && pwm <= 1700) return 1;
-  if (pwm >= 1800) return 2;
-  return -1;
+  psz->zx = psz->zy = 1; // neutral zone
+  psz->curr = 5; // center
+  psz->zx_rev = psz->zy_rev = false; // rev=false => top/left == narrow AIL/ELE pulse
+  psz->zx_sided = psz->zy_sided = false; // have not found a side yet
 }
 
-int8_t stick_zone_update(struct _stick_zone *psz)
+int8_t stick_zone(int16_t pwm, bool rev)
 {
-  int8_t tmp, moved;
+  int8_t zone;
+  if (pwm <= 1200) zone = 0;
+  else if (pwm >= 1300 && pwm <= 1700) zone = 1;
+  else if (pwm >= 1800) zone = 2;
+  else zone = -1; // in the hysteresis region
+  
+  if (zone >= 0 && rev)
+    zone = 2 - zone;
+  return zone;
+}
+
+bool stick_zone_update(struct _stick_zone *psz)
+{  
+  int8_t tmp;
+  bool moved;
 
   psz->prev = psz->curr;
-  psz->zx = (tmp = stick_zone(ail_in2)) >= 0 ? tmp : psz->zx; // hysteresis
-  psz->zy = (tmp = stick_zone(ele_in2)) >= 0 ? tmp : psz->zy;
-  psz->curr = (2 - psz->zy) * 3 + psz->zx + 1;
+  psz->zx = (tmp = stick_zone(ail_in2, psz->zx_rev)) >= 0 ? tmp : psz->zx; // hysteresis
+  psz->zy = (tmp = stick_zone(ele_in2, psz->zy_rev)) >= 0 ? tmp : psz->zy;
+    
+  // we assume that the first corner visited bottom left (position 7)
+  // so stick on the left if the AIL pulse is at either horizontal end
+  if (!psz->zx_sided && (psz->zx == 0 || psz->zx == 2)) {
+    if (psz->zx == 2) {
+      psz->zx_rev = true;
+      psz->zx = 2 - psz->zx;
+    }
+    psz->zx_sided = true;
+  }
+  // and stick is on the bottom if the ELE pulse is at either vertical end
+  if (!psz->zy_sided && (psz->zy == 0 || psz->zy == 2)) {
+    if (psz->zy == 0) {
+      psz->zy_rev = true;
+      psz->zy = 2 - psz->zy;
+    }
+    psz->zy_sided = true;
+  }
+
+  psz->curr = psz->zy * 3 + psz->zx + 1;
   // telephone pad mapping
   // 1 2 3
   // 4 5 6
@@ -1951,7 +2010,12 @@ int8_t stick_zone_update(struct _stick_zone *psz)
     psz->move = (psz->prev << 4) | psz->curr; // move = 0x[prev digit][curr digit]
 #if defined(USE_SERIAL)
       Serial.print("stick_zone "); 
-      Serial.println(psz->move, HEX);
+      Serial.print(psz->zx); Serial.print(' ');
+      Serial.print(psz->zy); Serial.print(' ');
+      Serial.print(psz->zx_rev); Serial.print(' ');
+      Serial.print(psz->zy_rev); Serial.print(' ');
+      Serial.print(psz->move, HEX);
+      Serial.println();
 #endif
   }
   return moved;
@@ -1959,16 +2023,17 @@ int8_t stick_zone_update(struct _stick_zone *psz)
 
 void stick_config(struct _stick_zone *psz)
 {
-// 1=wing_mode 2=roll_gain 3=pitch_gain 4=yaw_gain 5=mixer_epa_mode 6=cppm_mode 7=exit
-// wing_mode: see enum WING_MODE
-// [roll|pitch|yaw]_gain: see vr_notch_table[]
-// mixer_epa_mode: see enum MIXER_EPA_MODE
-// cppm_mode: see enum CPPM_MODE
+// 1= wing_mode (see enum WING_MODE)
+// 2,3,4= [roll|pitch|yaw]_gain (see vr_notch_table[])
+// 5= mixer_epa_mode (see enum MIXER_EPA_MODE)
+// 6= cppm_mode (see enum CPPM_MODE)
+// 7= mount_orient (see enum MOUNT_ORIENT)
+// 8= exit
 
 // note: be careful about off-by-one errors in this function
 
-  const int8_t param_ymin[] = {WING_SINGLE_AIL+1, -4, -4, -4, MIXER_EPA_FULL+1 , CPPM_NONE+1, 1};
-  const int8_t param_ymax[] = {WING_DUAL_AIL+1  , +4, +4, +4, MIXER_EPA_TRACK+1, CPPM_END+1 , 2};
+  const int8_t param_ymin[] = {WING_SINGLE_AIL+1, -4, -4, -4, MIXER_EPA_FULL+1 , CPPM_NONE+1, MOUNT_NORMAL+1       , 1};
+  const int8_t param_ymax[] = {WING_DUAL_AIL+1  , +4, +4, +4, MIXER_EPA_TRACK+1, CPPM_END+1 , MOUNT_ROLL_90_RIGHT+1, 2};
   const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
   int8_t param_yval[param_xcount];
 
@@ -1989,7 +2054,8 @@ void stick_config(struct _stick_zone *psz)
   param_yval[3] = eeprom_cfg.vr_notch[2] - 4;
   param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode + 1;
   param_yval[5] = (int8_t) eeprom_cfg.cppm_mode + 1;
-  param_yval[6] = 1; // exit option
+  param_yval[6] = (int8_t) eeprom_cfg.mount_orient + 1;
+  param_yval[7] = 1; // exit option
   
   int8_t update_x = (x + 1) << 1;
   int8_t update_y = param_yval[x] << 1;
@@ -2060,6 +2126,7 @@ void stick_config(struct _stick_zone *psz)
   eeprom_cfg.vr_notch[2] = param_yval[3] + 4;
   eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) (param_yval[4] - 1);
   eeprom_cfg.cppm_mode = (enum CPPM_MODE) (param_yval[5] - 1);
+  eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) (param_yval[6] - 1);
   eeprom_write_cfg(&eeprom_cfg);
 }
 
@@ -2314,6 +2381,9 @@ void setup()
   struct _calibration rx_cal;
   struct _calibration imu_cal;
   
+  // stick zone setup
+  stick_zone_init(&stick_zone);
+  
   // calibration setup  
   calibrate_init_stat(&rx_cal, 4);
   calibrate_init_stat(&imu_cal, 3);
@@ -2449,7 +2519,7 @@ again:
     // combine output of pid control loops 
     for (i=0; i<3; i++) {
       int32_t output = (int32_t)pid_att.output[i] + (int32_t)pid_rate.output[i];
-      // vr_gain [-128,127]/128, stick_gain [-400,400]/256, master_gain [0,800]/512
+      // vr_gain [-128,127]/128, stick_gain [400,0,400]/256, master_gain [0,800]/512
       correction[i] = (((output * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
     }
 
@@ -2463,7 +2533,7 @@ again:
         correction[i] += (calibration_wag & 1) ? 150 : -150;    
     }    
     
-    #if defined(USE_SERIAL) && 0
+#if defined(USE_SERIAL) && 0
     Serial.print(correction[0]); Serial.print('\t');
     Serial.print(correction[1]); Serial.print('\t');
     Serial.print(correction[2]); Serial.println('\t');
