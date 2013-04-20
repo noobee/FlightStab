@@ -15,6 +15,7 @@
 //#define RX3S_V2
 //#define NANOWII
 //#define NANO_MPU6050
+#define HK_MWSE_20
 
 //#define USE_SERIAL // enable serial port
 //#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
@@ -267,6 +268,77 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define F_I2C F_100KHZ // i2c bus speed
 #endif
 /* NANO_MPU6050 ************************************************************************************************/
+
+
+/* HK_MWSE_20 **************************************************************************************************/
+#if defined(HK_MWSE_20)
+#warning HK_MWSE_20 defined // emit device name
+/*
+ HK MultiWii SE v2.0
+ PB0  8 AUX2_IN             PC0 14/A0        PD0 0 (RXD)
+ PB1  9 AIL_OUT (PWM)       PC1 15/A1        PD1 1 (TXD)
+ PB2 10 ELE_OUT (PWM)       PC2 16/A2        PD2 2 
+ PB3 11 RUD_OUT (MOSI/PWM)  PC3 17/A3        PD3 3 (PWM)
+ PB4 12 AILR_OUT (MISO)     PC4 18/A4 (SDA)  PD4 4 AIL_IN
+ PB5 13 LED (SCK)           PC5 19/A5 (SCL)  PD5 5 ELE_IN (PWM)
+ PB6 14 (XTAL1)             PC6 (RESET)      PD6 6 RUD_IN (PWM)
+ PB7 15 (XTAL2)                              PD7 7 AUX_IN
+ 
+ CPPM enabled
+ PB0 8 CPPM_IN instead of AUX2_IN
+ PD5 5 FLP_OUT instead of ELE_IN
+ PD6 6 THR_OUT instead of RUD_IN
+*/
+
+// <VR> MUST BE ALL NULL
+#define AIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <RX> (must in PORT B/D due to ISR)
+#define RX_PORTB {&aux2_in, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define RX_PORTD {NULL, NULL, NULL, NULL, &ail_in, &ele_in, &rud_in, &aux_in}
+
+// <SWITCH> MUST BE ALL NULL
+#define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <SERVO>
+#define AIL_OUT_PIN 9
+#define ELE_OUT_PIN 10
+#define RUD_OUT_PIN 11
+#define AILR_OUT_PIN 12 // dual aileron mode only
+
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
+
+// <IMU>
+#define USE_MPU6050
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = -(y); gyro[1] = -(x); gyro[2] = (z);}
+
+// CPPM
+#define CPPM_PINREG PINB
+#define CPPM_PINBIT 0
+#define FLP_OUT_PIN 5
+#define THR_OUT_PIN 6
+
+#define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define F_I2C F_400KHZ // i2c bus speed
+#define SCL_PIN 19
+#define SDA_PIN 18
+
+// led register
+#define LED_DDR DDRB
+#define LED_PORT PORTB
+#define LED_BIT 5
+#define LED_XOR 0 // active high
+
+// eeprom clear pins. shorted on init means to clear eeprom
+#define EEPROM_RESET_OUT_PIN 3
+#define EEPROM_RESET_IN_PIN 12
+
+#endif
+/* HK_MWSE_20 **************************************************************************************************/
+
 
 // standard frequency definitions
 #define F_8MHZ 8000000UL
@@ -871,7 +943,7 @@ inline void pcint0_vect()
   }
 }
 
-#if defined(RX3S_V1) || defined(RX3S_V2)
+#if defined(RX3S_V1) || defined(RX3S_V2) || defined(HW_MWSE_20)
 // isr armed only if cppm enabled
 ISR(TIMER1_CAPT_vect)
 {
@@ -1016,7 +1088,7 @@ ISR(PCINT2_vect)
   }
 }
 
-#endif // defined(RX3S_V1) || defined(RX3S_V2)
+#endif // defined(RX3S_V1) || defined(RX3S_V2) || defined(HK_MWSE_20)
 
 #if defined(NANOWII)
 // PE6 = aux2_in
@@ -2148,11 +2220,11 @@ void setup()
   Serial.begin(115200L);
 #endif
   
-#if defined(RX3S_V1) || defined(RX3S_V2)
+#if defined(RX3S_V1) || defined(RX3S_V2) || defined(HK_MWSE_20)
   // clear wd reset bit and disable wdt in case it was enabled due to stick config reboot
   MCUSR &= ~(1 << WDRF);
   wdt_disable();
-#endif // RX3S_V1 || RX3S_V2
+#endif // RX3S_V1 || RX3S_V2 || HK_MWSE_20
 
   // init TIMER1
   TCCR1A = 0; // normal counting mode
@@ -2330,6 +2402,23 @@ void setup()
     pwm_out_pin[4] = THR_OUT_PIN; //
     pwm_out_var[5] = &flp_out; // enable flp_out
     pwm_out_pin[5] = FLP_OUT_PIN; //
+  }
+#endif // !DISABLE_CPPM
+#endif // NANOWII
+
+#if defined(HK_MWSE_20)
+#if !defined(DISABLE_CPPM)
+  if (cppm_mode > 0) {
+    // PB0 8 CPPM_IN instead of AUX2_IN
+    // PD5 5 FLP_OUT instead of ELE_IN
+    // PD6 6 THR_OUT instead of RUD_IN
+    rx_portb[0] = NULL; // disable aux2_in
+    rx_portd[5] = NULL; // disable ele_in
+    rx_portd[6] = NULL; // disable rud_in
+    pwm_out_var[5] = &flp_out; // enable flp_out
+    pwm_out_pin[5] = FLP_OUT_PIN; //
+    pwm_out_var[6] = &thr_out; // enable thr_out
+    pwm_out_pin[6] = THR_OUT_PIN; //
   }
 #endif // !DISABLE_CPPM
 #endif // NANOWII
