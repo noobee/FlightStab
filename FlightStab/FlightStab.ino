@@ -277,12 +277,12 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
  HK MultiWii SE v2.0
  PB0  8 AUX2_IN             PC0 14/A0        PD0 0 (RXD)
  PB1  9 AIL_OUT (PWM)       PC1 15/A1        PD1 1 (TXD)
- PB2 10 ELE_OUT (PWM)       PC2 16/A2        PD2 2 
+ PB2 10 ELE_OUT (PWM)       PC2 16/A2        PD2 2 AUX_IN
  PB3 11 RUD_OUT (MOSI/PWM)  PC3 17/A3        PD3 3 (PWM)
  PB4 12 AILR_OUT (MISO)     PC4 18/A4 (SDA)  PD4 4 AIL_IN
  PB5 13 LED (SCK)           PC5 19/A5 (SCL)  PD5 5 ELE_IN (PWM)
  PB6 14 (XTAL1)             PC6 (RESET)      PD6 6 RUD_IN (PWM)
- PB7 15 (XTAL2)                              PD7 7 AUX_IN
+ PB7 15 (XTAL2)                              PD7 7 AILR_IN
  
  CPPM enabled
  PB0 8 CPPM_IN instead of AUX2_IN
@@ -295,7 +295,7 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 
 // <RX> (must in PORT B/D due to ISR)
 #define RX_PORTB {&aux2_in, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
-#define RX_PORTD {NULL, NULL, NULL, NULL, &ail_in, &ele_in, &rud_in, &aux_in}
+#define RX_PORTD {NULL, NULL, &aux_in, NULL, &ail_in, &ele_in, &rud_in, &ailr_in}
 
 // <SWITCH> MUST BE ALL NULL
 #define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
@@ -2329,7 +2329,7 @@ void setup()
 #if !defined(DISABLE_CPPM)
   if (cppm_mode > 0) {
     // PB0 8 CPPM_IN instead of AIL_IN
-    // PB2 9 FLP_OUT instead of ELE_IN
+    // PB1 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
     rx_portb[0] = NULL; // disable ail_in
     rx_portb[1] = NULL; // disable ele_in
@@ -2380,6 +2380,7 @@ void setup()
 #if !defined(DISABLE_CPPM)
   if (cppm_mode > 0) {
     // PB0 8 CPPM_IN instead of AIL_IN
+    // PB1 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
     rx_portb[0] = NULL; // disable ail_in
     rx_portb[1] = NULL; // disable ele_in
@@ -2415,13 +2416,13 @@ void setup()
     rx_portb[0] = NULL; // disable aux2_in
     rx_portd[5] = NULL; // disable ele_in
     rx_portd[6] = NULL; // disable rud_in
+    pwm_out_var[4] = &thr_out; // enable thr_out
+    pwm_out_pin[4] = THR_OUT_PIN; //
     pwm_out_var[5] = &flp_out; // enable flp_out
     pwm_out_pin[5] = FLP_OUT_PIN; //
-    pwm_out_var[6] = &thr_out; // enable thr_out
-    pwm_out_pin[6] = THR_OUT_PIN; //
   }
 #endif // !DISABLE_CPPM
-#endif // NANOWII
+#endif // HK_MWSE_20
 
   set_led_msg(0, wing_mode + 1, LED_LONG);
 
