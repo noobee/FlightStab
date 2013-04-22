@@ -2526,23 +2526,23 @@ again:
 
     compute_pid(&pid_rate);
     
+    // combine output of pid control loops 
+    int32_t output[3];
     if (stab_mode == STAB_RATE) {
-        // rate mode, remove attitude correction
-        for (i=0; i<3; i++) {
-          pid_att.output[i] = 0;
-        }
+      // rate mode, use only rate correction
+      for (i=0; i<3; i++) {
+        output[i] = (int32_t)pid_rate.output[i];
+      }
     } else {
         // hold mode, halve the rate correction
-        for (i=0; i<3; i++) {
-          pid_rate.output[i] >>= 1;
-        }
+      for (i=0; i<3; i++) {
+        output[i] = (int32_t)pid_att.output[i] + (int32_t)pid_rate.output[i] >> 1;
+      }
     }
 
-    // combine output of pid control loops 
     for (i=0; i<3; i++) {
-      int32_t output = (int32_t)pid_att.output[i] + (int32_t)pid_rate.output[i];
       // vr_gain [-128,127]/128, stick_gain [400,0,400]/256, master_gain [400,0,400]/256
-      correction[i] = (((output * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 8;
+      correction[i] = (((output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 8;
     }
 
     // calibration wag on all surfaces if needed
