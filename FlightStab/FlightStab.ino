@@ -553,7 +553,7 @@ int8_t boot_check(int8_t in_pin, int8_t out_pin)
   20 VERY SHORT = low sram
   
   slot 3
-  100 VERY SHORT = eeprom reset
+  50 VERY SHORT = eeprom reset
   
 */
 
@@ -1260,8 +1260,8 @@ void compute_pid(struct _pid *ppid)
  * EEPROM
  ***************************************************************************************************************/
 
-// eeprom
-const int8_t eeprom_cfg_ver = 2;
+const uint8_t eeprom_cfg_ver = 2;
+const uint16_t eeprom_cfg_addr = 0;
  
 struct _eeprom_cfg {
   uint8_t ver;
@@ -1270,7 +1270,7 @@ struct _eeprom_cfg {
   enum MIXER_EPA_MODE mixer_epa_mode;
   enum CPPM_MODE cppm_mode; 
   enum MOUNT_ORIENT mount_orient;
-  uint8_t chksum;
+  uint8_t chksum; // must be the last field
 };
 
 uint8_t eeprom_compute_chksum(void *buf, int8_t len) 
@@ -1284,12 +1284,12 @@ uint8_t eeprom_compute_chksum(void *buf, int8_t len)
 void eeprom_write_cfg(struct _eeprom_cfg *pcfg) 
 {    
   pcfg->chksum = eeprom_compute_chksum(pcfg, sizeof(*pcfg)-1);
-  eeprom_write_block(pcfg, 0, sizeof(*pcfg));   
+  eeprom_write_block(pcfg, (void *)eeprom_cfg_addr, sizeof(*pcfg));   
 }
 
 int8_t eeprom_read_cfg(struct _eeprom_cfg *pcfg, uint8_t expect_ver) 
 {
-  eeprom_read_block(pcfg, 0, sizeof(*pcfg));
+  eeprom_read_block(pcfg, (void *)eeprom_cfg_addr, sizeof(*pcfg));
   if (pcfg->ver != expect_ver) {
     return -1;
   }
@@ -1410,6 +1410,9 @@ void init_imu()
  * CALIBRATION
  ***************************************************************************************************************/
 
+int8_t calibration_wag_count;
+uint32_t last_calibration_wag_time;
+ 
 struct _calibration {
   int8_t done;
   int16_t num_elements; // 3 for imu, 4 for rx
@@ -1782,8 +1785,8 @@ void apply_mixer_change(int16_t *change)
   case WING_DELTA:
     tmp0 =  ail_in2 + change[0];
     tmp1 =  ele_in2 + change[1];
-    ail_out2 = (tmp0 + tmp1) >> 1;
-    ele_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
+    ail_out2 = ((tmp0 + tmp1)*5 >> 3) - RX_WIDTH_MID/4;
+    ele_out2 = ((tmp0 - tmp1)*5 >> 3) + RX_WIDTH_MID;
     rud_out2 = rud_in2 + change[2];
     break;
   case WING_VTAIL:
@@ -1791,7 +1794,7 @@ void apply_mixer_change(int16_t *change)
     ailr_out2 = ailr_in2 + change[0];
     tmp1 =  ele_in2 + change[1];
     tmp2 =  rud_in2 + change[2];
-    ele_out2 = (tmp2 + tmp1) >> 1;
+    ele_out2 = ((tmp2 + tmp1) >> 1);
     rud_out2 = ((tmp2 - tmp1) >> 1) + RX_WIDTH_MID;
     break;
   }
@@ -2181,27 +2184,31 @@ void setup()
   pid_att.output_shift = PID_ATT_OUTPUT_SHIFT;
   for (i=0; i<3; i++) {
     pid_att.kp[i] = PID_KP_DEFAULT;
-    pid_att.ki[i] = PID_KI_DEFAULT;
+    pid_att.ki[i] = 0;
     pid_att.kd[i] = PID_KD_DEFAULT;
   }
 
-  int8_t eeprom_reset = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN);
   struct _eeprom_cfg eeprom_cfg;
-  if (eeprom_reset || eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver) != 0) {
-    // reset/write eeprom with default parameters
+  if (boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN)) {
+    // invalidate current eeprom, force write on next boot
+    eeprom_cfg.ver = 0;
+    eeprom_write_cfg(&eeprom_cfg);
+    set_led_msg(3, 50, LED_VERY_SHORT); // 3 sec
+    while (true) {
+      update_led(micros1());    
+    }
+  }
+
+  if (eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver) < 0) {
+    // write eeprom with default parameters
     eeprom_cfg.ver = eeprom_cfg_ver;
     eeprom_copy_to_cfg(&eeprom_cfg);
     eeprom_write_cfg(&eeprom_cfg);
+    calibration_wag_count = 9;
+  } else {
+    calibration_wag_count = 3;
   }
   eeprom_copy_from_cfg(&eeprom_cfg);
-
-  if (eeprom_reset) {
-    set_led_msg(3, 100, LED_VERY_SHORT); // 6 sec
-    do {
-      update_led(micros1());    
-    } while (true);
-      
-  }
   
   // set mixer limits based on configuration
   switch (mixer_epa_mode) {
@@ -2372,9 +2379,6 @@ void setup()
   int8_t stick_config_seq_i = 0;
   int8_t stick_configurable = true;
   
-  uint32_t last_calibration_wag_time = t;
-  int8_t calibration_wag = 3;
-  
   struct _calibration rx_cal;
   struct _calibration imu_cal;
   
@@ -2384,6 +2388,7 @@ void setup()
   // calibration setup  
   calibrate_init_stat(&rx_cal, 4);
   calibrate_init_stat(&imu_cal, 3);
+  last_calibration_wag_time = t;
 
 again:
   t = micros1();
@@ -2418,7 +2423,7 @@ again:
     }
     
     // use imu readings only after calibration completes
-    if (calibration_wag == 0) {
+    if (calibration_wag_count == 0) {
       for (i=0; i<3; i++) {
         gyro[i] -= gyro0[i]; // apply calibration offset
         att[i] += gyro[i]; // compute approx attitude
@@ -2546,13 +2551,13 @@ again:
     }
 
     // calibration wag on all surfaces if needed
-    if (calibration_wag > 0) {
+    if (calibration_wag_count > 0) {
       if ((int32_t)(t - last_calibration_wag_time) > 200000L) {
-        calibration_wag--;
+        calibration_wag_count--;
         last_calibration_wag_time = t;
       }
       for (i=0; i<3; i++)
-        correction[i] += (calibration_wag & 1) ? 150 : -150;    
+        correction[i] += (calibration_wag_count & 1) ? 150 : -150;    
     }    
     
 #if defined(USE_SERIAL) && 0
