@@ -389,20 +389,6 @@ int16_t mixer_out2_high_limit[4];
 int16_t gyro0[3] = {0, 0, 0}; // calibration sets zero-movement-measurement offsets
 int16_t gyro[3] = {0, 0, 0}; // full scale = 16b-signed = +/-2000 deg/sec
 int16_t accel[3] = {0, 0, 0}; // full scale = 16b-signed = 16g? (TODO)
-int32_t att[3] = {0, 0, 0}; // relative attitude
-
-// pid
-#define PID_KP_DEFAULT 500 // [0, 999] 11bits signed
-#define PID_KI_DEFAULT 500
-#define PID_KD_DEFAULT 500
-// rate pid thresholds
-#define PID_RATE_I_THRESHOLD 2048
-#define PID_RATE_I_WINDUP (((int32_t)1 << 13) - 1)
-#define PID_RATE_OUTPUT_SHIFT 10
-// attitude pid thresholds
-#define PID_ATT_I_THRESHOLD 2048
-#define PID_ATT_I_WINDUP (((int32_t)1 << 13) - 1)
-#define PID_ATT_OUTPUT_SHIFT 10
 
 int16_t correction[3] = {0, 0, 0}; // final correction values
 
@@ -433,8 +419,8 @@ volatile int16_t *rx_chan[][rx_chan_list_size] = {
 };
 
 // stabilization mode
-enum STAB_MODE {STAB_RATE, STAB_HOLD};
-enum STAB_MODE stab_mode = STAB_RATE;
+enum STAB_MODE {STAB_UNDEF, STAB_RATE, STAB_HOLD};
+enum STAB_MODE stab_mode = STAB_UNDEF; // undefined
 
 #define VR_GAIN_MAX 127
 #define STICK_GAIN_MAX 400 // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
@@ -1205,52 +1191,53 @@ void init_digital_out()
 #define PID_KI_SHIFT 6
 #define PID_KD_SHIFT 2
 
-struct _pid {
-  int16_t kp[3]; // [0, 500] 11b signed
+struct _pid_param {
+  int16_t kp[3]; // [0, 1000] 11b signed
   int16_t ki[3];
   int16_t kd[3];
   int16_t i_threshold;
   int32_t i_windup;
   int8_t output_shift;
-  
-  int16_t setpoint[3]; // [-8192, 8191] 14b signed, stick commanded rate or 0 for stabilize-only
-  int16_t input[3]; // [-8192, 8191] 14b signed gyro measured rate
+};
+
+struct _pid_state {
+  int16_t setpoint[3]; // [-8192, 8191] 14b signed
+  int16_t input[3]; // [-8192, 8191] 14b signed
   int16_t last_input[3]; // [-8192, 8191] 14b
   int32_t sum_iterm[3]; // clamped to PID_WINDUP
   int16_t output[3]; //
 };
 
-struct _pid pid_rate;
-struct _pid pid_att;
+struct _pid_param pid_param_rate; // rate mode pid parameters
+struct _pid_param pid_param_hold; // hold mode pid parameters
+struct _pid_state pid_state; // pid engine state
 
-void compute_pid(struct _pid *ppid) 
+void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param) 
 {
-  int32_t err, diff;
-  int8_t i;
-  
-  for (i=0; i<3; i++) {
-    err = ppid->input[i] - ppid->setpoint[i];
-    diff = ppid->input[i] - ppid->last_input[i];
-    if (abs(diff) >= ppid->i_threshold) {
-      ppid->sum_iterm[i] = 0;
+  for (int8_t i=0; i<3; i++) {
+    int32_t err, diff;
+    err = ppid_state->input[i] - ppid_state->setpoint[i];
+    diff = ppid_state->input[i] - ppid_state->last_input[i];
+    if (abs(diff) >= ppid_param->i_threshold) {
+      ppid_state->sum_iterm[i] = 0;
     } else {
-      ppid->sum_iterm[i] = constrain(ppid->sum_iterm[i] + ((ppid->ki[i] * err) >> PID_KI_SHIFT), 
-        -ppid->i_windup-1, +ppid->i_windup); 
+      ppid_state->sum_iterm[i] = constrain(ppid_state->sum_iterm[i] + ((ppid_param->ki[i] * err) >> PID_KI_SHIFT), 
+        -ppid_param->i_windup-1, +ppid_param->i_windup); 
     }
-    ppid->output[i] = (((ppid->kp[i] * err) >> PID_KP_SHIFT) + ppid->sum_iterm[i] - 
-      ((ppid->kd[i] * diff) >> PID_KD_SHIFT)) >> ppid->output_shift;
-    ppid->last_input[i] = ppid->input[i];
+    ppid_state->output[i] = (((ppid_param->kp[i] * err) >> PID_KP_SHIFT) + ppid_state->sum_iterm[i] - 
+      ((ppid_param->kd[i] * diff) >> PID_KD_SHIFT)) >> ppid_param->output_shift;
+    ppid_state->last_input[i] = ppid_state->input[i];
 
 #if defined(USE_SERIAL) && 0
     if (i == 2) {
-      Serial.print(ppid->input[i]); Serial.print('\t');
+      Serial.print(ppid_state->input[i]); Serial.print('\t');
       Serial.print(err); Serial.print('\t');
       Serial.print(diff); Serial.print('\t');
-      Serial.print((ppid->kp[i] * err) >> PID_KP_SHIFT); Serial.print('\t');
-      Serial.print((ppid->ki[i] * err) >> PID_KI_SHIFT); Serial.print('\t');
-      Serial.print(ppid->sum_iterm[i]); Serial.print('\t');
-      Serial.print((ppid->kd[i] * diff) >> PID_KD_SHIFT); Serial.print('\t');
-      Serial.println(ppid->output[i]);
+      Serial.print((ppid_param->kp[i] * err) >> PID_KP_SHIFT); Serial.print('\t');
+      Serial.print((ppid_param->ki[i] * err) >> PID_KI_SHIFT); Serial.print('\t');
+      Serial.print(ppid_state->sum_iterm[i]); Serial.print('\t');
+      Serial.print((ppid_param->kd[i] * diff) >> PID_KD_SHIFT); Serial.print('\t');
+      Serial.println(ppid_state->output[i]);
     }
 #endif
   }
@@ -1772,6 +1759,9 @@ void apply_mixer_change(int16_t *change)
 {
   // *_in2 => [change] => *_out2
   
+  // for delta/vtail
+  // tx = MID + (stick[x] + change[x]) * mult, where mult = 1/1, 3/2, 5/4
+  
   // mixer
   int16_t tmp0, tmp1, tmp2;
   switch (wing_mode) {
@@ -1785,8 +1775,19 @@ void apply_mixer_change(int16_t *change)
   case WING_DELTA:
     tmp0 =  ail_in2 + change[0];
     tmp1 =  ele_in2 + change[1];
-    ail_out2 = ((tmp0 + tmp1)*5 >> 3) - RX_WIDTH_MID/4;
-    ele_out2 = ((tmp0 - tmp1)*5 >> 3) + RX_WIDTH_MID;
+    // apply 100% (1/1)
+    //ail_out2 = ((tmp0 + tmp1) >> 1);
+    //ele_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
+    // apply 125% (5/4)
+    tmp2 = tmp0 + tmp1;
+    ail_out2 = (tmp2 >> 1) + (tmp2 >> 3) - (RX_WIDTH_MID >> 2);
+    tmp2 = tmp0 - tmp1;
+    ele_out2 = (tmp2 >> 1) + (tmp2 >> 3) + RX_WIDTH_MID;
+    // apply 150% (3/2)
+    //tmp2 = tmp0 + tmp1;
+    //ail_out2 = tmp2 - (tmp2 >> 2) - (RX_WIDTH_MID >> 1);
+    //tmp2 = tmp0 - tmp1;
+    //ele_out2 = tmp2 - (tmp2 >> 2) + RX_WIDTH_MID;
     rud_out2 = rud_in2 + change[2];
     break;
   case WING_VTAIL:
@@ -1794,8 +1795,11 @@ void apply_mixer_change(int16_t *change)
     ailr_out2 = ailr_in2 + change[0];
     tmp1 =  ele_in2 + change[1];
     tmp2 =  rud_in2 + change[2];
-    ele_out2 = ((tmp2 + tmp1) >> 1);
-    rud_out2 = ((tmp2 - tmp1) >> 1) + RX_WIDTH_MID;
+    // apply 125% (5/4)
+    tmp0 = tmp2 + tmp1;
+    ele_out2 = (tmp0 >> 1) + (tmp0 >> 3) - (RX_WIDTH_MID >> 2);
+    tmp0 = tmp2 - tmp1;
+    rud_out2 = (tmp0 >> 1) + (tmp0 >> 3) + RX_WIDTH_MID;    
     break;
   }
 
@@ -2169,25 +2173,26 @@ void setup()
   TCCR0B &= ~((1 << CS00) | (1 << CS01) | (1 << CS02)); // clock stopped
   // TIMSK0 &= ~(1 << TOIE0); // disable overflow interrupt
 
-  // set up default pid parameters
-  pid_rate.i_threshold = PID_RATE_I_THRESHOLD;
-  pid_rate.i_windup = PID_RATE_I_WINDUP;
-  pid_rate.output_shift = PID_RATE_OUTPUT_SHIFT;
+  // set up default RATE pid parameters
   for (i=0; i<3; i++) {
-    pid_rate.kp[i] = PID_KP_DEFAULT;
-    pid_rate.ki[i] = PID_KI_DEFAULT;
-    pid_rate.kd[i] = PID_KD_DEFAULT;
+    pid_param_rate.kp[i] = 500;
+    pid_param_rate.ki[i] = 0;
+    pid_param_rate.kd[i] = 500;
   }
-  
-  pid_att.i_threshold = PID_ATT_I_THRESHOLD;
-  pid_att.i_windup = PID_ATT_I_WINDUP;
-  pid_att.output_shift = PID_ATT_OUTPUT_SHIFT;
-  for (i=0; i<3; i++) {
-    pid_att.kp[i] = PID_KP_DEFAULT;
-    pid_att.ki[i] = 0;
-    pid_att.kd[i] = PID_KD_DEFAULT;
-  }
+  pid_param_rate.i_threshold = 2048;
+  pid_param_rate.i_windup = (((int32_t)1 << 13) - 1);
+  pid_param_rate.output_shift = 8;
 
+   // set up default HOLD pid parameters
+ for (i=0; i<3; i++) {
+    pid_param_hold.kp[i] = 250;
+    pid_param_hold.ki[i] = 500;
+    pid_param_hold.kd[i] = 500;
+  }
+  pid_param_hold.i_threshold = 8192;
+  pid_param_hold.i_windup = (((int32_t)1 << 13) - 1);
+  pid_param_hold.output_shift = 8;
+  
   struct _eeprom_cfg eeprom_cfg;
   if (boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN)) {
     // invalidate current eeprom, force write on next boot
@@ -2370,8 +2375,8 @@ void setup()
   int16_t stick_gain[3] = {STICK_GAIN_MAX, STICK_GAIN_MAX, STICK_GAIN_MAX};
   int16_t master_gain = MASTER_GAIN_MAX;
 
-  int8_t reset_att_ail_ele = false;
-  int8_t reset_att_rud = false;
+  int8_t reset_att_ail_ele;
+  int8_t reset_att_rud;
   
   uint32_t stick_config_check_time = t;
   struct _stick_zone stick_zone;
@@ -2426,7 +2431,6 @@ again:
     if (calibration_wag_count == 0) {
       for (i=0; i<3; i++) {
         gyro[i] -= gyro0[i]; // apply calibration offset
-        att[i] += gyro[i]; // compute approx attitude
       }
     }
     last_imu_time = t;
@@ -2462,18 +2466,19 @@ again:
     stick_gain[1] = STICK_GAIN_MAX - constrain(ele_stick_pos, 0, STICK_GAIN_MAX);
     stick_gain[2] = STICK_GAIN_MAX - constrain(rud_stick_pos, 0, STICK_GAIN_MAX);
     
+    // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
+    master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, MASTER_GAIN_MAX);     
+        
     // check stabilization mode
     enum STAB_MODE stab_mode2 = (aux_in2 <= RX_WIDTH_MID) ? STAB_RATE : STAB_HOLD;
     if (stab_mode2 != stab_mode) {
       stab_mode = stab_mode2;
-      reset_att_ail_ele = true; // reset measured relative attitude
+      reset_att_ail_ele = true; // reset attitude error on mode change
       reset_att_rud = true; //
-      set_led_msg(1, (stab_mode == STAB_HOLD) ? 4 : 0, LED_SHORT);
+      set_led_msg(1, (stab_mode == STAB_RATE) ? 0 : 4, LED_SHORT);
     }
-    // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
-    master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, MASTER_GAIN_MAX);     
-    
-    // reset measured relative attitude if stick is not center
+ 
+    // reset attitude error if stick is not center
     if (ail_stick_pos > 100 || ele_stick_pos > 100) {
       reset_att_ail_ele = true;
     }   
@@ -2482,72 +2487,42 @@ again:
     }
  
     if (reset_att_ail_ele) {
-      att[0] = 0;
-      att[1] = 0;
+      // reset pitch+roll attitude error to zero
+      pid_state.sum_iterm[0] = 0;
+      pid_state.sum_iterm[1] = 0;
       reset_att_ail_ele = false;
     }
     if (reset_att_rud) {
-      att[2] = 0;
+      // reset yaw attitude error to zero
+      pid_state.sum_iterm[2] = 0;
       reset_att_rud = false;
-    }
-      
-    // attitude hold control
-    // commanded attitude = (0, 0, 0) which is when attitude hold was engaged
-    pid_att.setpoint[0] = 0;
-    pid_att.setpoint[1] = 0;
-    pid_att.setpoint[2] = 0;
+    }      
 
-    // measured attitude
-    for (i=0; i<3; i++)
-      pid_att.input[i] = constrain(att[i] >> 4, -8192, 8191);
-    
-    compute_pid(&pid_att);
-
-#if defined(USE_SERIAL) && 0
-    for (i=0; i<3; i++) {
-      Serial.print(att[i] >> 4); Serial.print('\t');
-    }
-//    for (i=0; i<3; i++) {
-//      Serial.print(pid_att.output[i]); Serial.print('\t');
-//    }
-#endif
-  
-    // angular rate control
-    // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
+     // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
 #if 0    
+    // stick controlled roll rate
     // max stick == 400, if << 4 then 6400 == 6400/8192*500 = 391deg/s
-    pid_rate.setpoint[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (4-1);
-    pid_rate.setpoint[1] = (ele_in2 - ele_in2_mid) << 4;
-    pid_rate.setpoint[2] = (rud_in2 - rud_in2_mid) << 4;
+    pid_state.setpoint[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (4-1);
+    pid_state.setpoint[1] = (ele_in2 - ele_in2_mid) << 4;
+    pid_state.setpoint[2] = (rud_in2 - rud_in2_mid) << 4;
 #else
-    pid_rate.setpoint[0] = 0;
-    pid_rate.setpoint[1] = 0;
-    pid_rate.setpoint[2] = 0;
+    // zero roll rate
+    pid_state.setpoint[0] = 0;
+    pid_state.setpoint[1] = 0;
+    pid_state.setpoint[2] = 0;
 #endif
+
     // measured angular rate (from the gyro)
-    pid_rate.input[0] = constrain(gyro[0], -8192, 8191);
-    pid_rate.input[1] = constrain(gyro[1], -8192, 8191);
-    pid_rate.input[2] = constrain(gyro[2], -8192, 8191);
-
-    compute_pid(&pid_rate);
+    pid_state.input[0] = constrain(gyro[0], -8192, 8191);
+    pid_state.input[1] = constrain(gyro[1], -8192, 8191);
+    pid_state.input[2] = constrain(gyro[2], -8192, 8191);        
     
-    // combine output of pid control loops 
-    int32_t output[3];
-    if (stab_mode == STAB_RATE) {
-      // rate mode, use only rate correction
-      for (i=0; i<3; i++) {
-        output[i] = (int32_t)pid_rate.output[i];
-      }
-    } else {
-        // hold mode, halve the rate correction
-      for (i=0; i<3; i++) {
-        output[i] = (int32_t)pid_att.output[i] + (int32_t)pid_rate.output[i] >> 1;
-      }
-    }
-
+    // apply PID control
+    compute_pid(&pid_state, (stab_mode == STAB_RATE) ? &pid_param_rate : &pid_param_hold);
+    
     for (i=0; i<3; i++) {
-      // vr_gain [-128,127]/128, stick_gain [400,0,400]/256, master_gain [400,0,400]/256
-      correction[i] = (((output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 8;
+      // vr_gain [-128,127]/128, stick_gain [400,0,400]/512, master_gain [400,0,400]/512
+      correction[i] = ((((int32_t)pid_state.output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 9) * master_gain >> 9;
     }
 
     // calibration wag on all surfaces if needed
