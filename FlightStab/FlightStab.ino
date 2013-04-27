@@ -1186,7 +1186,7 @@ void init_digital_out()
  ***************************************************************************************************************/
 
 #define PID_PERIOD 10000
-// relative weights kp:ki:kd = 1/8 : 1/64 : 1/4 = 8 : 1 : 16
+// relative weights kp:ki:kd
 #define PID_KP_SHIFT 3 
 #define PID_KI_SHIFT 6
 #define PID_KD_SHIFT 2
@@ -1195,17 +1195,17 @@ struct _pid_param {
   int16_t kp[3]; // [0, 1000] 11b signed
   int16_t ki[3];
   int16_t kd[3];
-  int16_t i_threshold;
   int32_t i_windup;
   int8_t output_shift;
 };
 
 struct _pid_state {
-  int16_t setpoint[3]; // [-8192, 8191] 14b signed
-  int16_t input[3]; // [-8192, 8191] 14b signed
-  int16_t last_input[3]; // [-8192, 8191] 14b
-  int32_t sum_iterm[3]; // clamped to PID_WINDUP
-  int16_t output[3]; //
+  // setpoint, input [-8192, 8191]
+  int16_t setpoint[3];
+  int16_t input[3];
+  int16_t last_err[3];
+  int32_t sum_err[3];
+  int16_t output[3];
 };
 
 struct _pid_param pid_param_rate; // rate mode pid parameters
@@ -1215,28 +1215,27 @@ struct _pid_state pid_state; // pid engine state
 void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param) 
 {
   for (int8_t i=0; i<3; i++) {
-    int32_t err, diff;
+    int32_t err, sum_err, diff_err, pterm, iterm, dterm;
     err = ppid_state->input[i] - ppid_state->setpoint[i];
-    diff = ppid_state->input[i] - ppid_state->last_input[i];
-    if (abs(diff) >= ppid_param->i_threshold) {
-      ppid_state->sum_iterm[i] = 0;
-    } else {
-      ppid_state->sum_iterm[i] = constrain(ppid_state->sum_iterm[i] + ((ppid_param->ki[i] * err) >> PID_KI_SHIFT), 
-        -ppid_param->i_windup-1, +ppid_param->i_windup); 
-    }
-    ppid_state->output[i] = (((ppid_param->kp[i] * err) >> PID_KP_SHIFT) + ppid_state->sum_iterm[i] - 
-      ((ppid_param->kd[i] * diff) >> PID_KD_SHIFT)) >> ppid_param->output_shift;
-    ppid_state->last_input[i] = ppid_state->input[i];
+    ppid_state->sum_err[i] += err; // accumulate the error
+    sum_err = constrain(ppid_state->sum_err[i], -ppid_param->i_windup, ppid_param->i_windup); // clamp local copy
+    diff_err = err - ppid_state->last_err[i]; // difference the error
+    ppid_state->last_err[i] = err;    
+        
+    pterm = (ppid_param->kp[i] * err) >> PID_KP_SHIFT;
+    iterm = (ppid_param->ki[i] * sum_err) >> PID_KI_SHIFT;
+    dterm = (ppid_param->kd[i] * diff_err) >> PID_KD_SHIFT;
+    ppid_state->output[i] = (pterm + iterm + dterm) >> ppid_param->output_shift;
 
 #if defined(USE_SERIAL) && 0
     if (i == 2) {
       Serial.print(ppid_state->input[i]); Serial.print('\t');
       Serial.print(err); Serial.print('\t');
-      Serial.print(diff); Serial.print('\t');
-      Serial.print((ppid_param->kp[i] * err) >> PID_KP_SHIFT); Serial.print('\t');
-      Serial.print((ppid_param->ki[i] * err) >> PID_KI_SHIFT); Serial.print('\t');
-      Serial.print(ppid_state->sum_iterm[i]); Serial.print('\t');
-      Serial.print((ppid_param->kd[i] * diff) >> PID_KD_SHIFT); Serial.print('\t');
+      Serial.print(diff_err); Serial.print('\t');
+      Serial.print(pterm); Serial.print('\t');
+      Serial.print(iterm); Serial.print('\t');
+      Serial.print(ppid_state->sum_err[i]); Serial.print('\t');
+      Serial.print(dterm); Serial.print('\t');
       Serial.println(ppid_state->output[i]);
     }
 #endif
@@ -1503,7 +1502,7 @@ void calibrate_imu(struct _calibration *pimu_cal)
   sample[2] = gyro[2];
   calibrate_update_stat(pimu_cal, sample);
   
-  if (++pimu_cal->num_samples == 100) {
+  if (++pimu_cal->num_samples == 300) {
     if (calibrate_check_stat(pimu_cal, 50)) {
       calibrate_compute_mean(pimu_cal);
       for (int8_t i=0; i<3; i++)
@@ -2179,18 +2178,16 @@ void setup()
     pid_param_rate.ki[i] = 0;
     pid_param_rate.kd[i] = 500;
   }
-  pid_param_rate.i_threshold = 2048;
-  pid_param_rate.i_windup = (((int32_t)1 << 13) - 1);
+  pid_param_rate.i_windup = 0;
   pid_param_rate.output_shift = 8;
 
    // set up default HOLD pid parameters
- for (i=0; i<3; i++) {
+  for (i=0; i<3; i++) {
     pid_param_hold.kp[i] = 250;
     pid_param_hold.ki[i] = 500;
-    pid_param_hold.kd[i] = 500;
+    pid_param_hold.kd[i] = 250;
   }
-  pid_param_hold.i_threshold = 8192;
-  pid_param_hold.i_windup = (((int32_t)1 << 13) - 1);
+  pid_param_hold.i_windup = 32768;
   pid_param_hold.output_shift = 8;
   
   struct _eeprom_cfg eeprom_cfg;
@@ -2372,8 +2369,8 @@ void setup()
   int8_t servo_sync = false;
 
   int16_t vr_gain[3]= {VR_GAIN_MAX, VR_GAIN_MAX, VR_GAIN_MAX};
-  int16_t stick_gain[3] = {STICK_GAIN_MAX, STICK_GAIN_MAX, STICK_GAIN_MAX};
-  int16_t master_gain = MASTER_GAIN_MAX;
+  int16_t stick_gain[3];
+  int16_t master_gain;
 
   int8_t reset_att_ail_ele;
   int8_t reset_att_rud;
@@ -2425,13 +2422,6 @@ again:
     if (!imu_cal.done) {
       calibrate_imu(&imu_cal);
       calibrate_set_led(&rx_cal, &imu_cal);
-    }
-    
-    // use imu readings only after calibration completes
-    if (calibration_wag_count == 0) {
-      for (i=0; i<3; i++) {
-        gyro[i] -= gyro0[i]; // apply calibration offset
-      }
     }
     last_imu_time = t;
   }
@@ -2488,13 +2478,13 @@ again:
  
     if (reset_att_ail_ele) {
       // reset pitch+roll attitude error to zero
-      pid_state.sum_iterm[0] = 0;
-      pid_state.sum_iterm[1] = 0;
+      pid_state.sum_err[0] = 0;
+      pid_state.sum_err[1] = 0;
       reset_att_ail_ele = false;
     }
     if (reset_att_rud) {
       // reset yaw attitude error to zero
-      pid_state.sum_iterm[2] = 0;
+      pid_state.sum_err[2] = 0;
       reset_att_rud = false;
     }      
 
@@ -2512,10 +2502,10 @@ again:
     pid_state.setpoint[2] = 0;
 #endif
 
-    // measured angular rate (from the gyro)
-    pid_state.input[0] = constrain(gyro[0], -8192, 8191);
-    pid_state.input[1] = constrain(gyro[1], -8192, 8191);
-    pid_state.input[2] = constrain(gyro[2], -8192, 8191);        
+    // measured angular rate (from the gyro and apply calibration offset)
+    pid_state.input[0] = constrain(gyro[0] - gyro0[0], -8192, 8191);
+    pid_state.input[1] = constrain(gyro[1] - gyro0[1], -8192, 8191);
+    pid_state.input[2] = constrain(gyro[2] - gyro0[2], -8192, 8191);        
     
     // apply PID control
     compute_pid(&pid_state, (stab_mode == STAB_RATE) ? &pid_param_rate : &pid_param_hold);
