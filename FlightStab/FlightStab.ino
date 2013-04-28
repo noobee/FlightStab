@@ -353,7 +353,7 @@ volatile int16_t ail_in = RX_WIDTH_MID;
 volatile int16_t ele_in = RX_WIDTH_MID;
 volatile int16_t rud_in = RX_WIDTH_MID;
 volatile int16_t ailr_in = RX_WIDTH_MID;
-volatile int16_t aux_in = RX_WIDTH_HIGH_FULL; // assume max gain if no aux_in
+volatile int16_t aux_in = RX_WIDTH_LOW_FULL; // assume max RATE MODE gain if no aux_in
 volatile int16_t aux2_in = RX_WIDTH_MID;
 volatile int16_t thr_in = RX_WIDTH_LOW_FULL;
 volatile int16_t flp_in = RX_WIDTH_MID;
@@ -432,12 +432,13 @@ volatile int16_t *rx_chan[][rx_chan_list_size] = {
   {&tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in} // reserved undef
 };
 
-// hold mode
-int8_t att_hold = false;
+// stabilization mode
+enum STAB_MODE {STAB_RATE, STAB_HOLD};
+enum STAB_MODE stab_mode = STAB_RATE;
 
 #define VR_GAIN_MAX 127
-#define STICK_GAIN_MAX 400 // 1900-1500 or 1500-1100 
-#define MASTER_GAIN_MAX 800 // 1900-1100
+#define STICK_GAIN_MAX 400 // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
+#define MASTER_GAIN_MAX 400 // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
 
 /***************************************************************************************************************
  * TIMER1 AND MISC
@@ -545,6 +546,7 @@ int8_t boot_check(int8_t in_pin, int8_t out_pin)
   1 SHORT = rx calibrating
   2 SHORT = imu calibrating
   3 SHORT = both calibrating
+  4 SHORT = STAB_HOLD mode (else STAB_RATE)
 
   slot 2
   5 SHORT = gyro init error
@@ -2249,11 +2251,7 @@ void setup()
     rx_portb[3] = &aux_in; // enable aux_in
     rx_portb[4] = &ailr_in; // enable ailr_in
   }
-  
-  if (!ail_sw) {
-    att_hold = true;
-  }
-    
+      
 #if !defined(DISABLE_CPPM)
   if (cppm_mode > 0) {
     // PB0 8 CPPM_IN instead of AIL_IN
@@ -2299,10 +2297,6 @@ void setup()
       rx_portd[2] = &ailr_in; // enable ailr_in
       rx3s_v2_wing_dual_ailB = true;
     }
-  }
-
-  if (!rud_sw) {
-    att_hold = true;
   }
 
 #if !defined(DISABLE_CPPM)
@@ -2369,6 +2363,9 @@ void setup()
   int16_t stick_gain[3] = {STICK_GAIN_MAX, STICK_GAIN_MAX, STICK_GAIN_MAX};
   int16_t master_gain = MASTER_GAIN_MAX;
 
+  int8_t reset_att_ail_ele = false;
+  int8_t reset_att_rud = false;
+  
   uint32_t stick_config_check_time = t;
   struct _stick_zone stick_zone;
   const uint8_t stick_config_seq[] = {0x78, 0x89, 0x98, 0x87, 0x78, 0x89, 0x98, 0x87, 0xff}; // 7-9-7-9-7
@@ -2409,24 +2406,27 @@ again:
     servo_sync = false;
     apply_mixer();
     start_servo_frame();
+  }   
 
-    // schedule imu read just after servo pulse start, if needed.
-    // takes around 1ms at 100khz, 250us at 400khz
-    if ((int32_t)(t - last_imu_time) > PID_PERIOD) {
-      read_imu();
-      if (!imu_cal.done) {
-        calibrate_imu(&imu_cal);
-        calibrate_set_led(&rx_cal, &imu_cal);
-       }
-       
+  // schedule imu read just after servo pulse start, if needed.
+  // takes around 1ms at 100khz, 250us at 400khz
+  if ((int32_t)(t - last_imu_time) > PID_PERIOD) {
+    read_imu();
+    if (!imu_cal.done) {
+      calibrate_imu(&imu_cal);
+      calibrate_set_led(&rx_cal, &imu_cal);
+    }
+    
+    // use imu readings only after calibration completes
+    if (calibration_wag == 0) {
       for (i=0; i<3; i++) {
         gyro[i] -= gyro0[i]; // apply calibration offset
         att[i] += gyro[i]; // compute approx attitude
       }
-      last_imu_time = t;
     }
-  }   
-  
+    last_imu_time = t;
+  }
+
   if (stick_configurable && stick_zone_update(&stick_zone)) {
     stick_config_seq_i = (stick_zone.move == stick_config_seq[stick_config_seq_i]) ? stick_config_seq_i + 1 : 0;
     if (stick_config_seq[stick_config_seq_i] == 0xff) {
@@ -2456,27 +2456,37 @@ again:
     stick_gain[0] = STICK_GAIN_MAX - constrain(ail_stick_pos, 0, STICK_GAIN_MAX);
     stick_gain[1] = STICK_GAIN_MAX - constrain(ele_stick_pos, 0, STICK_GAIN_MAX);
     stick_gain[2] = STICK_GAIN_MAX - constrain(rud_stick_pos, 0, STICK_GAIN_MAX);
-
-    // master_gain [1100, 1900] => [0%, 100%] = [0, MASTER_GAIN_MAX]
-    master_gain = constrain(aux_in2 - RX_WIDTH_LOW_NORM, 0, MASTER_GAIN_MAX); 
     
-    // attitude hold check
-    if (att_hold || aux2_in2 > 1700) {
-      // if stick not in center, reset measured relative attitude
-      if (ail_stick_pos > 100 || ele_stick_pos > 100) {
-        att[0] = 0;
-        att[1] = 0;
-      }   
-      if (rud_stick_pos > 100) {
-        att[2] = 0;
-      }
-    } else {
+    // check stabilization mode
+    enum STAB_MODE stab_mode2 = (aux_in2 <= RX_WIDTH_MID) ? STAB_RATE : STAB_HOLD;
+    if (stab_mode2 != stab_mode) {
+      stab_mode = stab_mode2;
+      reset_att_ail_ele = true; // reset measured relative attitude
+      reset_att_rud = true; //
+      set_led_msg(1, (stab_mode == STAB_HOLD) ? 4 : 0, LED_SHORT);
+    }
+    // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
+    master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, MASTER_GAIN_MAX);     
+    
+    // reset measured relative attitude if stick is not center
+    if (ail_stick_pos > 100 || ele_stick_pos > 100) {
+      reset_att_ail_ele = true;
+    }   
+    if (rud_stick_pos > 100) {
+      reset_att_rud = true;
+    }
+ 
+    if (reset_att_ail_ele) {
       att[0] = 0;
       att[1] = 0;
+      reset_att_ail_ele = false;
+    }
+    if (reset_att_rud) {
       att[2] = 0;
+      reset_att_rud = false;
     }
       
-    // attitude control
+    // attitude hold control
     // commanded attitude = (0, 0, 0) which is when attitude hold was engaged
     pid_att.setpoint[0] = 0;
     pid_att.setpoint[1] = 0;
@@ -2516,11 +2526,23 @@ again:
 
     compute_pid(&pid_rate);
     
+    if (stab_mode == STAB_RATE) {
+        // rate mode, remove attitude correction
+        for (i=0; i<3; i++) {
+          pid_att.output[i] = 0;
+        }
+    } else {
+        // hold mode, halve the rate correction
+        for (i=0; i<3; i++) {
+          pid_rate.output[i] >>= 1;
+        }
+    }
+
     // combine output of pid control loops 
     for (i=0; i<3; i++) {
       int32_t output = (int32_t)pid_att.output[i] + (int32_t)pid_rate.output[i];
-      // vr_gain [-128,127]/128, stick_gain [400,0,400]/256, master_gain [0,800]/512
-      correction[i] = (((output * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 9;
+      // vr_gain [-128,127]/128, stick_gain [400,0,400]/256, master_gain [400,0,400]/256
+      correction[i] = (((output * vr_gain[i] >> 7) * stick_gain[i]) >> 8) * master_gain >> 8;
     }
 
     // calibration wag on all surfaces if needed
