@@ -72,6 +72,9 @@ endif (NOT TODAY)
 
 # defines = semicolon-separated list of key-value pairs "RX3S_V1;DEF=VAL;DEF2=VAL2"
 
+# AQUASTAR Programming Box
+add_arduino_firmware(${TODAY}_AQUASTAR Aquastar atmega8 "")
+
 # NANOWII
 add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
 add_arduino_firmware(TEST_NANOWII_NOCPPM FlightStab leonardo "NANOWII;DISABLE_CPPM")
