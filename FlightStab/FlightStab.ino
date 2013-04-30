@@ -5,6 +5,8 @@
 #include <avr/wdt.h>
 #include <util/atomic.h>
 
+#include "FlightStab.h"
+
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 /***************************************************************************************************************
@@ -407,23 +409,14 @@ int32_t att[3] = {0, 0, 0}; // relative attitude
 int16_t correction[3] = {0, 0, 0}; // final correction values
 
 // wing mode
-enum WING_MODE {WING_SINGLE_AIL, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
 enum WING_MODE wing_mode = WING_SINGLE_AIL;
-
-enum MIXER_EPA_MODE {MIXER_EPA_FULL, MIXER_EPA_NORM, MIXER_EPA_TRACK};
 enum MIXER_EPA_MODE mixer_epa_mode = MIXER_EPA_FULL;
-
-// cppm mode
-enum CPPM_MODE {CPPM_NONE=0, CPPM_OPEN9X=1, CPPM_UNDEF};
 enum CPPM_MODE cppm_mode = CPPM_NONE;
 #if defined(DISABLE_CPPM)
 #define CPPM_END CPPM_NONE
 #else
 #define CPPM_END CPPM_OPEN9X
 #endif
-
-// side mounting 
-enum MOUNT_ORIENT {MOUNT_NORMAL, MOUNT_ROLL_90_LEFT, MOUNT_ROLL_90_RIGHT};
 enum MOUNT_ORIENT mount_orient = MOUNT_NORMAL;
 
 const int8_t rx_chan_list_size = 8;
@@ -1259,19 +1252,6 @@ void compute_pid(struct _pid *ppid)
 /***************************************************************************************************************
  * EEPROM
  ***************************************************************************************************************/
-
-// eeprom
-const int8_t eeprom_cfg_ver = 2;
- 
-struct _eeprom_cfg {
-  uint8_t ver;
-  enum WING_MODE wing_mode; 
-  int8_t vr_notch[3];
-  enum MIXER_EPA_MODE mixer_epa_mode;
-  enum CPPM_MODE cppm_mode; 
-  enum MOUNT_ORIENT mount_orient;
-  uint8_t chksum;
-};
 
 uint8_t eeprom_compute_chksum(void *buf, int8_t len) 
 {
@@ -2150,6 +2130,12 @@ void setup()
   Serial.begin(115200L);
 #endif
   
+#if 0
+  ow_init();
+  ow_loop();
+  return;
+#endif
+
 #if defined(RX3S_V1) || defined(RX3S_V2)
   // clear wd reset bit and disable wdt in case it was enabled due to stick config reboot
   MCUSR &= ~(1 << WDRF);
@@ -2336,8 +2322,6 @@ void setup()
   init_imu(); // gyro/accelgyro
 
   copy_rx_in(); // init *_in2 vars
-  for (i=0; i<3; i++) // init mixer correction
-    correction[i] = 0;
   apply_mixer(); // init *_out2 vars
   
   //dump_sensors();

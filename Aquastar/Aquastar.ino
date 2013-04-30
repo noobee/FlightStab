@@ -6,6 +6,8 @@
 #include <avr/pgmspace.h>
 #include <avr/wdt.h>
 
+#include "FlightStab.h"
+
 #define LED_PIN 13
 
 /*
@@ -60,9 +62,9 @@ prog_char mount_normal[] PROGMEM = "Normal";
 prog_char mount_roll90left[] PROGMEM = "Roll 90deg Left";
 prog_char mount_roll90right[] PROGMEM = "Roll 90deg Right";
 
-prog_char config_update[] PROGMEM = "Update EEPROM ->";
+prog_char config_update[] PROGMEM = "Update EEPROM ^";
 
-const char *menu_heading[] PROGMEM = {
+prog_char *menu_heading[] PROGMEM = {
   wing_mode,
   roll_gain,
   pitch_gain,
@@ -73,7 +75,7 @@ const char *menu_heading[] PROGMEM = {
   config_exit,
 };
 
-const char *menu_item[][4] PROGMEM = {
+prog_char *menu_item[][4] PROGMEM = {
   {wing_single_ail,
    wing_delta,
    wing_vtail,
@@ -166,6 +168,81 @@ void button_init()
   }
 }
 
+/***************************************************************************************************************
+* SERIAL MESSAGING
+***************************************************************************************************************/
+
+void serial_write_byte(uint8_t b) {
+  Serial.write(b);
+  Serial.read(); // drain the received echo due to loopback
+  delay(5); // delay for the one-wire library to ready the next receive
+  // TODO: reduce delay?
+}
+
+bool send_msg(void *buf, int8_t buf_len) {
+  uint8_t chksum = buf_len;
+  serial_write_byte('$');
+  serial_write_byte(buf_len);
+  for (int8_t i=0; i<buf_len; i++) {
+    chksum += ((uint8_t *)buf)[i];
+    serial_write_byte(((uint8_t *)buf)[i]);
+  }
+  serial_write_byte((chksum ^ 0xff) + 1);
+}
+
+bool recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
+  enum RECV_STATE {IDLE, HEADER, LENGTH} state = IDLE;
+  uint32_t t = micros();
+  
+  while ((int32_t)(micros() - t) < timeout_ms * 1000) {
+    uint8_t ch, len, chksum, i;
+
+    if (!Serial.available())
+      continue;
+        
+    ch = Serial.read();    
+    switch (state) {
+    case IDLE: 
+      if (ch == '$') {
+        state = HEADER; // found HEADER
+      }
+      break;
+    case HEADER:
+      if (ch <= buf_len) {
+        // found valid LENGTH
+        len = ch;
+        chksum = ch;
+        i = 0;
+        state = LENGTH;
+      } else {
+        state = IDLE;
+      }
+      break;
+    case LENGTH:
+      chksum += ch;
+      if (len-- != 0) {
+        ((uint8_t *)buf)[i++] = ch;
+      } else {
+        // received expected length
+        if (chksum == 0) {
+          // good payload
+          return true;
+        } else {
+          // bad checksum
+          state = IDLE;
+        }
+      }
+      break;
+    }
+  }
+  
+  return false;
+}
+
+/***************************************************************************************************************
+* SETUP/LOOP
+***************************************************************************************************************/
+
 void setup()
 {
   // clear wd reset bit and disable wdt in case avrootloader enabled it
@@ -190,8 +267,8 @@ void setup()
   lcd.print("Programming Box");
 
   delay(1000);
-  
-  
+
+#if 0  
   for (int8_t i=0; i<7; i++) {
     lcd.clear();    
     lcd.setCursor(0, 0);
@@ -203,14 +280,46 @@ void setup()
       delay(2000);
     }
   }
+#endif
   
 }
 
 int16_t button_count[] = {0, 0, 0, 0};
 
+struct _ow_msg ow_msg;
+
 void loop()
 {
+  uint32_t t = micros();
+  uint32_t last_msg_time = t;
+  uint32_t last_lcd_time = t;
+  int16_t sync_ok=0, sync_err=0;
   
+again:
+  t = micros();
+
+  if ((int32_t)(t - last_msg_time) > 500000L) {
+    ow_msg.cmd = OW_SYNC;
+    send_msg(&ow_msg, sizeof(ow_msg));
+    if (recv_msg(&ow_msg, sizeof(ow_msg), 1000)) {
+      sync_ok++;
+    } else {
+      sync_err++;
+    }  
+    last_msg_time = t;
+  }
+  
+  if ((int32_t)(t - last_lcd_time) > 1000000L) {
+    lcd.clear();    
+    lcd.setCursor(0, 0);
+    lcd.print("ok=");
+    lcd.print(sync_ok);
+    lcd.print(" err=");
+    lcd.print(sync_err);
+    last_lcd_time = t;
+  }
+  
+#if 0  
   if (button_read()) {
     for (int8_t i=0; i<4; i++) {
 
@@ -236,6 +345,8 @@ void loop()
       }
     }
   }
+#endif
   
   
+  goto again;
 }
