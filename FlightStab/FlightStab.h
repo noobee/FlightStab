@@ -13,14 +13,13 @@ enum CPPM_MODE {CPPM_NONE=0, CPPM_OPEN9X=1, CPPM_UNDEF};
 enum MOUNT_ORIENT {MOUNT_NORMAL, MOUNT_ROLL_90_LEFT, MOUNT_ROLL_90_RIGHT};
 
 const int8_t eeprom_cfg_ver = 2;
-const uint16_t eeprom_cfg1_addr = 0;
-const uint16_t eeprom_cfg2_addr = 0;
 
 struct _eeprom_stats {
-  uint32_t device_id;
-  uint32_t device_version;
+  int8_t device_id;
+  uint32_t device_ver;
   int8_t eeprom_cfg1_err;
   int8_t eeprom_cfg2_err;
+  int8_t eeprom_cfg12_reset;
 };
 
 struct _eeprom_cfg {

@@ -315,6 +315,14 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #endif
 #endif
 
+// device id and version
+#if !defined(DEVICE_ID)
+#define DEVICE_ID 0x00
+#endif
+#if !defined(DEVICE_VER)
+#define DEVICE_VER 0x12345678
+#endif
+
 
 // LED set
 #define LED_OFF 0
@@ -1239,6 +1247,10 @@ void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param)
  * EEPROM
  ***************************************************************************************************************/
 
+const uint16_t eeprom_stats_addr = 128;
+const uint16_t eeprom_cfg1_addr = 0;
+const uint16_t eeprom_cfg2_addr = 256+0;
+
 uint8_t eeprom_compute_chksum(void *buf, int8_t len) 
 {
   uint8_t chksum = 0;
@@ -1247,15 +1259,15 @@ uint8_t eeprom_compute_chksum(void *buf, int8_t len)
   return (chksum ^ 0xff) + 1;
 }
 
-void eeprom_write_cfg(struct _eeprom_cfg *pcfg) 
+void eeprom_write_cfg(struct _eeprom_cfg *pcfg, uint16_t eeprom_addr) 
 {    
   pcfg->chksum = eeprom_compute_chksum(pcfg, sizeof(*pcfg)-1);
-  eeprom_write_block(pcfg, (void *)eeprom_cfg1_addr, sizeof(*pcfg));   
+  eeprom_write_block(pcfg, (void *)eeprom_addr, sizeof(*pcfg));   
 }
 
-int8_t eeprom_read_cfg(struct _eeprom_cfg *pcfg, uint8_t expect_ver) 
+int8_t eeprom_read_cfg(struct _eeprom_cfg *pcfg, uint16_t eeprom_addr, uint8_t expect_ver) 
 {
-  eeprom_read_block(pcfg, (void *)eeprom_cfg1_addr, sizeof(*pcfg));
+  eeprom_read_block(pcfg, (void *)eeprom_addr, sizeof(*pcfg));
   if (pcfg->ver != expect_ver) {
     return -1;
   }
@@ -2035,7 +2047,7 @@ void stick_config(struct _stick_zone *psz)
   struct _eeprom_cfg eeprom_cfg;
   
   // read eeprom
-  eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver);
+  eeprom_read_cfg(&eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
   param_yval[0] = (int8_t) eeprom_cfg.wing_mode + 1;
   param_yval[1] = eeprom_cfg.vr_notch[0] - 4;
   param_yval[2] = eeprom_cfg.vr_notch[1] - 4;
@@ -2115,7 +2127,8 @@ void stick_config(struct _stick_zone *psz)
   eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) (param_yval[4] - 1);
   eeprom_cfg.cppm_mode = (enum CPPM_MODE) (param_yval[5] - 1);
   eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) (param_yval[6] - 1);
-  eeprom_write_cfg(&eeprom_cfg);
+  eeprom_write_cfg(&eeprom_cfg, eeprom_cfg1_addr);
+  eeprom_write_cfg(&eeprom_cfg, eeprom_cfg2_addr);
 }
 
 
@@ -2136,17 +2149,15 @@ void setup()
   Serial.begin(115200L);
 #endif
   
-#if 0
-  ow_init();
-  ow_loop();
-  return;
-#endif
-
 #if defined(RX3S_V1) || defined(RX3S_V2)
   // clear wd reset bit and disable wdt in case it was enabled due to stick config reboot
   MCUSR &= ~(1 << WDRF);
   wdt_disable();
 #endif // RX3S_V1 || RX3S_V2
+
+#if 1
+  ow_loop();
+#endif
 
   // init TIMER1
   TCCR1A = 0; // normal counting mode
@@ -2176,27 +2187,64 @@ void setup()
   pid_param_hold.i_windup = 32768;
   pid_param_hold.output_shift = 8;
   
-  struct _eeprom_cfg eeprom_cfg;
-  if (boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN)) {
-    // invalidate current eeprom, force write on next boot
-    eeprom_cfg.ver = 0;
-    eeprom_write_cfg(&eeprom_cfg);
-    set_led_msg(3, 50, LED_VERY_SHORT); // 3 sec
-    while (true) {
-      update_led(micros1());    
-    }
+  // eeprom processing
+  
+  struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
+  struct _eeprom_stats eeprom_stats;
+  eeprom_read_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
+  if (eeprom_stats.device_id != DEVICE_ID || eeprom_stats.device_ver != DEVICE_VER) {
+    // initialize eeprom stats
+    eeprom_stats.device_id = DEVICE_ID;
+    eeprom_stats.device_ver = DEVICE_VER;
+    eeprom_stats.eeprom_cfg1_err = 0;
+    eeprom_stats.eeprom_cfg2_err = 0;
+    eeprom_stats.eeprom_cfg12_reset = 0;
   }
 
-  if (eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver) < 0) {
-    // write eeprom with default parameters
-    eeprom_cfg.ver = eeprom_cfg_ver;
-    eeprom_copy_to_cfg(&eeprom_cfg);
-    eeprom_write_cfg(&eeprom_cfg);
+  calibration_wag_count = 3;
+  int8_t ret = 0x00;
+  if (eeprom_read_cfg(&eeprom_cfg1, eeprom_cfg1_addr, eeprom_cfg_ver) < 0)
+    ret |= 0x01;
+  if (eeprom_read_cfg(&eeprom_cfg2, eeprom_cfg2_addr, eeprom_cfg_ver) < 0)
+    ret |= 0x10;
+  if (boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN))
+    ret = 0xff;
+
+  switch (ret) {
+  case 0x00: // both copy 1 and 2 good
+    break;
+  case 0x01: // copy 1 bad, copy 2 good
+    eeprom_cfg1 = eeprom_cfg2;
+    eeprom_write_cfg(&eeprom_cfg2, eeprom_cfg1_addr);
+    eeprom_stats.eeprom_cfg1_err++;
+    break;
+  case 0x10: // copy 1 good, copy 2 bad
+    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg2_addr);
+    eeprom_stats.eeprom_cfg2_err++;
+    break;
+  default: // both copy 1 and 2 bad (ret=0x11), or boot_check (ret=0xff)
+    eeprom_cfg1.ver = eeprom_cfg_ver;
+    eeprom_copy_to_cfg(&eeprom_cfg1);
+    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg1_addr);
+    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg2_addr);
+    eeprom_stats.eeprom_cfg12_reset++;
     calibration_wag_count = 9;
-  } else {
-    calibration_wag_count = 3;
+    break;
   }
-  eeprom_copy_from_cfg(&eeprom_cfg);
+  eeprom_copy_from_cfg(&eeprom_cfg1);
+  
+  if (ret != 0x00) {
+    // update stats to eeprom if at least one cfg was written
+    eeprom_write_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
+  }
+  
+  if (ret == 0xff) {
+    // boot_check initiated, halt and flash led indefinitely
+    set_led_msg(3, 50, LED_VERY_SHORT); // 3 sec
+    while (true) {
+      update_led(micros1());
+    }      
+  }
   
   // set mixer limits based on configuration
   switch (mixer_epa_mode) {
@@ -2344,6 +2392,10 @@ void setup()
 
  void loop() 
 { 
+#if 0
+  return;
+#endif
+
   int8_t i;
   uint32_t t = micros1();
   uint32_t last_rx_time = t;
