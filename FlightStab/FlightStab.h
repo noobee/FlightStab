@@ -7,12 +7,14 @@ aquastar programming box to be in sync with the flightstab firmware.
 
 #if !defined(FLIGHTSTAB_H)
 #define FLIGHTSTAB_H
-enum WING_MODE {WING_SINGLE_AIL, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
-enum MIXER_EPA_MODE {MIXER_EPA_FULL, MIXER_EPA_NORM, MIXER_EPA_TRACK};
-enum CPPM_MODE {CPPM_NONE=0, CPPM_OPEN9X=1, CPPM_UNDEF};
-enum MOUNT_ORIENT {MOUNT_NORMAL, MOUNT_ROLL_90_LEFT, MOUNT_ROLL_90_RIGHT};
 
-const int8_t eeprom_cfg_ver = 2;
+enum WING_MODE {WING_SINGLE_AIL=1, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
+enum MIXER_EPA_MODE {MIXER_EPA_FULL=1, MIXER_EPA_NORM, MIXER_EPA_TRACK};
+enum CPPM_MODE {CPPM_NONE=1, CPPM_RETA1a2F, CPPM_TAERF1a2F, CPPM_AETR1a2F};
+enum MOUNT_ORIENT {MOUNT_NORMAL=1, MOUNT_ROLL_90_LEFT, MOUNT_ROLL_90_RIGHT};
+enum HOLD_AXES {HOLD_AXES_AER=1, HOLD_AXES_AE_R, HOLD_AXES_A_E_R};
+
+const int8_t eeprom_cfg_ver = 3;
 
 struct _eeprom_stats {
   int8_t device_id;
@@ -29,17 +31,18 @@ struct _eeprom_cfg {
   enum MIXER_EPA_MODE mixer_epa_mode;
   enum CPPM_MODE cppm_mode; 
   enum MOUNT_ORIENT mount_orient;
+  enum HOLD_AXES hold_axes;
   uint8_t chksum;
 };
 
-enum OW_COMMAND {OW_SYNC, OW_GET_CFG, OW_SET_CFG};
+enum OW_COMMAND {OW_GET_CFG, OW_SET_CFG, OW_GET_STATS, OW_SET_STATS};
 
 struct _ow_msg {
   uint8_t cmd;
   union {
-    int8_t device_id; // OW_SYNC response
-    struct _eeprom_cfg eeprom_cfg;
+    struct _eeprom_cfg eeprom_cfg; // OW_*_CFG
+    struct _eeprom_stats eeprom_stats; // OW_*_STATS
   } u;
 };
-
+ 
 #endif // FLIGHTSTAB_H

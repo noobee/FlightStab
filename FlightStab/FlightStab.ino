@@ -7,6 +7,8 @@
 
 #include "FlightStab.h"
 
+void ow_loop(); // OneWireSerial.ino
+
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 /***************************************************************************************************************
@@ -406,17 +408,14 @@ int16_t correction[3] = {0, 0, 0}; // final correction values
 enum WING_MODE wing_mode = WING_SINGLE_AIL;
 enum MIXER_EPA_MODE mixer_epa_mode = MIXER_EPA_FULL;
 enum CPPM_MODE cppm_mode = CPPM_NONE;
-#if defined(DISABLE_CPPM)
-#define CPPM_END CPPM_NONE
-#else
-#define CPPM_END CPPM_OPEN9X
-#endif
 enum MOUNT_ORIENT mount_orient = MOUNT_NORMAL;
+enum HOLD_AXES hold_axes = HOLD_AXES_AE_R;
 
 const int8_t rx_chan_list_size = 8;
 volatile int16_t *rx_chan[][rx_chan_list_size] = {
-  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // open9x RETA1a2F
-  {&tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in} // reserved undef
+  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_RETA1a2F (FrSky)
+  {&thr_in, &ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_TAERF1a2F (JR/Spektrum)
+  {&ail_in, &ele_in, &thr_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in} // CPPM_AETR1a2F (Futaba)
 };
 
 // stabilization mode
@@ -822,7 +821,7 @@ void read_switches()
  ***************************************************************************************************************/
 
 volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
-int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cppm_mode-1][<n>] var for CPPM
+int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cppm_mode-2][<n>] var for CPPM
 // non cppm mode
 volatile int16_t *rx_portb[] = RX_PORTB;
 volatile int16_t *rx_portd[] = RX_PORTD;
@@ -881,7 +880,7 @@ ISR(TIMER1_CAPT_vect)
     ch = 0;
     ch0_synced = true;
   } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-    *rx_chan[cppm_mode-1][ch] = width;
+    *rx_chan[cppm_mode-2][ch] = width;
     if (ch == rx_frame_sync_ref)
       rx_frame_sync = true;
     ch++;
@@ -1060,7 +1059,7 @@ inline void int6_vect_cppm()
       ch = 0;
       ch0_synced = true;
     } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-      *rx_chan[cppm_mode-1][ch] = width;
+      *rx_chan[cppm_mode-2][ch] = width;
       if (ch == rx_frame_sync_ref)
         rx_frame_sync = true;
       ch++;
@@ -1071,7 +1070,7 @@ inline void int6_vect_cppm()
 
 ISR(INT6_vect) 
 { 
-  if (cppm_mode > 0)
+  if (cppm_mode != CPPM_NONE)
     int6_vect_cppm();
   else
     int6_vect_non_cppm();
@@ -1087,7 +1086,7 @@ ISR(PCINT0_vect)
 void init_digital_in_rx()
 {
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
 #if defined(NANOWII)
     // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
     EICRB |= (1 << ISC60); // interrupt on pin change
@@ -1287,6 +1286,7 @@ void eeprom_copy_to_cfg(struct _eeprom_cfg *pcfg)
   pcfg->mixer_epa_mode = mixer_epa_mode;
   pcfg->cppm_mode = cppm_mode;
   pcfg->mount_orient = mount_orient;
+  pcfg->hold_axes = hold_axes;
 }
 
 void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
@@ -1302,6 +1302,7 @@ void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
   mixer_epa_mode = pcfg->mixer_epa_mode;
   cppm_mode = pcfg->cppm_mode;
   mount_orient = pcfg->mount_orient;
+  hold_axes = pcfg->hold_axes;
 }
 
 
@@ -2032,8 +2033,8 @@ void stick_config(struct _stick_zone *psz)
 
 // note: be careful about off-by-one errors in this function
 
-  const int8_t param_ymin[] = {WING_SINGLE_AIL+1, -4, -4, -4, MIXER_EPA_FULL+1 , CPPM_NONE+1, MOUNT_NORMAL+1       , 1};
-  const int8_t param_ymax[] = {WING_DUAL_AIL+1  , +4, +4, +4, MIXER_EPA_TRACK+1, CPPM_END+1 , MOUNT_ROLL_90_RIGHT+1, 2};
+  const int8_t param_ymin[] = {WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , 1};
+  const int8_t param_ymax[] = {WING_DUAL_AIL  , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 2};
   const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
   int8_t param_yval[param_xcount];
 
@@ -2048,13 +2049,13 @@ void stick_config(struct _stick_zone *psz)
   
   // read eeprom
   eeprom_read_cfg(&eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
-  param_yval[0] = (int8_t) eeprom_cfg.wing_mode + 1;
+  param_yval[0] = (int8_t) eeprom_cfg.wing_mode;
   param_yval[1] = eeprom_cfg.vr_notch[0] - 4;
   param_yval[2] = eeprom_cfg.vr_notch[1] - 4;
   param_yval[3] = eeprom_cfg.vr_notch[2] - 4;
-  param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode + 1;
-  param_yval[5] = (int8_t) eeprom_cfg.cppm_mode + 1;
-  param_yval[6] = (int8_t) eeprom_cfg.mount_orient + 1;
+  param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode;
+  param_yval[5] = (int8_t) eeprom_cfg.cppm_mode;
+  param_yval[6] = (int8_t) eeprom_cfg.mount_orient;
   param_yval[7] = 1; // exit option
   
   int8_t update_x = (x + 1) << 1;
@@ -2120,13 +2121,13 @@ void stick_config(struct _stick_zone *psz)
   }
 
   // write eeprom;
-  eeprom_cfg.wing_mode = (enum WING_MODE) (param_yval[0] - 1);
+  eeprom_cfg.wing_mode = (enum WING_MODE) param_yval[0];
   eeprom_cfg.vr_notch[0] = param_yval[1] + 4;
   eeprom_cfg.vr_notch[1] = param_yval[2] + 4;
   eeprom_cfg.vr_notch[2] = param_yval[3] + 4;
-  eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) (param_yval[4] - 1);
-  eeprom_cfg.cppm_mode = (enum CPPM_MODE) (param_yval[5] - 1);
-  eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) (param_yval[6] - 1);
+  eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) param_yval[4];
+  eeprom_cfg.cppm_mode = (enum CPPM_MODE) param_yval[5];
+  eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) param_yval[6];
   eeprom_write_cfg(&eeprom_cfg, eeprom_cfg1_addr);
   eeprom_write_cfg(&eeprom_cfg, eeprom_cfg2_addr);
 }
@@ -2135,7 +2136,7 @@ void stick_config(struct _stick_zone *psz)
 /***************************************************************************************************************
  * SETUP
  ***************************************************************************************************************/
- 
+
 void setup() 
 {
   int8_t i;
@@ -2157,6 +2158,7 @@ void setup()
 
 #if 0
   ow_loop();
+  return;
 #endif
 
   // init TIMER1
@@ -2296,7 +2298,7 @@ void setup()
   }
       
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB2 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
@@ -2343,7 +2345,7 @@ void setup()
   }
 
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB2 10 THR_OUT instead of RUD_IN
     rx_portb[0] = NULL; // disable ail_in
@@ -2359,7 +2361,7 @@ void setup()
 
 #if defined(NANOWII)
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
     // PE6 7 CPPM_IN instead of THR/AUX2_IN
     // PC6 5 THR_OUT instead of M
     // PD7 6 FLP_OUT instead of M
