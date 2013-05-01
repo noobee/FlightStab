@@ -495,13 +495,13 @@ int get_free_sram()
   return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval); 
 }
 
-int8_t boot_check(int8_t in_pin, int8_t out_pin)
+bool boot_check(int8_t in_pin, int8_t out_pin)
 {
   pinMode(in_pin, INPUT);
   pinMode(out_pin, OUTPUT);
 
-  int8_t result = true;
-  for (int8_t i=0; i<4; i++) {
+  bool result = true;
+  for (int8_t i=0; i<8; i++) {
     int8_t level = i & 1 ? HIGH : LOW;
     digitalWrite(out_pin, level);
     if (digitalRead(in_pin) != level) {
@@ -2155,7 +2155,7 @@ void setup()
   wdt_disable();
 #endif // RX3S_V1 || RX3S_V2
 
-#if 1
+#if 0
   ow_loop();
 #endif
 
@@ -2191,8 +2191,11 @@ void setup()
   
   struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
   struct _eeprom_stats eeprom_stats;
+  
+  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0xff : 0;
+    
   eeprom_read_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
-  if (eeprom_stats.device_id != DEVICE_ID || eeprom_stats.device_ver != DEVICE_VER) {
+  if (ret || (eeprom_stats.device_id != DEVICE_ID || eeprom_stats.device_ver != DEVICE_VER)) {
     // initialize eeprom stats
     eeprom_stats.device_id = DEVICE_ID;
     eeprom_stats.device_ver = DEVICE_VER;
@@ -2201,22 +2204,19 @@ void setup()
     eeprom_stats.eeprom_cfg12_reset = 0;
   }
 
-  calibration_wag_count = 3;
-  int8_t ret = 0x00;
   if (eeprom_read_cfg(&eeprom_cfg1, eeprom_cfg1_addr, eeprom_cfg_ver) < 0)
     ret |= 0x01;
   if (eeprom_read_cfg(&eeprom_cfg2, eeprom_cfg2_addr, eeprom_cfg_ver) < 0)
     ret |= 0x10;
-  if (boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN))
-    ret = 0xff;
 
+  calibration_wag_count = 3;
   switch (ret) {
   case 0x00: // both copy 1 and 2 good
     break;
   case 0x01: // copy 1 bad, copy 2 good
-    eeprom_cfg1 = eeprom_cfg2;
     eeprom_write_cfg(&eeprom_cfg2, eeprom_cfg1_addr);
     eeprom_stats.eeprom_cfg1_err++;
+    eeprom_cfg1 = eeprom_cfg2;
     break;
   case 0x10: // copy 1 good, copy 2 bad
     eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg2_addr);
