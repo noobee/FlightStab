@@ -298,16 +298,21 @@ void loop()
 again:
   t = micros();
 
-  if ((int32_t)(t - last_msg_time) > 500000L) {
-    ow_msg.cmd = OW_SYNC;
+  // heartbeat message
+  if ((int32_t)(t - last_msg_time) > 450000L) { // every 450ms
+    struct _ow_msg ow_msg;
+    ow_msg.cmd = OW_GET_STATS;
     send_msg(&ow_msg, sizeof(ow_msg));
-    if (recv_msg(&ow_msg, sizeof(ow_msg), 1000)) {
+    if (recv_msg(&ow_msg, sizeof(ow_msg), 100)) { // wait 100ms for response
       sync_ok++;
     } else {
       sync_err++;
     }  
     last_msg_time = t;
   }
+
+
+
   
   if ((int32_t)(t - last_lcd_time) > 1000000L) {
     lcd.clear();    

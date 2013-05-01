@@ -1,7 +1,6 @@
 /* FlightStab **************************************************************************************************/
 
-#include <Arduino.h>
-
+#if 1
 const uint8_t ow_pin = 12;
 
 uint8_t ow_mask;
@@ -20,13 +19,13 @@ void ow_init()
   // uses timer 1 at full clock speed (16mhz)
   TCCR1A = 0; // normal counting mode
   TCCR1B = (1 << CS10); // clkio
-
+#if 1
   ow_mask = digitalPinToBitMask(ow_pin);
   uint8_t port = digitalPinToPort(ow_pin);
   ow_mode_reg = portModeRegister(port);
   ow_port_reg = portOutputRegister(port);
   ow_pin_reg = portInputRegister(port);
-    
+#endif    
   // set to [input mode + NO pull up]
   // require external pull up to HIGH. setting to output mode alone will pull pin down to LOW
   *ow_mode_reg &= ~ow_mask;
@@ -120,8 +119,8 @@ bool ow_recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
 
     w = ow_read(timeout_ms);
     if (w & 0xc000) {
-      Serial.print("bad_conn=");
-      Serial.println(w, HEX);
+//      Serial.print("bad_conn=");
+//      Serial.println(w, HEX);
       return false;
     }
     ch = w & 0xff;
@@ -151,11 +150,11 @@ bool ow_recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
         // received expected length
         if (chksum == 0) {
           // good payload
-          Serial.println("good payload");
+//          Serial.println("good payload");
           return true;
         } else {
           // bad checksum
-          Serial.println("bad chksum");
+//          Serial.println("bad chksum");
           state = IDLE;
         }
       }
@@ -165,31 +164,42 @@ bool ow_recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
 }
 
 void ow_loop() {
-  struct _ow_msg ow_msg;
   
-again:
+  ow_init();
   
-  while (true) {    
-    if (!ow_recv_msg(&ow_msg, sizeof(ow_msg), 5000)) {
+again:  
+  while (true) {
+    set_led(LED_INVERT);
+
+    struct _ow_msg ow_msg;
+    if (!ow_recv_msg(&ow_msg, sizeof(ow_msg), 500)) { // 500ms to receive message
       break; 
     }
     
-    Serial.print("cmd=");
-    Serial.println(ow_msg.cmd, HEX);
-    
+//    Serial.print("cmd=");
+//    Serial.println(ow_msg.cmd, HEX);
+
+#if 1
     switch(ow_msg.cmd) {
-    case OW_SYNC:
-      ow_msg.u.device_id = 0xa5;
-      break;
     case OW_GET_CFG:
+      eeprom_read_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
       break;
     case OW_SET_CFG:
+      eeprom_read_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
+      eeprom_read_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg2_addr, eeprom_cfg_ver);
       break;
+    case OW_GET_STATS:
+      eeprom_read_block(&ow_msg.u.eeprom_stats, (void *)eeprom_stats_addr, sizeof(ow_msg.u.eeprom_stats));
+    case OW_SET_STATS:
+      eeprom_read_block(&ow_msg.u.eeprom_stats, (void *)eeprom_stats_addr, sizeof(ow_msg.u.eeprom_stats));
+    break;
     }
-
+#endif
     ow_msg.cmd != 0x80;
     ow_send_msg(&ow_msg, sizeof(ow_msg));
   }
 
   goto again;
 }
+
+#endif
