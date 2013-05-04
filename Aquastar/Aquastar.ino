@@ -21,7 +21,12 @@
 */
 
 // button pins
+#if defined(AQUASTAR)
 const uint8_t button_pin[] = {2, 3, 4, 5}; // up, left, right, down
+#endif 
+#if defined(DLUX)
+const uint8_t button_pin[] = {2, 3, 5, 4}; // up, left, right, down
+#endif 
 
 // lcd pins
 LiquidCrystal lcd(A2, A3, A4, 8, 9, 10, 11); // (rs, rw, enable, d4, d5, d6, d7)
