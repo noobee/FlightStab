@@ -8,8 +8,6 @@
 
 #include "FlightStab.h"
 
-#define LED_PIN 13
-
 /*
  Aquastar pin mapping
  PB0  8 LCD_D4         PC0 14/A0               PD0 0 RXD
@@ -22,21 +20,68 @@
  PB7 15 (XTAL2)                                PD7 7 
 */
 
-// BUTTONS
-
-enum BUTTON_STATE {BUTTON_UP, BUTTON_DOWN, BUTTON_DOWN_AUTO};
-enum BUTTON_EVENT {BUTTON_NONE, BUTTON_RELEASE, BUTTON_PRESS};
-
-BUTTON_STATE button_state[] = {BUTTON_UP, BUTTON_UP, BUTTON_UP, BUTTON_UP};
-BUTTON_EVENT button_event[] = {BUTTON_NONE, BUTTON_NONE, BUTTON_NONE, BUTTON_NONE};
+// button pins
 const uint8_t button_pin[] = {2, 3, 4, 5}; // up, left, right, down
 
-// LCD
-
+// lcd pins
 LiquidCrystal lcd(A2, A3, A4, 8, 9, 10, 11); // (rs, rw, enable, d4, d5, d6, d7)
 
-// string table
+// lcd custom characters
+byte up_arrow[8] = {
+  B00100,
+  B01110,
+  B10101,
+  B00100,
+  B00100,
+  B00100,
+  B00000,
+};
 
+byte down_arrow[8] = {
+  B00000,
+  B00100,
+  B00100,
+  B00100,
+  B10101,
+  B01110,
+  B00100,
+};
+
+// string tables in flash
+
+#define CHAR_DEGREE \xdf
+#define CHAR_RIGHT_ARROW \x7e
+#define STR(s) #s
+#define XSTR(s) STR(s)
+
+// device names
+prog_char undef_device[] PROGMEM = "Undefined";
+prog_char rx3s_v1[] PROGMEM = "RX3S V1";
+prog_char rx3s_v2v3[] PROGMEM = "RX3S V2/V3";
+prog_char nanowii[] PROGMEM = "NanoWii";
+
+prog_char *device_name[] PROGMEM = { // must match enum DEVICE_IDS in eeprom_stats.device_id
+  undef_device,
+  rx3s_v1,
+  rx3s_v2v3,
+  nanowii
+};
+
+enum SCREEN_PAGES {
+  STATUS_PAGE, 
+  WING_MODE_PAGE, 
+  ROLL_GAIN_PAGE, 
+  PITCH_GAIN_PAGE, 
+  YAW_GAIN_PAGE, 
+  EPA_MODE_PAGE, 
+  CPPM_MODE_PAGE, 
+  MOUNT_ORIENT_PAGE, 
+  HOLD_AXES_PAGE, 
+  EEPROM_PAGE
+};
+
+// screen pages
+prog_char status[] PROGMEM = "STATUS";
 prog_char wing_mode[] PROGMEM = "WING MODE";
 prog_char roll_gain[] PROGMEM = "ROLL GAIN";
 prog_char pitch_gain[] PROGMEM = "PITCH GAIN";
@@ -44,7 +89,12 @@ prog_char yaw_gain[] PROGMEM = "YAW GAIN";
 prog_char mixer_epa_mode[] PROGMEM = "EPA MODE";
 prog_char cppm_mode[] PROGMEM = "CPPM MODE";
 prog_char mount_orient[] PROGMEM = "MOUNT ORIENT";
-prog_char config_exit[] PROGMEM = "EXIT";
+prog_char hold_axes[] PROGMEM = "HOLD AXES";
+prog_char eeprom[] PROGMEM = "EEPROM";
+
+prog_char status_device_id[] PROGMEM = "ID=";
+prog_char status_device_ver[] PROGMEM = "VER= ";
+prog_char status_device_eeprom[] PROGMEM = "1/2/R= ";
 
 prog_char wing_single_ail[] PROGMEM = "Single Aileron";
 prog_char wing_delta[] PROGMEM = "Delta";
@@ -56,15 +106,25 @@ prog_char mixer_epa_norm[] PROGMEM = "Norm 1100-1900";
 prog_char mixer_epa_track[] PROGMEM = "Tracking";
 
 prog_char cppm_none[] PROGMEM = "None";
-prog_char cppm_open9x[] PROGMEM = "RETA1a2F";
+prog_char cppm_RETA1a2f[] PROGMEM = "RETA1a2F";
+prog_char cppm_TAER1a2F[] PROGMEM = "TAER1a2F";
+prog_char cppm_AETR1a2F[] PROGMEM = "AETR1a2F";
 
 prog_char mount_normal[] PROGMEM = "Normal";
-prog_char mount_roll90left[] PROGMEM = "Roll 90deg Left";
-prog_char mount_roll90right[] PROGMEM = "Roll 90deg Right";
+prog_char mount_roll90left[] PROGMEM = "Roll 90" XSTR(CHAR_DEGREE) " Left";
+prog_char mount_roll90right[] PROGMEM = "Roll 90" XSTR(CHAR_DEGREE) " Right";
 
-prog_char config_update[] PROGMEM = "Update EEPROM ^";
+prog_char hold_axes_aer[] PROGMEM = "[AER]";
+prog_char hold_axes_ae_r[] PROGMEM = "[AE][R]";
+prog_char hold_axes_a_e_r[] PROGMEM = "[A][E][R]";
+
+prog_char eeprom_instr[] PROGMEM = "Up/Dn then " XSTR(CHAR_RIGHT_ARROW);
+prog_char eeprom_update_cfg[] PROGMEM = "Update Config " XSTR(CHAR_RIGHT_ARROW);
+prog_char eeprom_erase_cfg[] PROGMEM = "Erase Config " XSTR(CHAR_RIGHT_ARROW);
+prog_char eeprom_erase_stats[] PROGMEM = "Erase Stats " XSTR(CHAR_RIGHT_ARROW);
 
 prog_char *menu_heading[] PROGMEM = {
+  status,
   wing_mode,
   roll_gain,
   pitch_gain,
@@ -72,10 +132,14 @@ prog_char *menu_heading[] PROGMEM = {
   mixer_epa_mode,
   cppm_mode,
   mount_orient,
-  config_exit,
+  hold_axes,
+  eeprom,
 };
 
-prog_char *menu_item[][4] PROGMEM = {
+prog_char *menu_item[][5] PROGMEM = {
+  {status_device_id,
+   status_device_ver,
+   status_device_eeprom},
   {wing_single_ail,
    wing_delta,
    wing_vtail,
@@ -87,19 +151,34 @@ prog_char *menu_item[][4] PROGMEM = {
    mixer_epa_norm,
    mixer_epa_track},
   {cppm_none,
-   cppm_open9x},
+   cppm_RETA1a2f,
+   cppm_TAER1a2F,
+   cppm_AETR1a2F},
   {mount_normal,
    mount_roll90left,
    mount_roll90right},
-  {config_update},
+  {hold_axes_aer,
+   hold_axes_ae_r,
+   hold_axes_a_e_r},
+  {eeprom_instr,
+   eeprom_update_cfg,
+   eeprom_erase_cfg,
+   eeprom_erase_stats},
 };
 
-const int8_t menu_count[] = {4, 0, 0, 0, 3, 2, 3, 1};
-
+const int8_t menu_count[] = {3, 4, 0, 0, 0, 3, 4, 3, 3, 4};
+const int8_t param_min[] = {1, WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL,  CPPM_NONE,     MOUNT_NORMAL,        HOLD_AXES_AER,   1};
+const int8_t param_max[] = {3, WING_DUAL_AIL,   +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, HOLD_AXES_A_E_R, 4};
 
 /***************************************************************************************************************
 * BUTTONS
 ***************************************************************************************************************/
+
+enum BUTTON_ID {BUTTON_ID_UP, BUTTON_ID_LEFT, BUTTON_ID_RIGHT, BUTTON_ID_DOWN};
+enum BUTTON_STATE {BUTTON_UP, BUTTON_DOWN, BUTTON_DOWN_AUTO};
+enum BUTTON_EVENT {BUTTON_NONE, BUTTON_RELEASE, BUTTON_PRESS};
+BUTTON_STATE button_state[] = {BUTTON_UP, BUTTON_UP, BUTTON_UP, BUTTON_UP};
+BUTTON_EVENT button_event[] = {BUTTON_NONE, BUTTON_NONE, BUTTON_NONE, BUTTON_NONE};
 
 bool button_read()
 {
@@ -169,14 +248,13 @@ void button_init()
 }
 
 /***************************************************************************************************************
-* SERIAL MESSAGING
+* BITBANG SERIAL
 ***************************************************************************************************************/
 
 void serial_write_byte(uint8_t b) {
   Serial.write(b);
-  Serial.read(); // drain the received echo due to loopback
-  delay(5); // delay for the one-wire library to ready the next receive
-  // TODO: reduce delay?
+  Serial.read(); // drain the echo received due to loopback
+  delay(2); // delay for one-wire library on the target to ready the next receive
 }
 
 bool send_msg(void *buf, int8_t buf_len) {
@@ -194,7 +272,7 @@ bool recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
   enum RECV_STATE {IDLE, HEADER, LENGTH} state = IDLE;
   uint32_t t = micros();
   
-  while ((int32_t)(micros() - t) < timeout_ms * 1000) {
+  while ((int32_t)(micros() - t) < (int32_t)timeout_ms * 1000L) {
     uint8_t ch, len, chksum, i;
 
     if (!Serial.available())
@@ -240,6 +318,30 @@ bool recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
 }
 
 /***************************************************************************************************************
+* EEPROM CONFIG
+***************************************************************************************************************/
+
+void copy_from_cfg(int8_t *param, struct _eeprom_cfg *pcfg) {
+  param[1] = (int8_t) pcfg->wing_mode;
+  param[2] = pcfg->vr_notch[0];
+  param[3] = pcfg->vr_notch[1];
+  param[4] = pcfg->vr_notch[2];
+  param[5] = (int8_t) pcfg->mixer_epa_mode;
+  param[6] = (int8_t) pcfg->cppm_mode;
+  param[7] = (int8_t) pcfg->mount_orient;
+}
+
+void copy_to_cfg(int8_t *param, struct _eeprom_cfg *pcfg) {
+  pcfg->wing_mode = (WING_MODE) param[1];
+  pcfg->vr_notch[0] = param[2];
+  pcfg->vr_notch[1] = param[3];
+  pcfg->vr_notch[2] = param[4];
+  pcfg->mixer_epa_mode = (MIXER_EPA_MODE) param[5];
+  pcfg->cppm_mode = (CPPM_MODE) param[6];
+  pcfg->mount_orient = (MOUNT_ORIENT) param[7];
+}
+
+/***************************************************************************************************************
 * SETUP/LOOP
 ***************************************************************************************************************/
 
@@ -249,9 +351,6 @@ void setup()
   MCUSR &= ~(1 << WDRF);
   wdt_disable();
 
-  pinMode(LED_PIN, OUTPUT);
-  digitalWrite(LED_PIN, HIGH);
-
   Serial.begin(115200L);  
 
   // init buttons
@@ -259,99 +358,192 @@ void setup()
   
   // init lcd
   lcd.begin(16, 2);
-  lcd.clear();    
   lcd.blink();
-  lcd.setCursor(0, 0);
-  lcd.print("Open FlightStab");
-  lcd.setCursor(0, 1);
-  lcd.print("Programming Box");
-
-  delay(1000);
-
-#if 0  
-  for (int8_t i=0; i<7; i++) {
-    lcd.clear();    
-    lcd.setCursor(0, 0);
-    lcd.print((const __FlashStringHelper*) pgm_read_word(&menu_heading[i]));
-    for (int8_t j=0; j<menu_count[i]; j++) {
-      lcd.setCursor(0, 1);
-      lcd.print((const __FlashStringHelper*) pgm_read_word(&menu_item[i][j]));
-      lcd.print("................");
-      delay(2000);
-    }
-  }
-#endif
-  
+  lcd.createChar(0, up_arrow);
+  lcd.createChar(1, down_arrow);
 }
-
-int16_t button_count[] = {0, 0, 0, 0};
-
-struct _ow_msg ow_msg;
 
 void loop()
 {
   uint32_t t = micros();
   uint32_t last_msg_time = t;
-  uint32_t last_lcd_time = t;
-  int16_t sync_ok=0, sync_err=0;
+
+  enum OW_STATE {
+    OW_WAIT_CONNECT,
+    OW_WAIT_STATS,
+    OW_CONNECTED,
+    OW_SEND
+  } ow_state = OW_WAIT_CONNECT;
+
+  struct _ow_msg ow_msg;
+  struct _eeprom_stats eeprom_stats;
+
+  int8_t param[sizeof(menu_count)/sizeof(menu_count[0])];
+  int8_t page;
+  bool update_lcd = true;
   
 again:
   t = micros();
 
-  // heartbeat message
-  if ((int32_t)(t - last_msg_time) > 450000L) { // every 450ms
-    struct _ow_msg ow_msg;
-    ow_msg.cmd = OW_GET_STATS;
+  // connection state machine
+  if ((int32_t)(t - last_msg_time) > 250000L) { // every 250ms
+
+    switch (ow_state) {
+    case OW_WAIT_CONNECT: 
+      ow_msg.cmd = OW_GET_CFG; 
+      break;
+    case OW_WAIT_STATS:
+      ow_msg.cmd = OW_GET_STATS;
+      break;
+    case OW_CONNECTED: 
+      ow_msg.cmd = OW_NULL;
+      break;
+    case OW_SEND:
+      // ow_msg already set up
+      break;
+    }
     send_msg(&ow_msg, sizeof(ow_msg));
-    if (recv_msg(&ow_msg, sizeof(ow_msg), 100)) { // wait 100ms for response
-      sync_ok++;
+    
+    if (recv_msg(&ow_msg, sizeof(ow_msg), 200)) { // wait 200ms for response
+      switch (ow_state) {
+      case OW_WAIT_CONNECT:
+        copy_from_cfg(param, &ow_msg.u.eeprom_cfg);
+        ow_state = OW_WAIT_STATS;
+        break;
+      case OW_WAIT_STATS:
+        eeprom_stats = ow_msg.u.eeprom_stats;
+        ow_state = OW_CONNECTED;
+        // reset screen menu
+        page = STATUS_PAGE;
+        param[STATUS_PAGE] = param_min[STATUS_PAGE];
+        param[EEPROM_PAGE] = param_min[EEPROM_PAGE];
+        update_lcd = true;
+        break;    
+      case OW_SEND:
+        ow_state = OW_WAIT_CONNECT; // restart state machine
+        update_lcd = true;
+        break;    
+      }
     } else {
-      sync_err++;
-    }  
+      if (ow_state != OW_WAIT_CONNECT) {
+        update_lcd = true;
+      }
+      ow_state = OW_WAIT_CONNECT; // reset to initial state
+    }
     last_msg_time = t;
   }
 
+  // screen update
+  if (update_lcd) {
+    int8_t id, v;
+    struct _eeprom_stats *p = &eeprom_stats;
+    id = p->device_id;
+    if (id < DEVICE_UNDEF || id > DEVICE_NANOWII)
+      id = DEVICE_UNDEF;
 
+    update_lcd = false;
+    lcd.clear();
+   
+    switch (ow_state) {
+    case OW_WAIT_CONNECT:
+      lcd.print(F("Open FlightStab"));
+      lcd.setCursor(0, 1);
+      lcd.print(F("Program Box"));
+      break;
+    case OW_CONNECTED:
+      // heading
+      lcd.print((const __FlashStringHelper*) pgm_read_word(&menu_heading[page]));
+      lcd.setCursor(14, 0);
+      lcd.write(param[page] > param_min[page] ? byte(0) : ' '); // up arrow
+      lcd.write(param[page] < param_max[page] ? byte(1) : ' '); // down arrow
 
-  
-  if ((int32_t)(t - last_lcd_time) > 1000000L) {
-    lcd.clear();    
-    lcd.setCursor(0, 0);
-    lcd.print("ok=");
-    lcd.print(sync_ok);
-    lcd.print(" err=");
-    lcd.print(sync_err);
-    last_lcd_time = t;
-  }
-  
-#if 0  
-  if (button_read()) {
-    for (int8_t i=0; i<4; i++) {
-
-      if (button_event[i] == BUTTON_PRESS) {
-        button_count[i]++;
-
-        lcd.clear();    
-        lcd.setCursor(0, 0);
-        lcd.print("button=");
-        lcd.print(i);
-        lcd.print(" state=");
-        lcd.print(button_state[i]);
-        lcd.setCursor(0, 1);
-        lcd.print("count=");
-        lcd.print(button_count[i]);
-        
-        Serial.print("button=");        
-        Serial.print(i);
-        Serial.print(" state=");
-        Serial.print(button_state[i]);
-        Serial.print(" count=");
-        Serial.println(button_count[i]); 
+      lcd.setCursor(0, 1);
+      switch (page) {
+      case STATUS_PAGE:
+        lcd.print((const __FlashStringHelper*) pgm_read_word(&menu_item[page][param[page] - 1]));
+        switch (param[page]) {
+        case 1: // device_id
+          lcd.print(p->device_id);
+          lcd.print(F(" "));
+          lcd.print((const __FlashStringHelper*) pgm_read_word(&device_name[id]));
+          break;
+        case 2: // device_ver
+          lcd.print(p->device_ver); 
+          break;
+        case 3: // eeprom err and reset
+          lcd.print(p->eeprom_cfg1_err);
+          lcd.print(F("/"));
+          lcd.print(p->eeprom_cfg2_err);
+          lcd.print(F("/"));
+          lcd.print(p->eeprom_cfg12_reset);
+          break;
+        }
+        break;
+      case ROLL_GAIN_PAGE:
+      case PITCH_GAIN_PAGE:  
+      case YAW_GAIN_PAGE:
+        v = param[page];
+        if (v > 0) lcd.print(F("+"));
+        if (v == 0) lcd.print(F(" "));
+        lcd.print(v);
+        lcd.print(v < 0 ? F(" (Reverse)") : v > 0 ? F(" (Forward)") : F(" (OFF)"));
+        break;
+      default: // all other pages
+        if ((param[page] >= param_min[page]) && (param[page] <= param_max[page])) {
+          lcd.print((const __FlashStringHelper*) pgm_read_word(&menu_item[page][param[page] - 1]));
+        } else {
+          lcd.print(F("Invalid! ")); // out of range
+          lcd.print(param[page]);
+        }
+        break;
       }
+      break;
     }
   }
-#endif
+
+  // button handler
+  if ((ow_state == OW_CONNECTED) && button_read()) {
   
-  
+    if (button_event[BUTTON_ID_LEFT] == BUTTON_PRESS) {
+      if (page > 0)
+        page--;
+    }
+    if (button_event[BUTTON_ID_RIGHT] == BUTTON_PRESS) {
+    
+      if (page == EEPROM_PAGE) {
+        switch (param[page]) {
+        case 2: // update cfg
+          copy_to_cfg(param, &ow_msg.u.eeprom_cfg);
+          ow_msg.u.eeprom_cfg.ver = eeprom_cfg_ver;
+          ow_msg.cmd = OW_SET_CFG;
+          ow_state = OW_SEND; 
+          break;
+        case 3: // erase cfg
+          ow_msg.u.eeprom_cfg.ver = 0; // invalidate ver
+          ow_msg.cmd = OW_SET_CFG;
+          ow_state = OW_SEND; 
+          break;
+        case 4: // erase stats
+          ow_msg.u.eeprom_stats.device_id = 0; // invalidate device_id
+          ow_msg.cmd = OW_SET_STATS;
+          ow_state = OW_SEND; 
+          break;
+        }
+      }
+      if (page < sizeof(menu_count)/sizeof(menu_count[0])-1) {
+        page++;
+      }      
+    }
+    if (button_event[BUTTON_ID_UP] == BUTTON_PRESS) {
+      if (param[page] > param_min[page])
+        param[page]--;
+    }
+    if (button_event[BUTTON_ID_DOWN] == BUTTON_PRESS) {
+      if (param[page] < param_max[page])
+        param[page]++;
+    }
+    
+    update_lcd = true;
+  }
   goto again;
 }

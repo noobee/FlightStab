@@ -7,7 +7,7 @@
 
 #include "FlightStab.h"
 
-void ow_loop(); // OneWireSerial.ino
+bool ow_loop(); // OneWireSerial.ino
 
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
@@ -22,7 +22,9 @@ void ow_loop(); // OneWireSerial.ino
 
 //#define USE_SERIAL // enable serial port
 //#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
-//#define DISABLE_CPPM // remove cppm code to reduce firmware size
+//#define NO_CPPM // remove cppm code
+//#define NO_ONEWIRE // remove one-wire serial config code
+//#define NO_STICKCONFIG // remove stick config code
 
 //#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 //#define USE_I2CLIGHT // poll-based i2c access routines
@@ -56,6 +58,8 @@ void ow_loop(); // OneWireSerial.ino
  PB1 9 FLP_OUT instead of ELE_IN
  PB2 10 THR_OUT instead of RUD_IN
 */
+
+#define DEVICE_ID DEVICE_RX3S_V1
 
 // <VR>
 #define AIN_PORTC {&ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL}
@@ -99,6 +103,12 @@ void ow_loop(); // OneWireSerial.ino
 #define LED_BIT 5
 #define LED_XOR 0 // active high
 
+// one-wire port = PD7
+#define OW_BIT 7
+#define OW_DDR DDRD
+#define OW_PORT PORTD
+#define OW_PINREG PIND
+
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN 4
 #define EEPROM_RESET_IN_PIN 5
@@ -134,6 +144,8 @@ void ow_loop(); // OneWireSerial.ino
  PB1 9 FLP_OUT instead of ELE_IN
  PB2 10 THR_OUT instead of RUD_IN
 */
+
+#define DEVICE_ID DEVICE_RX3S_V2V3
 
 // <VR>
 #define AIN_PORTC {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL}
@@ -177,6 +189,12 @@ void ow_loop(); // OneWireSerial.ino
 #define LED_BIT 5
 #define LED_XOR 0 // active high
 
+// one-wire port = PD7
+#define OW_BIT 7
+#define OW_DDR DDRD
+#define OW_PORT PORTD
+#define OW_PINREG PIND
+
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN 4
 #define EEPROM_RESET_IN_PIN 5
@@ -210,6 +228,8 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
  PC6 5 THR_OUT instead of M
  PD7 6 FLP_OUT instead of M
 */
+
+#define DEVICE_ID DEVICE_NANOWII
 
 // <VR> MUST BE ALL NULL
 #define AIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL}
@@ -253,6 +273,12 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define LED_BIT 5
 #define LED_XOR 1 // active low
 
+// one-wire port = PC7
+#define OW_BIT 7
+#define OW_DDR DDRC
+#define OW_PORT PORTC
+#define OW_PINREG PINC
+
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN 6 // also used for flap_out in cppm mode
 #define EEPROM_RESET_IN_PIN 5 // also used for thr_out in cppm mode
@@ -266,6 +292,7 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #warning NANO_MPU6050 defined // emit device name
 #undef USE_ITG3200
 #define USE_MPU6050
+#undef GYRO_ORIENTATION
 #define GYRO_ORIENTATION(x, y, z) {gyro[0] = -(x); gyro[1] = (y); gyro[2] = (z);}
 #undef F_I2C
 #define F_I2C F_100KHZ // i2c bus speed
@@ -319,10 +346,10 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 
 // device id and version
 #if !defined(DEVICE_ID)
-#define DEVICE_ID 0x00
+#define DEVICE_ID DEVICE_UNDEF
 #endif
 #if !defined(DEVICE_VER)
-#define DEVICE_VER 0x12345678
+#define DEVICE_VER 12345678L
 #endif
 
 
@@ -348,7 +375,7 @@ volatile uint8_t rud_vr; //
 
  // for eeprom config
 int8_t vr_notch_table[4+1+4] = {0, 32, 64, 96, 128, 160, 192, 224, 255};
-int8_t vr_notch[3] = {8, 8, 8};
+int8_t vr_notch[3] = {4, 4, 4};
 
 // rx
 #define RX_WIDTH_MIN 900
@@ -1296,9 +1323,9 @@ void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
   for (i=0; i<3; i++) {   
     vr_notch[i] = pcfg->vr_notch[i];
   }
-  ail_vr = vr_notch_table[vr_notch[0]];
-  ele_vr = vr_notch_table[vr_notch[1]];
-  rud_vr = vr_notch_table[vr_notch[2]];
+  ail_vr = vr_notch_table[vr_notch[0] + 4];
+  ele_vr = vr_notch_table[vr_notch[1] + 4];
+  rud_vr = vr_notch_table[vr_notch[2] + 4];
   mixer_epa_mode = pcfg->mixer_epa_mode;
   cppm_mode = pcfg->cppm_mode;
   mount_orient = pcfg->mount_orient;
@@ -2050,9 +2077,9 @@ void stick_config(struct _stick_zone *psz)
   // read eeprom
   eeprom_read_cfg(&eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
   param_yval[0] = (int8_t) eeprom_cfg.wing_mode;
-  param_yval[1] = eeprom_cfg.vr_notch[0] - 4;
-  param_yval[2] = eeprom_cfg.vr_notch[1] - 4;
-  param_yval[3] = eeprom_cfg.vr_notch[2] - 4;
+  param_yval[1] = eeprom_cfg.vr_notch[0];
+  param_yval[2] = eeprom_cfg.vr_notch[1];
+  param_yval[3] = eeprom_cfg.vr_notch[2];
   param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode;
   param_yval[5] = (int8_t) eeprom_cfg.cppm_mode;
   param_yval[6] = (int8_t) eeprom_cfg.mount_orient;
@@ -2122,9 +2149,9 @@ void stick_config(struct _stick_zone *psz)
 
   // write eeprom;
   eeprom_cfg.wing_mode = (enum WING_MODE) param_yval[0];
-  eeprom_cfg.vr_notch[0] = param_yval[1] + 4;
-  eeprom_cfg.vr_notch[1] = param_yval[2] + 4;
-  eeprom_cfg.vr_notch[2] = param_yval[3] + 4;
+  eeprom_cfg.vr_notch[0] = param_yval[1];
+  eeprom_cfg.vr_notch[1] = param_yval[2];
+  eeprom_cfg.vr_notch[2] = param_yval[3];
   eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) param_yval[4];
   eeprom_cfg.cppm_mode = (enum CPPM_MODE) param_yval[5];
   eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) param_yval[6];
@@ -2150,26 +2177,11 @@ void setup()
   Serial.begin(115200L);
 #endif
   
-#if defined(RX3S_V1) || defined(RX3S_V2)
+#if defined(RX3S_V1) || defined(RX3S_V2) // test should be if atmega168/328
   // clear wd reset bit and disable wdt in case it was enabled due to stick config reboot
   MCUSR &= ~(1 << WDRF);
   wdt_disable();
 #endif // RX3S_V1 || RX3S_V2
-
-#if 0
-  ow_loop();
-  return;
-#endif
-
-  // init TIMER1
-  TCCR1A = 0; // normal counting mode
-  TCCR1B = (1 << CS11); // clkio/8
-  TIMSK1 = (1 << TOIE1); // enable overflow interrupt
-  // TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
-
-  // disable TIMER0
-  TCCR0B &= ~((1 << CS00) | (1 << CS01) | (1 << CS02)); // clock stopped
-  // TIMSK0 &= ~(1 << TOIE0); // disable overflow interrupt
 
   // set up default RATE pid parameters
   for (i=0; i<3; i++) {
@@ -2190,7 +2202,6 @@ void setup()
   pid_param_hold.output_shift = 8;
   
   // eeprom processing
-  
   struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
   struct _eeprom_stats eeprom_stats;
   
@@ -2242,11 +2253,31 @@ void setup()
   
   if (ret == 0xff) {
     // boot_check initiated, halt and flash led indefinitely
-    set_led_msg(3, 50, LED_VERY_SHORT); // 3 sec
     while (true) {
-      update_led(micros1());
+      set_led(LED_INVERT);
+      delay(100);
     }      
   }
+
+#if !defined(NO_ONEWIRE)
+  // check for program box, reboot on return if connected
+  // cannot disable TIMER0 or init TIMER1 before this call
+  if (ow_loop()) {
+    wdt_enable(WDTO_1S);
+    while (true);
+  }
+#endif // !NO_ONEWIRE
+  
+  // init TIMER1
+  TCCR1A = 0; // normal counting mode
+  TCCR1B = (1 << CS11); // clkio/8
+  TIMSK1 = (1 << TOIE1); // enable overflow interrupt
+  // TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
+
+  // disable TIMER0
+  TCCR0B &= ~((1 << CS00) | (1 << CS01) | (1 << CS02)); // clock stopped
+  // TIMSK0 &= ~(1 << TOIE0); // disable overflow interrupt
+  
   
   // set mixer limits based on configuration
   switch (mixer_epa_mode) {
@@ -2373,7 +2404,7 @@ void setup()
 #endif // !DISABLE_CPPM
 #endif // NANOWII
 
-  set_led_msg(0, wing_mode + 1, LED_LONG);
+  set_led_msg(0, wing_mode, LED_LONG);
 
   init_analog_in(); // vr
   init_digital_in_rx(); // rx
@@ -2394,10 +2425,6 @@ void setup()
 
  void loop() 
 { 
-#if 0
-  return;
-#endif
-
   int8_t i;
   uint32_t t = micros1();
   uint32_t last_rx_time = t;
@@ -2412,19 +2439,20 @@ void setup()
 
   int8_t reset_att_ail_ele;
   int8_t reset_att_rud;
-  
+
+#if !defined(NO_STICKCONFIG)  
   uint32_t stick_config_check_time = t;
   struct _stick_zone stick_zone;
   const uint8_t stick_config_seq[] = {0x78, 0x89, 0x98, 0x87, 0x78, 0x89, 0x98, 0x87, 0xff}; // 7-9-7-9-7
   int8_t stick_config_seq_i = 0;
   int8_t stick_configurable = true;
+
+  stick_zone_init(&stick_zone); // stick zone setup
+#endif // !NO_STICKCONFIG
   
   struct _calibration rx_cal;
   struct _calibration imu_cal;
-  
-  // stick zone setup
-  stick_zone_init(&stick_zone);
-  
+    
   // calibration setup  
   calibrate_init_stat(&rx_cal, 4);
   calibrate_init_stat(&imu_cal, 3);
@@ -2464,6 +2492,7 @@ again:
     last_imu_time = t;
   }
 
+#if !defined(NO_STICKCONFIG)
   if (stick_configurable && stick_zone_update(&stick_zone)) {
     stick_config_seq_i = (stick_zone.move == stick_config_seq[stick_config_seq_i]) ? stick_config_seq_i + 1 : 0;
     if (stick_config_seq[stick_config_seq_i] == 0xff) {
@@ -2475,7 +2504,8 @@ again:
     if ((int32_t)(t - stick_config_check_time) > 15000000L) // 15 sec to enter config mode
       stick_configurable = false;
   }
-    
+#endif // !NO_STICKCONFIG
+
   // short circuit rest of the loop if calibration not done, do not compute correction[]
   if (!rx_cal.done || !imu_cal.done) {
     goto again;

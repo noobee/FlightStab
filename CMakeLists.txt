@@ -77,7 +77,6 @@ add_arduino_firmware(${TODAY}_AQUASTAR Aquastar atmega8 "")
 
 # NANOWII
 add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
-add_arduino_firmware(TEST_NANOWII_NOCPPM FlightStab leonardo "NANOWII;DISABLE_CPPM")
 add_arduino_firmware(TEST_NANOWII_SERIAL FlightStab leonardo "NANOWII;USE_SERIAL")
 add_arduino_firmware(TEST_NANOWII_I2CDEVLIB FlightStab leonardo "NANOWII;USE_I2CDEVLIB")
 
@@ -88,16 +87,15 @@ add_arduino_firmware(${TODAY}_RX3S_V2 FlightStab pro5v "RX3S_V2")
 # RX3S_* 8MHz
 add_arduino_firmware(${TODAY}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
 add_arduino_firmware(${TODAY}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
-
-# RX3S_* CPPM disabled
-add_arduino_firmware(${TODAY}_RX3S_V1_NOCPPM FlightStab pro5v "RX3S_V1;DISABLE_CPPM")
-add_arduino_firmware(${TODAY}_RX3S_V2_NOCPPM FlightStab pro5v "RX3S_V2;DISABLE_CPPM")
          
 # RX3S_V2 test permutations          
 add_arduino_firmware(TEST_RX3S_V2_MOD_PCINT0 FlightStab pro5v "RX3S_V2;MOD_PCINT0")
 add_arduino_firmware(TEST_RX3S_V2_SERIAL FlightStab pro5v "RX3S_V2;USE_SERIAL")
 add_arduino_firmware(TEST_RX3S_V2_LED_TIMING FlightStab pro5v "RX3S_V2;LED_TIMING")
 add_arduino_firmware(TEST_RX3S_V2_I2CDEVLIB FlightStab pro5v "RX3S_V2;USE_I2CDEVLIB")
+add_arduino_firmware(TEST_RX3S_V2_NO_CPPM FlightStab pro5v "RX3S_V2;NO_CPPM")
+add_arduino_firmware(TEST_RX3S_V2_NO_ONEWIRE FlightStab pro5v "RX3S_V2;NO_ONEWIRE")
+add_arduino_firmware(TEST_RX3S_V2_NO_STICKCONFIG FlightStab pro5v "RX3S_V2;NO_STICKCONFIG")
 
 
 

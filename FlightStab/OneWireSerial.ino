@@ -1,36 +1,16 @@
 /* FlightStab **************************************************************************************************/
 
-#if 1
-const uint8_t ow_pin = 12;
-
-uint8_t ow_mask;
-volatile uint8_t *ow_mode_reg;
-volatile uint8_t *ow_port_reg;
-volatile uint8_t *ow_pin_reg;
-
 /***************************************************************************************************************
 * ONE-WIRE SERIAL
 ***************************************************************************************************************/
 
-const uint16_t ow_pulse_width_ticks = 139; // 16mhz clock, 1/115200 == 139 ticks
+// required OW_* definitions
+//#define OW_BIT 7
+//#define OW_DDR DDRD
+//#define OW_PORT PORTD
+//#define OW_PINREG PIND
 
-void ow_init()
-{
-  // uses timer 1 at full clock speed (16mhz)
-  TCCR1A = 0; // normal counting mode
-  TCCR1B = (1 << CS10); // clkio
-#if 1
-  ow_mask = digitalPinToBitMask(ow_pin);
-  uint8_t port = digitalPinToPort(ow_pin);
-  ow_mode_reg = portModeRegister(port);
-  ow_port_reg = portOutputRegister(port);
-  ow_pin_reg = portInputRegister(port);
-#endif    
-  // set to [input mode + NO pull up]
-  // require external pull up to HIGH. setting to output mode alone will pull pin down to LOW
-  *ow_mode_reg &= ~ow_mask;
-  *ow_port_reg &= ~ow_mask;
-}
+const uint16_t ow_pulse_width_ticks = 139; // 1/115200 at 16mhz == 139 ticks
 
 void ow_write(uint8_t b) 
 {
@@ -41,9 +21,9 @@ void ow_write(uint8_t b)
   for (int8_t i=0; i<10; i++) {
     while ((int16_t)(t - TCNT1) > 0);
     if (w & 1) {
-      *ow_mode_reg &= ~ow_mask; // set input mode, external pull up to 1
+      OW_DDR &= ~(1 << OW_BIT); // set input mode, external pull up to 1
     } else {
-      *ow_mode_reg |= ow_mask; // set output mode, internal pull down to 0
+      OW_DDR |= (1 << OW_BIT); // set output mode, internal pull down to 0
     }
     w >>= 1;
     t += ow_pulse_width_ticks;
@@ -60,7 +40,7 @@ uint16_t ow_read(int16_t timeout_ms)
   do {
 
     // check for link already down on entry
-    if (!(*ow_pin_reg & ow_mask)) {
+    if (!(OW_PINREG & (1 << OW_BIT))) {
       w = 0x4000;
       break;
     }
@@ -69,7 +49,7 @@ uint16_t ow_read(int16_t timeout_ms)
     while (timeout_ms-- > 0) {
       t = TCNT1 + 16000; // 1ms interval from current time
       while ((int16_t)(t - TCNT1) > 0) {
-        if (!(*ow_pin_reg & ow_mask)) {
+        if (!(OW_PINREG & (1 << OW_BIT))) {
           // found start edge (high to low)
           timeout_ms = -1;
           break;
@@ -90,7 +70,7 @@ uint16_t ow_read(int16_t timeout_ms)
       w >>= 1;
       while ((int16_t)(t - TCNT1) > 0);
       //PORTB ^= (1 << 5);
-      w |= (*ow_pin_reg & ow_mask) ? 0x80 : 0;
+      w |= (OW_PINREG & (1 << OW_BIT)) ? 0x80 : 0;
       t += ow_pulse_width_ticks;
     }
   } while (0);
@@ -119,8 +99,8 @@ bool ow_recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
 
     w = ow_read(timeout_ms);
     if (w & 0xc000) {
-//      Serial.print("bad_conn=");
-//      Serial.println(w, HEX);
+      // Serial.print("bad_conn=");
+      // Serial.println(w, HEX);
       return false;
     }
     ch = w & 0xff;
@@ -150,11 +130,11 @@ bool ow_recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
         // received expected length
         if (chksum == 0) {
           // good payload
-//          Serial.println("good payload");
+          // Serial.println("good payload");
           return true;
         } else {
           // bad checksum
-//          Serial.println("bad chksum");
+          // Serial.println("bad chksum");
           state = IDLE;
         }
       }
@@ -163,43 +143,56 @@ bool ow_recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
   }
 }
 
-void ow_loop() {
-  
-  ow_init();
-  
+bool ow_loop() {
 again:  
-  while (true) {
-    set_led(LED_INVERT);
+  bool connected = false;
+  bool done = false;
+  
+  // uses timer 1 at full clock speed (16mhz)
+  TCCR1A = 0; // normal counting mode
+  TCCR1B = (1 << CS10); // clkio
 
+  // set to [input mode + NO pull up]
+  // require external pull up to HIGH. setting to output mode alone will pull pin down to LOW
+  OW_DDR &= ~(1 << OW_BIT);
+  OW_PORT &= ~(1 << OW_BIT);
+  
+  do {
     struct _ow_msg ow_msg;
     if (!ow_recv_msg(&ow_msg, sizeof(ow_msg), 500)) { // 500ms to receive message
       break; 
     }
+    connected = true;
     
-//    Serial.print("cmd=");
-//    Serial.println(ow_msg.cmd, HEX);
+    // Serial.print("cmd=");
+    // Serial.println(ow_msg.cmd, HEX);
 
-#if 1
     switch(ow_msg.cmd) {
+    case OW_NULL:
+      break;
+    case OW_GET_STATS:
+      eeprom_read_block(&ow_msg.u.eeprom_stats, (void *)eeprom_stats_addr, sizeof(ow_msg.u.eeprom_stats));
+      break;
+    case OW_SET_STATS:
+      eeprom_write_block(&ow_msg.u.eeprom_stats, (void *)eeprom_stats_addr, sizeof(ow_msg.u.eeprom_stats));
+      done = true;
+      break;
     case OW_GET_CFG:
       eeprom_read_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
       break;
     case OW_SET_CFG:
-      eeprom_read_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
-      eeprom_read_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg2_addr, eeprom_cfg_ver);
+      eeprom_write_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg1_addr);
+      eeprom_write_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg2_addr);
+      done = true;
       break;
-    case OW_GET_STATS:
-      eeprom_read_block(&ow_msg.u.eeprom_stats, (void *)eeprom_stats_addr, sizeof(ow_msg.u.eeprom_stats));
-    case OW_SET_STATS:
-      eeprom_read_block(&ow_msg.u.eeprom_stats, (void *)eeprom_stats_addr, sizeof(ow_msg.u.eeprom_stats));
-    break;
     }
-#endif
+    // send response
     ow_msg.cmd != 0x80;
     ow_send_msg(&ow_msg, sizeof(ow_msg));
-  }
-
-  goto again;
+    
+  } while (!done);
+  
+  //goto again;
+  
+  return connected;
 }
-
-#endif
