@@ -72,19 +72,6 @@ prog_char *device_name[] PROGMEM = { // must match enum DEVICE_IDS in eeprom_sta
   nanowii
 };
 
-enum SCREEN_PAGES {
-  STATUS_PAGE, 
-  WING_MODE_PAGE, 
-  ROLL_GAIN_PAGE, 
-  PITCH_GAIN_PAGE, 
-  YAW_GAIN_PAGE, 
-  EPA_MODE_PAGE, 
-  CPPM_MODE_PAGE, 
-  MOUNT_ORIENT_PAGE, 
-  HOLD_AXES_PAGE, 
-  EEPROM_PAGE
-};
-
 // screen pages
 prog_char status[] PROGMEM = "STATUS";
 prog_char wing_mode[] PROGMEM = "WING MODE";
@@ -128,6 +115,19 @@ prog_char eeprom_update_cfg[] PROGMEM = "Update Config " XSTR(CHAR_RIGHT_ARROW);
 prog_char eeprom_erase_cfg[] PROGMEM = "Erase Config " XSTR(CHAR_RIGHT_ARROW);
 prog_char eeprom_erase_stats[] PROGMEM = "Erase Stats " XSTR(CHAR_RIGHT_ARROW);
 
+enum SCREEN_PAGES { // must be in sync with menu_heading
+  STATUS_PAGE, 
+  WING_MODE_PAGE, 
+  ROLL_GAIN_PAGE, 
+  PITCH_GAIN_PAGE, 
+  YAW_GAIN_PAGE, 
+  EPA_MODE_PAGE, 
+  CPPM_MODE_PAGE, 
+  MOUNT_ORIENT_PAGE, 
+  HOLD_AXES_PAGE, 
+  EEPROM_PAGE
+};
+
 prog_char *menu_heading[] PROGMEM = {
   status,
   wing_mode,
@@ -141,7 +141,7 @@ prog_char *menu_heading[] PROGMEM = {
   eeprom,
 };
 
-prog_char *menu_item[][5] PROGMEM = {
+prog_char *menu_item[][4] PROGMEM = {
   {status_device_id,
    status_device_ver,
    status_device_eeprom},
@@ -174,6 +174,8 @@ prog_char *menu_item[][5] PROGMEM = {
 const int8_t menu_count[] = {3, 4, 0, 0, 0, 3, 4, 3, 3, 4};
 const int8_t param_min[] = {1, WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL,  CPPM_NONE,     MOUNT_NORMAL,        HOLD_AXES_AER,   1};
 const int8_t param_max[] = {3, WING_DUAL_AIL,   +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, HOLD_AXES_A_E_R, 4};
+
+const int8_t menu_num_pages = sizeof(menu_count)/sizeof(menu_count[0]);
 
 /***************************************************************************************************************
 * BUTTONS
@@ -383,7 +385,7 @@ void loop()
   struct _ow_msg ow_msg;
   struct _eeprom_stats eeprom_stats;
 
-  int8_t param[sizeof(menu_count)/sizeof(menu_count[0])];
+  int8_t param[menu_num_pages];
   int8_t page;
   bool update_lcd = true;
   
@@ -535,9 +537,17 @@ again:
           break;
         }
       }
-      if (page < sizeof(menu_count)/sizeof(menu_count[0])-1) {
+      
+      if (page < menu_num_pages - 1) {
         page++;
-      }      
+      }
+      
+      if (page == EEPROM_PAGE) {
+        // reset to safe option (eeprom_instr) when paging into eeprom page.
+        // prevents user autorepeating right through it
+        param[page] = param_min[page];
+      }
+      
     }
     if (button_event[BUTTON_ID_UP] == BUTTON_PRESS) {
       if (param[page] > param_min[page])
