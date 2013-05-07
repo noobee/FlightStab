@@ -5,6 +5,10 @@
 #include <avr/wdt.h>
 #include <util/atomic.h>
 
+#include "FlightStab.h"
+
+bool ow_loop(); // OneWireSerial.ino
+
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 /***************************************************************************************************************
@@ -19,7 +23,9 @@
 
 //#define USE_SERIAL // enable serial port
 //#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
-//#define DISABLE_CPPM // remove cppm code to reduce firmware size
+//#define NO_CPPM // remove cppm code
+//#define NO_ONEWIRE // remove one-wire serial config code
+//#define NO_STICKCONFIG // remove stick config code
 
 //#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 //#define USE_I2CLIGHT // poll-based i2c access routines
@@ -53,6 +59,8 @@
  PB1 9 FLP_OUT instead of ELE_IN
  PB2 10 THR_OUT instead of RUD_IN
 */
+
+#define DEVICE_ID DEVICE_RX3S_V1
 
 // <VR>
 #define AIN_PORTC {&ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL}
@@ -96,6 +104,12 @@
 #define LED_BIT 5
 #define LED_XOR 0 // active high
 
+// one-wire port = PD7
+#define OW_BIT 7
+#define OW_DDR DDRD
+#define OW_PORT PORTD
+#define OW_PINREG PIND
+
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN 4
 #define EEPROM_RESET_IN_PIN 5
@@ -131,6 +145,8 @@
  PB1 9 FLP_OUT instead of ELE_IN
  PB2 10 THR_OUT instead of RUD_IN
 */
+
+#define DEVICE_ID DEVICE_RX3S_V2V3
 
 // <VR>
 #define AIN_PORTC {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL}
@@ -174,6 +190,12 @@
 #define LED_BIT 5
 #define LED_XOR 0 // active high
 
+// one-wire port = PD7
+#define OW_BIT 7
+#define OW_DDR DDRD
+#define OW_PORT PORTD
+#define OW_PINREG PIND
+
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN 4
 #define EEPROM_RESET_IN_PIN 5
@@ -207,6 +229,8 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
  PC6 5 THR_OUT instead of M
  PD7 6 FLP_OUT instead of M
 */
+
+#define DEVICE_ID DEVICE_NANOWII
 
 // <VR> MUST BE ALL NULL
 #define AIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL}
@@ -250,6 +274,12 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define LED_BIT 5
 #define LED_XOR 1 // active low
 
+// one-wire port = PC7
+#define OW_BIT 7
+#define OW_DDR DDRC
+#define OW_PORT PORTC
+#define OW_PINREG PINC
+
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN 6 // also used for flap_out in cppm mode
 #define EEPROM_RESET_IN_PIN 5 // also used for thr_out in cppm mode
@@ -263,6 +293,7 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #warning NANO_MPU6050 defined // emit device name
 #undef USE_ITG3200
 #define USE_MPU6050
+#undef GYRO_ORIENTATION
 #define GYRO_ORIENTATION(x, y, z) {gyro[0] = -(x); gyro[1] = (y); gyro[2] = (z);}
 #undef F_I2C
 #define F_I2C F_100KHZ // i2c bus speed
@@ -385,6 +416,14 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #endif
 #endif
 
+// device id and version
+#if !defined(DEVICE_ID)
+#define DEVICE_ID DEVICE_UNDEF
+#endif
+#if !defined(DEVICE_VER)
+#define DEVICE_VER 12345678L
+#endif
+
 
 // LED set
 #define LED_OFF 0
@@ -408,7 +447,7 @@ volatile uint8_t rud_vr; //
 
  // for eeprom config
 int8_t vr_notch_table[4+1+4] = {0, 32, 64, 96, 128, 160, 192, 224, 255};
-int8_t vr_notch[3] = {8, 8, 8};
+int8_t vr_notch[3] = {4, 4, 4};
 
 // rx
 #define RX_WIDTH_MIN 900
@@ -465,29 +504,17 @@ int16_t accel[3] = {0, 0, 0}; // full scale = 16b-signed = 16g? (TODO)
 int16_t correction[3] = {0, 0, 0}; // final correction values
 
 // wing mode
-enum WING_MODE {WING_SINGLE_AIL, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
 enum WING_MODE wing_mode = WING_SINGLE_AIL;
-
-enum MIXER_EPA_MODE {MIXER_EPA_FULL, MIXER_EPA_NORM, MIXER_EPA_TRACK};
 enum MIXER_EPA_MODE mixer_epa_mode = MIXER_EPA_FULL;
-
-// cppm mode
-enum CPPM_MODE {CPPM_NONE=0, CPPM_OPEN9X=1, CPPM_UNDEF};
 enum CPPM_MODE cppm_mode = CPPM_NONE;
-#if defined(DISABLE_CPPM)
-#define CPPM_END CPPM_NONE
-#else
-#define CPPM_END CPPM_OPEN9X
-#endif
-
-// side mounting 
-enum MOUNT_ORIENT {MOUNT_NORMAL, MOUNT_ROLL_90_LEFT, MOUNT_ROLL_90_RIGHT};
 enum MOUNT_ORIENT mount_orient = MOUNT_NORMAL;
+enum HOLD_AXES hold_axes = HOLD_AXES_AE_R;
 
 const int8_t rx_chan_list_size = 8;
 volatile int16_t *rx_chan[][rx_chan_list_size] = {
-  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // open9x RETA1a2F
-  {&tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in, &tmp_in} // reserved undef
+  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_RETA1a2F (FrSky)
+  {&thr_in, &ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_TAERF1a2F (JR/Spektrum)
+  {&ail_in, &ele_in, &thr_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in} // CPPM_AETR1a2F (Futaba)
 };
 
 // stabilization mode
@@ -566,13 +593,13 @@ int get_free_sram()
   return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval); 
 }
 
-int8_t boot_check(int8_t in_pin, int8_t out_pin)
+bool boot_check(int8_t in_pin, int8_t out_pin)
 {
   pinMode(in_pin, INPUT);
   pinMode(out_pin, OUTPUT);
 
-  int8_t result = true;
-  for (int8_t i=0; i<4; i++) {
+  bool result = true;
+  for (int8_t i=0; i<8; i++) {
     int8_t level = i & 1 ? HIGH : LOW;
     digitalWrite(out_pin, level);
     if (digitalRead(in_pin) != level) {
@@ -893,7 +920,7 @@ void read_switches()
  ***************************************************************************************************************/
 
 volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
-int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cppm_mode-1][<n>] var for CPPM
+int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cppm_mode-2][<n>] var for CPPM
 // non cppm mode
 volatile int16_t *rx_portb[] = RX_PORTB;
 volatile int16_t *rx_portd[] = RX_PORTD;
@@ -952,7 +979,7 @@ ISR(TIMER1_CAPT_vect)
     ch = 0;
     ch0_synced = true;
   } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-    *rx_chan[cppm_mode-1][ch] = width;
+    *rx_chan[cppm_mode-2][ch] = width;
     if (ch == rx_frame_sync_ref)
       rx_frame_sync = true;
     ch++;
@@ -1131,7 +1158,7 @@ inline void int6_vect_cppm()
       ch = 0;
       ch0_synced = true;
     } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-      *rx_chan[cppm_mode-1][ch] = width;
+      *rx_chan[cppm_mode-2][ch] = width;
       if (ch == rx_frame_sync_ref)
         rx_frame_sync = true;
       ch++;
@@ -1142,7 +1169,7 @@ inline void int6_vect_cppm()
 
 ISR(INT6_vect) 
 { 
-  if (cppm_mode > 0)
+  if (cppm_mode != CPPM_NONE)
     int6_vect_cppm();
   else
     int6_vect_non_cppm();
@@ -1158,7 +1185,7 @@ ISR(PCINT0_vect)
 void init_digital_in_rx()
 {
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
 #if defined(NANOWII)
     // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
     EICRB |= (1 << ISC60); // interrupt on pin change
@@ -1318,19 +1345,10 @@ void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param)
  * EEPROM
  ***************************************************************************************************************/
 
-const uint8_t eeprom_cfg_ver = 2;
-const uint16_t eeprom_cfg_addr = 0;
+const uint16_t eeprom_stats_addr = 128;
+const uint16_t eeprom_cfg1_addr = 0;
+const uint16_t eeprom_cfg2_addr = 256+0;
  
-struct _eeprom_cfg {
-  uint8_t ver;
-  enum WING_MODE wing_mode; 
-  int8_t vr_notch[3];
-  enum MIXER_EPA_MODE mixer_epa_mode;
-  enum CPPM_MODE cppm_mode; 
-  enum MOUNT_ORIENT mount_orient;
-  uint8_t chksum; // must be the last field
-};
-
 uint8_t eeprom_compute_chksum(void *buf, int8_t len) 
 {
   uint8_t chksum = 0;
@@ -1339,15 +1357,15 @@ uint8_t eeprom_compute_chksum(void *buf, int8_t len)
   return (chksum ^ 0xff) + 1;
 }
 
-void eeprom_write_cfg(struct _eeprom_cfg *pcfg) 
+void eeprom_write_cfg(struct _eeprom_cfg *pcfg, uint16_t eeprom_addr) 
 {    
   pcfg->chksum = eeprom_compute_chksum(pcfg, sizeof(*pcfg)-1);
-  eeprom_write_block(pcfg, (void *)eeprom_cfg_addr, sizeof(*pcfg));   
+  eeprom_write_block(pcfg, (void *)eeprom_addr, sizeof(*pcfg));   
 }
 
-int8_t eeprom_read_cfg(struct _eeprom_cfg *pcfg, uint8_t expect_ver) 
+int8_t eeprom_read_cfg(struct _eeprom_cfg *pcfg, uint16_t eeprom_addr, uint8_t expect_ver) 
 {
-  eeprom_read_block(pcfg, (void *)eeprom_cfg_addr, sizeof(*pcfg));
+  eeprom_read_block(pcfg, (void *)eeprom_addr, sizeof(*pcfg));
   if (pcfg->ver != expect_ver) {
     return -1;
   }
@@ -1367,6 +1385,7 @@ void eeprom_copy_to_cfg(struct _eeprom_cfg *pcfg)
   pcfg->mixer_epa_mode = mixer_epa_mode;
   pcfg->cppm_mode = cppm_mode;
   pcfg->mount_orient = mount_orient;
+  pcfg->hold_axes = hold_axes;
 }
 
 void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
@@ -1376,12 +1395,13 @@ void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
   for (i=0; i<3; i++) {   
     vr_notch[i] = pcfg->vr_notch[i];
   }
-  ail_vr = vr_notch_table[vr_notch[0]];
-  ele_vr = vr_notch_table[vr_notch[1]];
-  rud_vr = vr_notch_table[vr_notch[2]];
+  ail_vr = vr_notch_table[vr_notch[0] + 4];
+  ele_vr = vr_notch_table[vr_notch[1] + 4];
+  rud_vr = vr_notch_table[vr_notch[2] + 4];
   mixer_epa_mode = pcfg->mixer_epa_mode;
   cppm_mode = pcfg->cppm_mode;
   mount_orient = pcfg->mount_orient;
+  hold_axes = pcfg->hold_axes;
 }
 
 
@@ -2112,8 +2132,8 @@ void stick_config(struct _stick_zone *psz)
 
 // note: be careful about off-by-one errors in this function
 
-  const int8_t param_ymin[] = {WING_SINGLE_AIL+1, -4, -4, -4, MIXER_EPA_FULL+1 , CPPM_NONE+1, MOUNT_NORMAL+1       , 1};
-  const int8_t param_ymax[] = {WING_DUAL_AIL+1  , +4, +4, +4, MIXER_EPA_TRACK+1, CPPM_END+1 , MOUNT_ROLL_90_RIGHT+1, 2};
+  const int8_t param_ymin[] = {WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , 1};
+  const int8_t param_ymax[] = {WING_DUAL_AIL  , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 2};
   const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
   int8_t param_yval[param_xcount];
 
@@ -2127,14 +2147,14 @@ void stick_config(struct _stick_zone *psz)
   struct _eeprom_cfg eeprom_cfg;
   
   // read eeprom
-  eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver);
-  param_yval[0] = (int8_t) eeprom_cfg.wing_mode + 1;
-  param_yval[1] = eeprom_cfg.vr_notch[0] - 4;
-  param_yval[2] = eeprom_cfg.vr_notch[1] - 4;
-  param_yval[3] = eeprom_cfg.vr_notch[2] - 4;
-  param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode + 1;
-  param_yval[5] = (int8_t) eeprom_cfg.cppm_mode + 1;
-  param_yval[6] = (int8_t) eeprom_cfg.mount_orient + 1;
+  eeprom_read_cfg(&eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
+  param_yval[0] = (int8_t) eeprom_cfg.wing_mode;
+  param_yval[1] = eeprom_cfg.vr_notch[0];
+  param_yval[2] = eeprom_cfg.vr_notch[1];
+  param_yval[3] = eeprom_cfg.vr_notch[2];
+  param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode;
+  param_yval[5] = (int8_t) eeprom_cfg.cppm_mode;
+  param_yval[6] = (int8_t) eeprom_cfg.mount_orient;
   param_yval[7] = 1; // exit option
   
   int8_t update_x = (x + 1) << 1;
@@ -2200,14 +2220,15 @@ void stick_config(struct _stick_zone *psz)
   }
 
   // write eeprom;
-  eeprom_cfg.wing_mode = (enum WING_MODE) (param_yval[0] - 1);
-  eeprom_cfg.vr_notch[0] = param_yval[1] + 4;
-  eeprom_cfg.vr_notch[1] = param_yval[2] + 4;
-  eeprom_cfg.vr_notch[2] = param_yval[3] + 4;
-  eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) (param_yval[4] - 1);
-  eeprom_cfg.cppm_mode = (enum CPPM_MODE) (param_yval[5] - 1);
-  eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) (param_yval[6] - 1);
-  eeprom_write_cfg(&eeprom_cfg);
+  eeprom_cfg.wing_mode = (enum WING_MODE) param_yval[0];
+  eeprom_cfg.vr_notch[0] = param_yval[1];
+  eeprom_cfg.vr_notch[1] = param_yval[2];
+  eeprom_cfg.vr_notch[2] = param_yval[3];
+  eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) param_yval[4];
+  eeprom_cfg.cppm_mode = (enum CPPM_MODE) param_yval[5];
+  eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) param_yval[6];
+  eeprom_write_cfg(&eeprom_cfg, eeprom_cfg1_addr);
+  eeprom_write_cfg(&eeprom_cfg, eeprom_cfg2_addr);
 }
 
 
@@ -2234,16 +2255,6 @@ void setup()
   wdt_disable();
 #endif // RX3S_V1 || RX3S_V2 || HK_MWSE_20
 
-  // init TIMER1
-  TCCR1A = 0; // normal counting mode
-  TCCR1B = (1 << CS11); // clkio/8
-  TIMSK1 = (1 << TOIE1); // enable overflow interrupt
-  // TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
-
-  // disable TIMER0
-  TCCR0B &= ~((1 << CS00) | (1 << CS01) | (1 << CS02)); // clock stopped
-  // TIMSK0 &= ~(1 << TOIE0); // disable overflow interrupt
-
   // set up default RATE pid parameters
   for (i=0; i<3; i++) {
     pid_param_rate.kp[i] = 500;
@@ -2262,27 +2273,83 @@ void setup()
   pid_param_hold.i_windup = 32768;
   pid_param_hold.output_shift = 8;
   
-  struct _eeprom_cfg eeprom_cfg;
-  if (boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN)) {
-    // invalidate current eeprom, force write on next boot
-    eeprom_cfg.ver = 0;
-    eeprom_write_cfg(&eeprom_cfg);
-    set_led_msg(3, 50, LED_VERY_SHORT); // 3 sec
+  // eeprom processing
+  struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
+  struct _eeprom_stats eeprom_stats;
+  
+  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0xff : 0;
+    
+  eeprom_read_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
+  if (ret || (eeprom_stats.device_id != DEVICE_ID || eeprom_stats.device_ver != DEVICE_VER)) {
+    // initialize eeprom stats
+    eeprom_stats.device_id = DEVICE_ID;
+    eeprom_stats.device_ver = DEVICE_VER;
+    eeprom_stats.eeprom_cfg1_err = 0;
+    eeprom_stats.eeprom_cfg2_err = 0;
+    eeprom_stats.eeprom_cfg12_reset = 0;
+  }
+
+  if (eeprom_read_cfg(&eeprom_cfg1, eeprom_cfg1_addr, eeprom_cfg_ver) < 0)
+    ret |= 0x01;
+  if (eeprom_read_cfg(&eeprom_cfg2, eeprom_cfg2_addr, eeprom_cfg_ver) < 0)
+    ret |= 0x10;
+
+  calibration_wag_count = 3;
+  switch (ret) {
+  case 0x00: // both copy 1 and 2 good
+    break;
+  case 0x01: // copy 1 bad, copy 2 good
+    eeprom_write_cfg(&eeprom_cfg2, eeprom_cfg1_addr);
+    eeprom_stats.eeprom_cfg1_err++;
+    eeprom_cfg1 = eeprom_cfg2;
+    break;
+  case 0x10: // copy 1 good, copy 2 bad
+    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg2_addr);
+    eeprom_stats.eeprom_cfg2_err++;
+    break;
+  default: // both copy 1 and 2 bad (ret=0x11), or boot_check (ret=0xff)
+    eeprom_cfg1.ver = eeprom_cfg_ver;
+    eeprom_copy_to_cfg(&eeprom_cfg1);
+    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg1_addr);
+    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg2_addr);
+    eeprom_stats.eeprom_cfg12_reset++;
+    calibration_wag_count = 9;
+    break;
+  }
+  eeprom_copy_from_cfg(&eeprom_cfg1);
+  
+  if (ret != 0x00) {
+    // update stats to eeprom if at least one cfg was written
+    eeprom_write_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
+  }
+  
+  if (ret == 0xff) {
+    // boot_check initiated, halt and flash led indefinitely
     while (true) {
-      update_led(micros1());    
+      set_led(LED_INVERT);
+      delay(100);
     }
   }
 
-  if (eeprom_read_cfg(&eeprom_cfg, eeprom_cfg_ver) < 0) {
-    // write eeprom with default parameters
-    eeprom_cfg.ver = eeprom_cfg_ver;
-    eeprom_copy_to_cfg(&eeprom_cfg);
-    eeprom_write_cfg(&eeprom_cfg);
-    calibration_wag_count = 9;
-  } else {
-    calibration_wag_count = 3;
+#if !defined(NO_ONEWIRE)
+  // check for program box, reboot on return if connected
+  // cannot disable TIMER0 or init TIMER1 before this call
+  if (ow_loop()) {
+    wdt_enable(WDTO_1S);
+    while (true);
   }
-  eeprom_copy_from_cfg(&eeprom_cfg);
+#endif // !NO_ONEWIRE
+  
+  // init TIMER1
+  TCCR1A = 0; // normal counting mode
+  TCCR1B = (1 << CS11); // clkio/8
+  TIMSK1 = (1 << TOIE1); // enable overflow interrupt
+  // TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
+
+  // disable TIMER0
+  TCCR0B &= ~((1 << CS00) | (1 << CS01) | (1 << CS02)); // clock stopped
+  // TIMSK0 &= ~(1 << TOIE0); // disable overflow interrupt
+  
   
   // set mixer limits based on configuration
   switch (mixer_epa_mode) {
@@ -2334,7 +2401,7 @@ void setup()
   }
       
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB1 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
@@ -2381,7 +2448,7 @@ void setup()
   }
 
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB1 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
@@ -2398,7 +2465,7 @@ void setup()
 
 #if defined(NANOWII)
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
     // PE6 7 CPPM_IN instead of THR/AUX2_IN
     // PC6 5 THR_OUT instead of M
     // PD7 6 FLP_OUT instead of M
@@ -2435,8 +2502,6 @@ void setup()
   init_imu(); // gyro/accelgyro
 
   copy_rx_in(); // init *_in2 vars
-  for (i=0; i<3; i++) // init mixer correction
-    correction[i] = 0;
   apply_mixer(); // init *_out2 vars
   
   //dump_sensors();
@@ -2465,17 +2530,18 @@ void setup()
   int8_t reset_att_ail_ele;
   int8_t reset_att_rud;
   
+#if !defined(NO_STICKCONFIG)  
   uint32_t stick_config_check_time = t;
   struct _stick_zone stick_zone;
   const uint8_t stick_config_seq[] = {0x78, 0x89, 0x98, 0x87, 0x78, 0x89, 0x98, 0x87, 0xff}; // 7-9-7-9-7
   int8_t stick_config_seq_i = 0;
   int8_t stick_configurable = true;
   
+  stick_zone_init(&stick_zone); // stick zone setup
+#endif // !NO_STICKCONFIG
+  
   struct _calibration rx_cal;
   struct _calibration imu_cal;
-  
-  // stick zone setup
-  stick_zone_init(&stick_zone);
   
   // calibration setup  
   calibrate_init_stat(&rx_cal, 4);
@@ -2516,6 +2582,7 @@ again:
     last_imu_time = t;
   }
 
+#if !defined(NO_STICKCONFIG)
   if (stick_configurable && stick_zone_update(&stick_zone)) {
     stick_config_seq_i = (stick_zone.move == stick_config_seq[stick_config_seq_i]) ? stick_config_seq_i + 1 : 0;
     if (stick_config_seq[stick_config_seq_i] == 0xff) {
@@ -2527,6 +2594,7 @@ again:
     if ((int32_t)(t - stick_config_check_time) > 15000000L) // 15 sec to enter config mode
       stick_configurable = false;
   }
+#endif // !NO_STICKCONFIG
     
   // short circuit rest of the loop if calibration not done, do not compute correction[]
   if (!rx_cal.done || !imu_cal.done) {
