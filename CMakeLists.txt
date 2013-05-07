@@ -78,8 +78,9 @@ add_arduino_firmware(${TODAY}_DLUX Aquastar atmega8 "DLUX")
 
 # NANOWII
 add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
-add_arduino_firmware(TEST_NANOWII_SERIAL FlightStab leonardo "NANOWII;USE_SERIAL")
-add_arduino_firmware(TEST_NANOWII_I2CDEVLIB FlightStab leonardo "NANOWII;USE_I2CDEVLIB")
+
+# HK_MWSE_20
+add_arduino_firmware(${TODAY}_HK_MWSE_20 FlightStab pro5v "HK_MWSE_20")
 
 # RX3S_* 16MHz (standard)
 add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")

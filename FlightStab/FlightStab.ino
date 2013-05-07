@@ -19,7 +19,7 @@ bool ow_loop(); // OneWireSerial.ino
 //#define RX3S_V2
 //#define NANOWII
 //#define NANO_MPU6050
-#define HK_MWSE_20
+//#define HK_MWSE_20
 
 //#define USE_SERIAL // enable serial port
 //#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
@@ -362,6 +362,12 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define LED_PORT PORTB
 #define LED_BIT 5
 #define LED_XOR 0 // active high
+
+// one-wire port = PB4
+#define OW_BIT 4
+#define OW_DDR DDRB
+#define OW_PORT PORTB
+#define OW_PINREG PINB
 
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN 3
@@ -2479,7 +2485,7 @@ void setup()
 
 #if defined(HK_MWSE_20)
 #if !defined(DISABLE_CPPM)
-  if (cppm_mode > 0) {
+  if (cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AUX2_IN
     // PD5 5 FLP_OUT instead of ELE_IN
     // PD6 6 THR_OUT instead of RUD_IN
@@ -2494,7 +2500,7 @@ void setup()
 #endif // !DISABLE_CPPM
 #endif // HK_MWSE_20
 
-  set_led_msg(0, wing_mode + 1, LED_LONG);
+  set_led_msg(0, wing_mode, LED_LONG);
 
   init_analog_in(); // vr
   init_digital_in_rx(); // rx
