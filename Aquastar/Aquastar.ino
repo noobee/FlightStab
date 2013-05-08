@@ -2,20 +2,19 @@
 
 #include <Arduino.h>
 #include <LiquidCrystal.h>
-#include <avr/eeprom.h>
 #include <avr/pgmspace.h>
 #include <avr/wdt.h>
 
 #include "FlightStab.h"
 
 /*
- Aquastar pin mapping
+ Aquastar/DLUX pin mapping
  PB0  8 LCD_D4         PC0 14/A0               PD0 0 RXD
  PB1  9 LCD_D5         PC1 15/A1               PD1 1 TXD
  PB2 10 LCD_D6         PC2 16/A2 LCD_RS        PD2 2 UP_BUTTON
  PB3 11 LCD_D7 (MOSI)  PC3 17/A3 LCD_RW        PD3 3 LEFT_BUTTON
- PB4 12 (MISO)         PC4 18/A4 LCD_EN (SDA)  PD4 4 RIGHT_BUTTON
- PB5 13 (SCK)          PC5 19/A5 (SCL)         PD5 5 DOWN_BUTTON
+ PB4 12 (MISO)         PC4 18/A4 LCD_EN (SDA)  PD4 4 RIGHT_BUTTON (DLUX=DOWN_BUTTON)
+ PB5 13 (SCK)          PC5 19/A5 (SCL)         PD5 5 DOWN_BUTTON (DLUX=RIGHT_BUTTON)
  PB6 14 (XTAL1)        PC6 (RESET)             PD6 6 
  PB7 15 (XTAL2)                                PD7 7 
 */
@@ -255,7 +254,7 @@ void button_init()
 }
 
 /***************************************************************************************************************
-* BITBANG SERIAL
+* SERIAL
 ***************************************************************************************************************/
 
 void serial_write_byte(uint8_t b) {
