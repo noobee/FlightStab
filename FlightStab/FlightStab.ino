@@ -20,11 +20,14 @@ bool ow_loop(); // OneWireSerial.ino
 //#define NANOWII
 //#define NANO_MPU6050
 
-//#define USE_SERIAL // enable serial port
-//#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
 //#define NO_CPPM // remove cppm code
 //#define NO_ONEWIRE // remove one-wire serial config code
 //#define NO_STICKCONFIG // remove stick config code
+//#define NO_SERIALRX // remove sbus serial rx code
+
+//#define SERIAL_DEBUG // enable debug messages through serial port
+//#define DUMP_SENSORS // dump sensors through the serial port
+//#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
 
 //#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 //#define USE_I2CLIGHT // poll-based i2c access routines
@@ -91,6 +94,9 @@ bool ow_loop(); // OneWireSerial.ino
 #define CPPM_PINBIT 0
 #define FLP_OUT_PIN 9
 #define THR_OUT_PIN 10
+
+// NO SERIAL RX
+#define NO_SERIALRX
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
@@ -178,6 +184,9 @@ bool ow_loop(); // OneWireSerial.ino
 #define FLP_OUT_PIN 9
 #define THR_OUT_PIN 10
 
+// NO SERIAL RX
+#define NO_SERIALRX
+
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
 #define SCL_PIN 19
@@ -262,6 +271,9 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define THR_OUT_PIN 5
 #define FLP_OUT_PIN 6
 
+// SERIAL RX
+//#define NO_SERIALRX
+
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
 #define SCL_PIN 3
@@ -294,6 +306,7 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #define USE_MPU6050
 #undef GYRO_ORIENTATION
 #define GYRO_ORIENTATION(x, y, z) {gyro[0] = -(x); gyro[1] = (y); gyro[2] = (z);}
+#define NO_SERIALRX
 #undef F_I2C
 #define F_I2C F_100KHZ // i2c bus speed
 #endif
@@ -315,9 +328,9 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #error (F_XTAL,F_CPU) must be (16MHz,16MHz), (16MHz,8MHz) or (8MHz,8MHz)
 #endif
 
-// emit serial enabled
-#if defined(USE_SERIAL)
-#warning USE_SERIAL defined
+// emit serial debug enabled
+#if defined(SERIAL_DEBUG)
+#warning SERIAL_DEBUG defined
 #endif
 
 // verify single i2c lib defined
@@ -436,7 +449,7 @@ enum WING_MODE wing_mode = WING_SINGLE_AIL;
 enum MIXER_EPA_MODE mixer_epa_mode = MIXER_EPA_FULL;
 enum CPPM_MODE cppm_mode = CPPM_NONE;
 enum MOUNT_ORIENT mount_orient = MOUNT_NORMAL;
-enum HOLD_AXES hold_axes = HOLD_AXES_AE_R;
+enum SERIALRX_MODE serialrx_mode = SERIALRX_NONE;
 
 const int8_t rx_chan_list_size = 8;
 volatile int16_t *rx_chan[][rx_chan_list_size] = {
@@ -1254,7 +1267,7 @@ void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param)
     dterm = (ppid_param->kd[i] * diff_err) >> PID_KD_SHIFT;
     ppid_state->output[i] = (pterm + iterm + dterm) >> ppid_param->output_shift;
 
-#if defined(USE_SERIAL) && 0
+#if defined(SERIAL_DEBUG) && 0
     if (i == 2) {
       Serial.print(ppid_state->input[i]); Serial.print('\t');
       Serial.print(err); Serial.print('\t');
@@ -1313,7 +1326,7 @@ void eeprom_copy_to_cfg(struct _eeprom_cfg *pcfg)
   pcfg->mixer_epa_mode = mixer_epa_mode;
   pcfg->cppm_mode = cppm_mode;
   pcfg->mount_orient = mount_orient;
-  pcfg->hold_axes = hold_axes;
+  pcfg->serialrx_mode = serialrx_mode;
 }
 
 void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
@@ -1329,7 +1342,7 @@ void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
   mixer_epa_mode = pcfg->mixer_epa_mode;
   cppm_mode = pcfg->cppm_mode;
   mount_orient = pcfg->mount_orient;
-  hold_axes = pcfg->hold_axes;
+  serialrx_mode = pcfg->serialrx_mode;
 }
 
 
@@ -1473,7 +1486,7 @@ int8_t calibrate_check_stat(struct _calibration *pcal, int16_t range)
 
 void calibrate_print_stat(struct _calibration *pcal)
 {
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) && 0
   Serial.println(pcal->num_samples);
   for (int8_t i=0; i < pcal->num_elements; i++) {  
     Serial.print(pcal->low[i]); Serial.print('\t');
@@ -1501,7 +1514,7 @@ void calibrate_rx(struct _calibration *prx_cal)
       ele_in2_mid = prx_cal->mean[1];
       rud_in2_mid = prx_cal->mean[2];
       ailr_in2_mid = prx_cal->mean[3];
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) && 0
       Serial.println("RX");
       calibrate_print_stat(prx_cal);
 #endif
@@ -1527,7 +1540,7 @@ void calibrate_imu(struct _calibration *pimu_cal)
       calibrate_compute_mean(pimu_cal);
       for (int8_t i=0; i<3; i++)
         gyro0[i] = pimu_cal->mean[i];
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) && 0
       Serial.println("GY");
       calibrate_print_stat(pimu_cal);
 #endif
@@ -1544,7 +1557,7 @@ void calibrate_imu(struct _calibration *pimu_cal)
  * SERIAL
  ***************************************************************************************************************/
 
-#if defined(USE_SERIAL) && 0
+#if defined(SERIAL_DEBUG) && 0
 void serial_tx(void *buf, int8_t len);
 uint8_t serial_buf[48];
 
@@ -1881,9 +1894,9 @@ void start_servo_frame()
  * DUMP SENSORS
  ***************************************************************************************************************/
 
+#if defined(DUMP_SENSORS)  
 void dump_sensors()
 {
-#if defined(USE_SERIAL)  
   uint32_t t;
   uint32_t last_rx_time = 0;
   int8_t servo_sync = false;
@@ -1892,6 +1905,10 @@ void dump_sensors()
 
   while (true) {
     t = micros1();
+
+#if !defined(NO_SERIALRX)
+  serialrx_update();
+#endif  
     
     if (rx_frame_sync || (int32_t)(t - last_rx_time) > 30000) {
       rx_frame_sync = false;
@@ -1954,6 +1971,7 @@ void dump_sensors()
     Serial.print(mixer_epa_mode); Serial.print(' ');
     Serial.print(cppm_mode); Serial.print(' ');
     Serial.print(mount_orient); Serial.print(' ');
+    Serial.print(serialrx_mode); Serial.print(' ');
     Serial.print(get_free_sram()); Serial.print(' ');
     Serial.print(servo_out); Serial.print(' ');
     Serial.println();
@@ -1961,8 +1979,8 @@ void dump_sensors()
     set_led(LED_INVERT);
     delay1(50);
   }
-#endif
 }
+#endif
 
 /***************************************************************************************************************
 * STICK CONFIGURATION
@@ -2036,7 +2054,7 @@ bool stick_zone_update(struct _stick_zone *psz)
   moved = (psz->curr != psz->prev);
   if (moved) {
     psz->move = (psz->prev << 4) | psz->curr; // move = 0x[prev digit][curr digit]
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) && 0
       Serial.print("stick_zone "); 
       Serial.print(psz->zx); Serial.print(' ');
       Serial.print(psz->zy); Serial.print(' ');
@@ -2056,12 +2074,13 @@ void stick_config(struct _stick_zone *psz)
 // 5= mixer_epa_mode (see enum MIXER_EPA_MODE)
 // 6= cppm_mode (see enum CPPM_MODE)
 // 7= mount_orient (see enum MOUNT_ORIENT)
-// 8= exit
+// 8= serialrx_mode (see enum SERIALRX_MODE)
+// 9= exit
 
 // note: be careful about off-by-one errors in this function
 
-  const int8_t param_ymin[] = {WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , 1};
-  const int8_t param_ymax[] = {WING_DUAL_AIL  , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 2};
+  const int8_t param_ymin[] = {WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , SERIALRX_NONE, 1};
+  const int8_t param_ymax[] = {WING_DUAL_AIL  , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, SERIALRX_SBUS, 2};
   const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
   int8_t param_yval[param_xcount];
 
@@ -2083,7 +2102,8 @@ void stick_config(struct _stick_zone *psz)
   param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode;
   param_yval[5] = (int8_t) eeprom_cfg.cppm_mode;
   param_yval[6] = (int8_t) eeprom_cfg.mount_orient;
-  param_yval[7] = 1; // exit option
+  param_yval[7] = (int8_t) eeprom_cfg.serialrx_mode;
+  param_yval[8] = 1; // exit option
   
   int8_t update_x = (x + 1) << 1;
   int8_t update_y = param_yval[x] << 1;
@@ -2136,7 +2156,7 @@ void stick_config(struct _stick_zone *psz)
         break;
       }
  
-  #if defined(USE_SERIAL) && 1
+  #if defined(SERIAL_DEBUG) && 0
       Serial.print("param "); 
       Serial.print(psz->prev, HEX); Serial.print(' ');
       Serial.print(psz->curr, HEX); Serial.print(' ');
@@ -2155,6 +2175,7 @@ void stick_config(struct _stick_zone *psz)
   eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) param_yval[4];
   eeprom_cfg.cppm_mode = (enum CPPM_MODE) param_yval[5];
   eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) param_yval[6];
+  eeprom_cfg.serialrx_mode = (enum SERIALRX_MODE) param_yval[7];
   eeprom_write_cfg(&eeprom_cfg, eeprom_cfg1_addr);
   eeprom_write_cfg(&eeprom_cfg, eeprom_cfg2_addr);
 }
@@ -2173,7 +2194,7 @@ void setup()
   if (get_free_sram() < 128)
     set_led_msg(2, 20, LED_VERY_SHORT); 
 
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) || defined(DUMP_SENSORS)
   Serial.begin(115200L);
 #endif
   
@@ -2205,7 +2226,7 @@ void setup()
   struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
   struct _eeprom_stats eeprom_stats;
   
-  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0xff : 0;
+  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0xff : 0x00;
     
   eeprom_read_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
   if (ret || (eeprom_stats.device_id != DEVICE_ID || eeprom_stats.device_ver != DEVICE_VER)) {
@@ -2278,6 +2299,9 @@ void setup()
   TCCR0B &= ~((1 << CS00) | (1 << CS01) | (1 << CS02)); // clock stopped
   // TIMSK0 &= ~(1 << TOIE0); // disable overflow interrupt
   
+#if !defined(NO_SERIALRX)
+  serialrx_init();
+#endif  
   
   // set mixer limits based on configuration
   switch (mixer_epa_mode) {
@@ -2413,8 +2437,10 @@ void setup()
 
   copy_rx_in(); // init *_in2 vars
   apply_mixer(); // init *_out2 vars
-  
-  //dump_sensors();
+
+#if defined(DUMP_SENSORS)  
+  dump_sensors();
+#endif
   //struct _stick_zone sz;
   //stick_config(&sz);
 }
@@ -2462,6 +2488,10 @@ again:
   t = micros1();
   update_led(t);
 
+#if !defined(NO_SERIALRX)
+  serialrx_update();
+#endif  
+    
   // update rx frame data with rx ISR received reference channel or after timeout
   if (rx_frame_sync || (int32_t)(t - last_rx_time) > 30000) {
     rx_frame_sync = false;
@@ -2593,7 +2623,7 @@ again:
         correction[i] += (calibration_wag_count & 1) ? 150 : -150;    
     }    
     
-#if defined(USE_SERIAL) && 0
+#if defined(SERIAL_DEBUG) && 0
     Serial.print(correction[0]); Serial.print('\t');
     Serial.print(correction[1]); Serial.print('\t');
     Serial.print(correction[2]); Serial.println('\t');

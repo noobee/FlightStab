@@ -14,9 +14,9 @@ enum WING_MODE {WING_SINGLE_AIL=1, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
 enum MIXER_EPA_MODE {MIXER_EPA_FULL=1, MIXER_EPA_NORM, MIXER_EPA_TRACK};
 enum CPPM_MODE {CPPM_NONE=1, CPPM_RETA1a2F, CPPM_TAER1a2F, CPPM_AETR1a2F};
 enum MOUNT_ORIENT {MOUNT_NORMAL=1, MOUNT_ROLL_90_LEFT, MOUNT_ROLL_90_RIGHT};
-enum HOLD_AXES {HOLD_AXES_AER=1, HOLD_AXES_AE_R, HOLD_AXES_A_E_R};
+enum SERIALRX_MODE {SERIALRX_NONE=1, SERIALRX_SPEKTRUM, SERIALRX_SBUS};
 
-const int8_t eeprom_cfg_ver = 3;
+const int8_t eeprom_cfg_ver = 4;
 
 struct _eeprom_stats {
   int8_t device_id;
@@ -33,7 +33,7 @@ struct _eeprom_cfg {
   enum MIXER_EPA_MODE mixer_epa_mode;
   enum CPPM_MODE cppm_mode; 
   enum MOUNT_ORIENT mount_orient;
-  enum HOLD_AXES hold_axes;
+  enum SERIALRX_MODE serialrx_mode;
   uint8_t chksum;
 };
 

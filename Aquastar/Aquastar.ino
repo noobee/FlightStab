@@ -80,7 +80,7 @@ prog_char yaw_gain[] PROGMEM = "YAW GAIN";
 prog_char mixer_epa_mode[] PROGMEM = "EPA MODE";
 prog_char cppm_mode[] PROGMEM = "CPPM MODE";
 prog_char mount_orient[] PROGMEM = "MOUNT ORIENT";
-prog_char hold_axes[] PROGMEM = "HOLD AXES";
+prog_char serialrx_mode[] PROGMEM = "SERIAL RX MODE";
 prog_char eeprom[] PROGMEM = "EEPROM";
 
 prog_char status_device_id[] PROGMEM = "ID=";
@@ -105,9 +105,9 @@ prog_char mount_normal[] PROGMEM = "Normal";
 prog_char mount_roll90left[] PROGMEM = "Roll 90" XSTR(CHAR_DEGREE) " Left";
 prog_char mount_roll90right[] PROGMEM = "Roll 90" XSTR(CHAR_DEGREE) " Right";
 
-prog_char hold_axes_aer[] PROGMEM = "[AER]";
-prog_char hold_axes_ae_r[] PROGMEM = "[AE][R]";
-prog_char hold_axes_a_e_r[] PROGMEM = "[A][E][R]";
+prog_char serialrx_none[] PROGMEM = "None";
+prog_char serialrx_spektrum[] PROGMEM = "Spektrum";
+prog_char serialrx_sbus[] PROGMEM = "SBus";
 
 prog_char eeprom_instr[] PROGMEM = "Up/Dn then " XSTR(CHAR_RIGHT_ARROW);
 prog_char eeprom_update_cfg[] PROGMEM = "Update Config " XSTR(CHAR_RIGHT_ARROW);
@@ -123,7 +123,7 @@ enum SCREEN_PAGES { // must be in sync with menu_heading
   EPA_MODE_PAGE, 
   CPPM_MODE_PAGE, 
   MOUNT_ORIENT_PAGE, 
-  HOLD_AXES_PAGE, 
+  SERIALRX_PAGE, 
   EEPROM_PAGE
 };
 
@@ -136,7 +136,7 @@ prog_char *menu_heading[] PROGMEM = {
   mixer_epa_mode,
   cppm_mode,
   mount_orient,
-  hold_axes,
+  serialrx_mode,
   eeprom,
 };
 
@@ -161,9 +161,9 @@ prog_char *menu_item[][4] PROGMEM = {
   {mount_normal,
    mount_roll90left,
    mount_roll90right},
-  {hold_axes_aer,
-   hold_axes_ae_r,
-   hold_axes_a_e_r},
+  {serialrx_none,
+   serialrx_spektrum,
+   serialrx_sbus},
   {eeprom_instr,
    eeprom_update_cfg,
    eeprom_erase_cfg,
@@ -171,8 +171,8 @@ prog_char *menu_item[][4] PROGMEM = {
 };
 
 const int8_t menu_count[] = {3, 4, 0, 0, 0, 3, 4, 3, 3, 4};
-const int8_t param_min[] = {1, WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL,  CPPM_NONE,     MOUNT_NORMAL,        HOLD_AXES_AER,   1};
-const int8_t param_max[] = {3, WING_DUAL_AIL,   +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, HOLD_AXES_A_E_R, 4};
+const int8_t param_min[] = {1, WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL,  CPPM_NONE,     MOUNT_NORMAL,        SERIALRX_NONE, 1};
+const int8_t param_max[] = {3, WING_DUAL_AIL,   +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, SERIALRX_SBUS, 4};
 
 const int8_t menu_num_pages = sizeof(menu_count)/sizeof(menu_count[0]);
 
@@ -335,6 +335,7 @@ void copy_from_cfg(int8_t *param, struct _eeprom_cfg *pcfg) {
   param[5] = (int8_t) pcfg->mixer_epa_mode;
   param[6] = (int8_t) pcfg->cppm_mode;
   param[7] = (int8_t) pcfg->mount_orient;
+  param[8] = (int8_t) pcfg->serialrx_mode;
 }
 
 void copy_to_cfg(int8_t *param, struct _eeprom_cfg *pcfg) {
@@ -345,6 +346,7 @@ void copy_to_cfg(int8_t *param, struct _eeprom_cfg *pcfg) {
   pcfg->mixer_epa_mode = (MIXER_EPA_MODE) param[5];
   pcfg->cppm_mode = (CPPM_MODE) param[6];
   pcfg->mount_orient = (MOUNT_ORIENT) param[7];
+  pcfg->serialrx_mode = (SERIALRX_MODE) param[8];
 }
 
 /***************************************************************************************************************
@@ -378,7 +380,8 @@ void loop()
     OW_WAIT_CONNECT,
     OW_WAIT_STATS,
     OW_CONNECTED,
-    OW_SEND
+    OW_SEND,
+    OW_BAD_CFG_VER
   } ow_state = OW_WAIT_CONNECT;
 
   struct _ow_msg ow_msg;
@@ -407,12 +410,20 @@ again:
     case OW_SEND:
       // ow_msg already set up
       break;
+    case OW_BAD_CFG_VER: 
+      ow_msg.cmd = OW_NULL;
+      break;
     }
     send_msg(&ow_msg, sizeof(ow_msg));
     
     if (recv_msg(&ow_msg, sizeof(ow_msg), 200)) { // wait 200ms for response
       switch (ow_state) {
       case OW_WAIT_CONNECT:
+        if (ow_msg.u.eeprom_cfg.ver != eeprom_cfg_ver) {
+          ow_state = OW_BAD_CFG_VER;
+          update_lcd = true;
+          break;
+        }      
         copy_from_cfg(param, &ow_msg.u.eeprom_cfg);
         ow_state = OW_WAIT_STATS;
         break;
@@ -503,6 +514,14 @@ again:
         }
         break;
       }
+      break;
+    case OW_BAD_CFG_VER:
+      lcd.print(F("Cfg Ver Mismatch"));
+      lcd.setCursor(0, 1);
+      lcd.print(F("read="));
+      lcd.print(ow_msg.u.eeprom_cfg.ver);
+      lcd.print(F(" need="));
+      lcd.print(eeprom_cfg_ver);
       break;
     }
   }
