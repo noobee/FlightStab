@@ -20,11 +20,13 @@ bool ow_loop(); // OneWireSerial.ino
 //#define NANOWII
 //#define NANO_MPU6050
 
-//#define USE_SERIAL // enable serial port
-//#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
 //#define NO_CPPM // remove cppm code
 //#define NO_ONEWIRE // remove one-wire serial config code
 //#define NO_STICKCONFIG // remove stick config code
+
+//#define SERIAL_DEBUG // enable debug messages through serial port
+//#define DUMP_SENSORS // dump sensors through the serial port
+//#define LED_TIMING // disable LED_MSG and use LED_TIMING_START/STOP to measure timings
 
 //#define USE_I2CDEVLIB // interrupt-based wire and i2cdev libraries
 //#define USE_I2CLIGHT // poll-based i2c access routines
@@ -47,6 +49,8 @@ bool ow_loop(); // OneWireSerial.ino
  PB7 15 (XTAL2)                                    PD7 7 AILR_OUT
  
  AIL_SINGLE mode (DEFAULT SETTING)
+ DELTA mode
+ VTAIL mode
  PD7 7 AUX_IN instead of AILR_OUT
  
  AIL_DUAL mode
@@ -315,9 +319,9 @@ int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 #error (F_XTAL,F_CPU) must be (16MHz,16MHz), (16MHz,8MHz) or (8MHz,8MHz)
 #endif
 
-// emit serial enabled
-#if defined(USE_SERIAL)
-#warning USE_SERIAL defined
+// emit serial debug enabled
+#if defined(SERIAL_DEBUG)
+#warning SERIAL_DEBUG defined
 #endif
 
 // verify single i2c lib defined
@@ -890,7 +894,7 @@ inline void pcint0_vect()
 // isr armed only if cppm enabled
 ISR(TIMER1_CAPT_vect)
 {
-#if !defined(DISABLE_CPPM)
+#if !defined(NO_CPPM)
   static int8_t ch0_synced = false;
   static uint16_t rise_time;
   static uint8_t ch;
@@ -912,7 +916,7 @@ ISR(TIMER1_CAPT_vect)
       rx_frame_sync = true;
     ch++;
   }
-#endif // !DISABLE_CPPM
+#endif // !NO_CPPM
 }
 
 #if !(defined(RX3S_V2) && defined(MOD_PCINT0))
@@ -1062,7 +1066,7 @@ inline void int6_vect_non_cppm()
 // PE6 = cppm_in
 inline void int6_vect_cppm() 
 {
-#if !defined(DISABLE_CPPM)
+#if !defined(NO_CPPM)
   static int8_t ch0_synced = false;
   static uint16_t rise_time;
   static uint8_t last_pin;
@@ -1092,7 +1096,7 @@ inline void int6_vect_cppm()
       ch++;
     }
   }
-#endif // !DISABLE_CPPM
+#endif // !NO_CPPM
 }
 
 ISR(INT6_vect) 
@@ -1112,7 +1116,7 @@ ISR(PCINT0_vect)
 
 void init_digital_in_rx()
 {
-#if !defined(DISABLE_CPPM)
+#if !defined(NO_CPPM)
   if (cppm_mode != CPPM_NONE) {
 #if defined(NANOWII)
     // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
@@ -1128,7 +1132,7 @@ void init_digital_in_rx()
     rx_frame_sync_ref = 3; // sync on rx_chan[][3] first, but isr will track the sync gap
     return;
   }
-#endif // !DISABLE_CPPM
+#endif // !NO_CPPM
 
   // PORTB RX
   PCICR |= (1 << PCIE0); // interrupt on pin change
@@ -1254,7 +1258,7 @@ void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param)
     dterm = (ppid_param->kd[i] * diff_err) >> PID_KD_SHIFT;
     ppid_state->output[i] = (pterm + iterm + dterm) >> ppid_param->output_shift;
 
-#if defined(USE_SERIAL) && 0
+#if defined(SERIAL_DEBUG) && 0
     if (i == 2) {
       Serial.print(ppid_state->input[i]); Serial.print('\t');
       Serial.print(err); Serial.print('\t');
@@ -1473,7 +1477,7 @@ int8_t calibrate_check_stat(struct _calibration *pcal, int16_t range)
 
 void calibrate_print_stat(struct _calibration *pcal)
 {
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) && 0
   Serial.println(pcal->num_samples);
   for (int8_t i=0; i < pcal->num_elements; i++) {  
     Serial.print(pcal->low[i]); Serial.print('\t');
@@ -1501,7 +1505,7 @@ void calibrate_rx(struct _calibration *prx_cal)
       ele_in2_mid = prx_cal->mean[1];
       rud_in2_mid = prx_cal->mean[2];
       ailr_in2_mid = prx_cal->mean[3];
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) && 0
       Serial.println("RX");
       calibrate_print_stat(prx_cal);
 #endif
@@ -1527,7 +1531,7 @@ void calibrate_imu(struct _calibration *pimu_cal)
       calibrate_compute_mean(pimu_cal);
       for (int8_t i=0; i<3; i++)
         gyro0[i] = pimu_cal->mean[i];
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) && 0
       Serial.println("GY");
       calibrate_print_stat(pimu_cal);
 #endif
@@ -1544,7 +1548,7 @@ void calibrate_imu(struct _calibration *pimu_cal)
  * SERIAL
  ***************************************************************************************************************/
 
-#if defined(USE_SERIAL) && 0
+#if defined(SERIAL_DEBUG) && 0
 void serial_tx(void *buf, int8_t len);
 uint8_t serial_buf[48];
 
@@ -1881,9 +1885,9 @@ void start_servo_frame()
  * DUMP SENSORS
  ***************************************************************************************************************/
 
+#if defined(DUMP_SENSORS)  
 void dump_sensors()
 {
-#if defined(USE_SERIAL)  
   uint32_t t;
   uint32_t last_rx_time = 0;
   int8_t servo_sync = false;
@@ -1892,7 +1896,7 @@ void dump_sensors()
 
   while (true) {
     t = micros1();
-    
+
     if (rx_frame_sync || (int32_t)(t - last_rx_time) > 30000) {
       rx_frame_sync = false;
       copy_rx_in();
@@ -1961,8 +1965,8 @@ void dump_sensors()
     set_led(LED_INVERT);
     delay1(50);
   }
-#endif
 }
+#endif
 
 /***************************************************************************************************************
 * STICK CONFIGURATION
@@ -2036,7 +2040,7 @@ bool stick_zone_update(struct _stick_zone *psz)
   moved = (psz->curr != psz->prev);
   if (moved) {
     psz->move = (psz->prev << 4) | psz->curr; // move = 0x[prev digit][curr digit]
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) && 0
       Serial.print("stick_zone "); 
       Serial.print(psz->zx); Serial.print(' ');
       Serial.print(psz->zy); Serial.print(' ');
@@ -2136,7 +2140,7 @@ void stick_config(struct _stick_zone *psz)
         break;
       }
  
-  #if defined(USE_SERIAL) && 1
+  #if defined(SERIAL_DEBUG) && 0
       Serial.print("param "); 
       Serial.print(psz->prev, HEX); Serial.print(' ');
       Serial.print(psz->curr, HEX); Serial.print(' ');
@@ -2173,7 +2177,7 @@ void setup()
   if (get_free_sram() < 128)
     set_led_msg(2, 20, LED_VERY_SHORT); 
 
-#if defined(USE_SERIAL)
+#if defined(SERIAL_DEBUG) || defined(DUMP_SENSORS)
   Serial.begin(115200L);
 #endif
   
@@ -2205,7 +2209,7 @@ void setup()
   struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
   struct _eeprom_stats eeprom_stats;
   
-  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0xff : 0;
+  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0xff : 0x00;
     
   eeprom_read_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
   if (ret || (eeprom_stats.device_id != DEVICE_ID || eeprom_stats.device_ver != DEVICE_VER)) {
@@ -2297,38 +2301,36 @@ void setup()
   read_switches();
   
   // device-specific modes and pin assignment differences
-
+  
+  const enum WING_MODE dip_sw_to_wing_mode_map[] = {
+    WING_DUAL_AIL, // 0=rev / 0=rev
+    WING_VTAIL, // 0=rev / 1=norm
+    WING_DELTA, // 1=norm / 0=rev
+    WING_SINGLE_AIL // 1=norm / 1=norm
+  };
+  
 #if defined(RX3S_V1)
-  switch ((ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)) {
-  case 0: // ele rev/0, rud rev/0
-    wing_mode = WING_DUAL_AIL;
-    break; 
-  case 1: // ele rev/0, rud norm/1
-    wing_mode = WING_VTAIL;
-    break; 
-  case 2: // ele norm/1, rud rev/0
-    wing_mode = WING_DELTA;
-    break;
-  case 3: // ele norm/1, rud norm/1
-    wing_mode = WING_SINGLE_AIL;
-    break; 
-  }
 
-  if (wing_mode == WING_SINGLE_AIL) {
+  wing_mode = dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)];
+
+  switch (wing_mode) {
+  case WING_SINGLE_AIL:
+  case WING_DELTA:
+  case WING_VTAIL:
     // PD7 7 AUX_IN instead of AILR_OUT
     pwm_out_var[3] = NULL; // disable ailr_out
     pwm_out_pin[3] = -1; //
     rx_portd[7] = &aux_in; // enable aux_in
-  }
-
-  if (wing_mode == WING_DUAL_AIL) {
+    break;
+  case WING_DUAL_AIL:
     // PB3 11 AUX_IN instead of MOSI
     // PB4 12 AILR_IN instead of MISO
     rx_portb[3] = &aux_in; // enable aux_in
     rx_portb[4] = &ailr_in; // enable ailr_in
+    break;
   }
-      
-#if !defined(DISABLE_CPPM)
+        
+#if !defined(NO_CPPM)
   if (cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB2 9 FLP_OUT instead of ELE_IN
@@ -2341,25 +2343,13 @@ void setup()
     pwm_out_var[5] = &flp_out; // enable flp_out
     pwm_out_pin[5] = FLP_OUT_PIN; //
   }
-#endif // !DISABLE_CPPM
+#endif // !NO_CPPM
 #endif // RX3S_V1
 
 #if defined(RX3S_V2)
-  switch ((vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)) {
-  case 0: // vtail on/0, delta on/0
-    wing_mode = WING_DUAL_AIL;
-    break; 
-  case 1: // vtail on/0, delta off/1
-    wing_mode = WING_VTAIL;
-    break; 
-  case 2: // vtail off/1, delta on/0
-    wing_mode = WING_DELTA;
-    break; 
-  case 3: // vtail off/1, delta off/1
-    wing_mode = WING_SINGLE_AIL;
-    break; 
-  }
 
+  wing_mode = dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)];
+  
   if (wing_mode == WING_DUAL_AIL) {
     if (ail_sw) {
       // WING_DUAL_AIL mode A
@@ -2375,7 +2365,7 @@ void setup()
     }
   }
 
-#if !defined(DISABLE_CPPM)
+#if !defined(NO_CPPM)
   if (cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB2 10 THR_OUT instead of RUD_IN
@@ -2387,11 +2377,11 @@ void setup()
     pwm_out_var[5] = &flp_out; // enable flp_out
     pwm_out_pin[5] = FLP_OUT_PIN; //
   }
-#endif // !DISABLE_CPPM
+#endif // !NO_CPPM
 #endif // RX3S_V2
 
 #if defined(NANOWII)
-#if !defined(DISABLE_CPPM)
+#if !defined(NO_CPPM)
   if (cppm_mode != CPPM_NONE) {
     // PE6 7 CPPM_IN instead of THR/AUX2_IN
     // PC6 5 THR_OUT instead of M
@@ -2401,7 +2391,7 @@ void setup()
     pwm_out_var[5] = &flp_out; // enable flp_out
     pwm_out_pin[5] = FLP_OUT_PIN; //
   }
-#endif // !DISABLE_CPPM
+#endif // !NO_CPPM
 #endif // NANOWII
 
   set_led_msg(0, wing_mode, LED_LONG);
@@ -2413,8 +2403,10 @@ void setup()
 
   copy_rx_in(); // init *_in2 vars
   apply_mixer(); // init *_out2 vars
-  
-  //dump_sensors();
+
+#if defined(DUMP_SENSORS)  
+  dump_sensors();
+#endif
   //struct _stick_zone sz;
   //stick_config(&sz);
 }
@@ -2593,7 +2585,7 @@ again:
         correction[i] += (calibration_wag_count & 1) ? 150 : -150;    
     }    
     
-#if defined(USE_SERIAL) && 0
+#if defined(SERIAL_DEBUG) && 0
     Serial.print(correction[0]); Serial.print('\t');
     Serial.print(correction[1]); Serial.print('\t');
     Serial.print(correction[2]); Serial.println('\t');

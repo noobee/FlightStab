@@ -2,20 +2,19 @@
 
 #include <Arduino.h>
 #include <LiquidCrystal.h>
-#include <avr/eeprom.h>
 #include <avr/pgmspace.h>
 #include <avr/wdt.h>
 
 #include "FlightStab.h"
 
 /*
- Aquastar pin mapping
+ Aquastar/DLUX pin mapping
  PB0  8 LCD_D4         PC0 14/A0               PD0 0 RXD
  PB1  9 LCD_D5         PC1 15/A1               PD1 1 TXD
  PB2 10 LCD_D6         PC2 16/A2 LCD_RS        PD2 2 UP_BUTTON
  PB3 11 LCD_D7 (MOSI)  PC3 17/A3 LCD_RW        PD3 3 LEFT_BUTTON
- PB4 12 (MISO)         PC4 18/A4 LCD_EN (SDA)  PD4 4 RIGHT_BUTTON
- PB5 13 (SCK)          PC5 19/A5 (SCL)         PD5 5 DOWN_BUTTON
+ PB4 12 (MISO)         PC4 18/A4 LCD_EN (SDA)  PD4 4 RIGHT_BUTTON (DLUX=DOWN_BUTTON)
+ PB5 13 (SCK)          PC5 19/A5 (SCL)         PD5 5 DOWN_BUTTON (DLUX=RIGHT_BUTTON)
  PB6 14 (XTAL1)        PC6 (RESET)             PD6 6 
  PB7 15 (XTAL2)                                PD7 7 
 */
@@ -255,7 +254,7 @@ void button_init()
 }
 
 /***************************************************************************************************************
-* BITBANG SERIAL
+* SERIAL
 ***************************************************************************************************************/
 
 void serial_write_byte(uint8_t b) {
@@ -379,7 +378,8 @@ void loop()
     OW_WAIT_CONNECT,
     OW_WAIT_STATS,
     OW_CONNECTED,
-    OW_SEND
+    OW_SEND,
+    OW_BAD_CFG_VER
   } ow_state = OW_WAIT_CONNECT;
 
   struct _ow_msg ow_msg;
@@ -408,12 +408,20 @@ again:
     case OW_SEND:
       // ow_msg already set up
       break;
+    case OW_BAD_CFG_VER: 
+      ow_msg.cmd = OW_NULL;
+      break;
     }
     send_msg(&ow_msg, sizeof(ow_msg));
     
     if (recv_msg(&ow_msg, sizeof(ow_msg), 200)) { // wait 200ms for response
       switch (ow_state) {
       case OW_WAIT_CONNECT:
+        if (ow_msg.u.eeprom_cfg.ver != eeprom_cfg_ver) {
+          ow_state = OW_BAD_CFG_VER;
+          update_lcd = true;
+          break;
+        }      
         copy_from_cfg(param, &ow_msg.u.eeprom_cfg);
         ow_state = OW_WAIT_STATS;
         break;
@@ -504,6 +512,14 @@ again:
         }
         break;
       }
+      break;
+    case OW_BAD_CFG_VER:
+      lcd.print(F("Cfg Ver Mismatch"));
+      lcd.setCursor(0, 1);
+      lcd.print(F("read="));
+      lcd.print(ow_msg.u.eeprom_cfg.ver);
+      lcd.print(F(" need="));
+      lcd.print(eeprom_cfg_ver);
       break;
     }
   }
