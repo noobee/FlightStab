@@ -1543,7 +1543,6 @@ void calibrate_imu(struct _calibration *pimu_cal)
 }
 
 
-
 /***************************************************************************************************************
  * SERIAL
  ***************************************************************************************************************/
@@ -2198,11 +2197,11 @@ void setup()
 
    // set up default HOLD pid parameters
   for (i=0; i<3; i++) {
-    pid_param_hold.kp[i] = 250;
-    pid_param_hold.ki[i] = 500;
-    pid_param_hold.kd[i] = 250;
+    pid_param_hold.kp[i] = 500;
+    pid_param_hold.ki[i] = 0;
+    pid_param_hold.kd[i] = 500;
   }
-  pid_param_hold.i_windup = 32768;
+  pid_param_hold.i_windup = 0;
   pid_param_hold.output_shift = 8;
   
   // eeprom processing
@@ -2429,9 +2428,6 @@ void setup()
   int16_t stick_gain[3];
   int16_t master_gain;
 
-  int8_t reset_att_ail_ele;
-  int8_t reset_att_rud;
-
 #if !defined(NO_STICKCONFIG)  
   uint32_t stick_config_check_time = t;
   struct _stick_zone stick_zone;
@@ -2519,49 +2515,33 @@ again:
     // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
     master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, MASTER_GAIN_MAX);     
         
-    // check stabilization mode
+    // stabilization mode
     enum STAB_MODE stab_mode2 = (aux_in2 <= RX_WIDTH_MID) ? STAB_RATE : STAB_HOLD;
     if (stab_mode2 != stab_mode) {
       stab_mode = stab_mode2;
-      reset_att_ail_ele = true; // reset attitude error on mode change
-      reset_att_rud = true; //
+      // reset attitude error on mode change
+      for (i=0; i<3; i++) 
+        pid_state.sum_err[i] = 0;
       set_led_msg(1, (stab_mode == STAB_RATE) ? 0 : 4, LED_SHORT);
     }
- 
-    // reset attitude error if stick is not center
-    if (ail_stick_pos > 100 || ele_stick_pos > 100) {
-      reset_att_ail_ele = true;
-    }   
-    if (rud_stick_pos > 100) {
-      reset_att_rud = true;
+  
+    // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
+    
+    if (stab_mode == STAB_RATE) {
+      // zero roll rate, stabilization only
+      for (i=0; i<3; i++) 
+        pid_state.setpoint[i] = 0;
     }
- 
-    if (reset_att_ail_ele) {
-      // reset pitch+roll attitude error to zero
-      pid_state.sum_err[0] = 0;
-      pid_state.sum_err[1] = 0;
-      reset_att_ail_ele = false;
+    
+    // TEST TEST TEST: STAB_HOLD == STAB_RATE with stick controlled roll rate
+    if (stab_mode == STAB_HOLD) {
+      // stick controlled roll rate
+      // max stick == 400, if "<< 4" then 400*16 = 6400 => 6400/8192*500 = 391deg/s (32768 == 2000deg/s)
+      pid_state.setpoint[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (4-1);
+      pid_state.setpoint[1] = (ele_in2 - ele_in2_mid) << 4;
+      pid_state.setpoint[2] = (rud_in2 - rud_in2_mid) << 4;
     }
-    if (reset_att_rud) {
-      // reset yaw attitude error to zero
-      pid_state.sum_err[2] = 0;
-      reset_att_rud = false;
-    }      
-
-     // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
-#if 0    
-    // stick controlled roll rate
-    // max stick == 400, if << 4 then 6400 == 6400/8192*500 = 391deg/s
-    pid_state.setpoint[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (4-1);
-    pid_state.setpoint[1] = (ele_in2 - ele_in2_mid) << 4;
-    pid_state.setpoint[2] = (rud_in2 - rud_in2_mid) << 4;
-#else
-    // zero roll rate
-    pid_state.setpoint[0] = 0;
-    pid_state.setpoint[1] = 0;
-    pid_state.setpoint[2] = 0;
-#endif
-
+    
     // measured angular rate (from the gyro and apply calibration offset)
     pid_state.input[0] = constrain(gyro[0] - gyro0[0], -8192, 8191);
     pid_state.input[1] = constrain(gyro[1] - gyro0[1], -8192, 8191);
@@ -2571,10 +2551,10 @@ again:
     compute_pid(&pid_state, (stab_mode == STAB_RATE) ? &pid_param_rate : &pid_param_hold);
     
     for (i=0; i<3; i++) {
-      // vr_gain [-128,127]/128, stick_gain [400,0,400]/512, master_gain [400,0,400]/512
+      // vr_gain [-128,0,127]/128, stick_gain [0,400,0]/512, master_gain [400,0,400]/512
       correction[i] = ((((int32_t)pid_state.output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 9) * master_gain >> 9;
     }
-
+    
     // calibration wag on all surfaces if needed
     if (calibration_wag_count > 0) {
       if ((int32_t)(t - last_calibration_wag_time) > 200000L) {
@@ -2593,7 +2573,6 @@ again:
     last_pid_time = t;
   }
 
-  
   if ((int32_t)(t - last_vr_time) > 500123) {
     // sample all adc channels
     uint8_t ail_vr2, ele_vr2, rud_vr2;
