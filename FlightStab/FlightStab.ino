@@ -2537,9 +2537,13 @@ again:
     if (stab_mode == STAB_HOLD) {
       // stick controlled roll rate
       // max stick == 400, if "<< 4" then 400*16 = 6400 => 6400/8192*500 = 391deg/s (32768 == 2000deg/s)
-      pid_state.setpoint[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (4-1);
-      pid_state.setpoint[1] = (ele_in2 - ele_in2_mid) << 4;
-      pid_state.setpoint[2] = (rud_in2 - rud_in2_mid) << 4;
+      int16_t sp;
+      sp = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (4-1);
+      pid_state.setpoint[0] = vr_gain[0] < 0 ? sp : -sp;      
+      sp = (ele_in2 - ele_in2_mid) << 4;
+      pid_state.setpoint[1] = vr_gain[1] < 0 ? sp : -sp;
+      sp = (rud_in2 - rud_in2_mid) << 4;
+      pid_state.setpoint[2] = vr_gain[2] < 0 ? sp : -sp;
     }
     
     // measured angular rate (from the gyro and apply calibration offset)
