@@ -1226,7 +1226,7 @@ struct _pid_param {
   int16_t kp[3]; // [0, 1000] 11b signed
   int16_t ki[3];
   int16_t kd[3];
-  int32_t i_windup;
+  int32_t i_limit[3];
   int8_t output_shift;
 };
 
@@ -1248,8 +1248,8 @@ void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param)
   for (int8_t i=0; i<3; i++) {
     int32_t err, sum_err, diff_err, pterm, iterm, dterm;
     err = ppid_state->input[i] - ppid_state->setpoint[i];
-    ppid_state->sum_err[i] += err; // accumulate the error
-    sum_err = constrain(ppid_state->sum_err[i], -ppid_param->i_windup, ppid_param->i_windup); // clamp local copy
+    // accumulate the error up to an i_limit threshold
+    sum_err = ppid_state->sum_err[i] = constrain(ppid_state->sum_err[i] + err, -ppid_param->i_limit[i], ppid_param->i_limit[i]);
     diff_err = err - ppid_state->last_err[i]; // difference the error
     ppid_state->last_err[i] = err;    
         
@@ -2191,17 +2191,17 @@ void setup()
     pid_param_rate.kp[i] = 500;
     pid_param_rate.ki[i] = 0;
     pid_param_rate.kd[i] = 500;
+    pid_param_rate.i_limit[i] = 0;
   }
-  pid_param_rate.i_windup = 0;
   pid_param_rate.output_shift = 8;
 
    // set up default HOLD pid parameters
   for (i=0; i<3; i++) {
     pid_param_hold.kp[i] = 500;
-    pid_param_hold.ki[i] = 0;
+    pid_param_hold.ki[i] = 500;
     pid_param_hold.kd[i] = 500;
+    pid_param_hold.i_limit[i] = 0;
   }
-  pid_param_hold.i_windup = 0;
   pid_param_hold.output_shift = 8;
   
   // eeprom processing
@@ -2533,17 +2533,21 @@ again:
         pid_state.setpoint[i] = 0;
     }
     
-    // TEST TEST TEST: STAB_HOLD == STAB_RATE with stick controlled roll rate
     if (stab_mode == STAB_HOLD) {
       // stick controlled roll rate
       // max stick == 400, if "<< 4" then 400*16 = 6400 => 6400/8192*500 = 391deg/s (32768 == 2000deg/s)
-      int16_t sp;
-      sp = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (4-1);
-      pid_state.setpoint[0] = vr_gain[0] < 0 ? sp : -sp;      
-      sp = (ele_in2 - ele_in2_mid) << 4;
-      pid_state.setpoint[1] = vr_gain[1] < 0 ? sp : -sp;
-      sp = (rud_in2 - rud_in2_mid) << 4;
-      pid_state.setpoint[2] = vr_gain[2] < 0 ? sp : -sp;
+      int16_t sp[3];
+      sp[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (2-1);
+      sp[1] = (ele_in2 - ele_in2_mid) << 2;
+      sp[2] = (rud_in2 - rud_in2_mid) << 2;
+      for (i=0; i<3; i++) {
+        pid_state.setpoint[i] = vr_gain[i] < 0 ? sp[i] : -sp[i];      
+      }
+
+      for (i=0; i<3; i++) {
+        // 2000 deg/s == 32768 units, so 1 deg/(PID_PERIOD=10ms) == 32768/20 units
+        pid_param_hold.i_limit[i] = ((int32_t)30 * (32768 / 2 / (PID_PERIOD / 1000)) * stick_gain[i]) >> 9; 
+      }
     }
     
     // measured angular rate (from the gyro and apply calibration offset)
@@ -2553,7 +2557,8 @@ again:
     
     // apply PID control
     compute_pid(&pid_state, (stab_mode == STAB_RATE) ? &pid_param_rate : &pid_param_hold);
-    
+
+    // apply vr_gain, stick_gain and master_gain
     for (i=0; i<3; i++) {
       // vr_gain [-128,0,127]/128, stick_gain [0,400,0]/512, master_gain [400,0,400]/512
       correction[i] = ((((int32_t)pid_state.output[i] * vr_gain[i] >> 7) * stick_gain[i]) >> 9) * master_gain >> 9;
@@ -2588,6 +2593,13 @@ again:
     vr_gain[0] = (int16_t)ail_vr2 - 128;
     vr_gain[1] = (int16_t)ele_vr2 - 128;
     vr_gain[2] = (int16_t)rud_vr2 - 128;
+    
+    // deadband filter
+    const int8_t vr_deadband = 8;
+    for (i=0; i<3; i++) {
+      if (vr_gain[i] > -vr_deadband && vr_gain[i] < vr_deadband) 
+        vr_gain[i] = 0; 
+    }
 
     start_next_adc(0);
     last_vr_time = t;
