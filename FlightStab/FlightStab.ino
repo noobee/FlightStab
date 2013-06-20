@@ -147,6 +147,7 @@ bool ow_loop(); // OneWireSerial.ino
  PB0 8 CPPM_IN instead of AIL_IN
  PB1 9 FLP_OUT instead of ELE_IN
  PB2 10 THR_OUT instead of RUD_IN
+ PB3 11 AUX2_OUT instead of AUX_IN
 */
 
 #define DEVICE_ID DEVICE_RX3S_V2V3
@@ -169,8 +170,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
 
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL /*&aux2_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1, -1}
 
 // <IMU>
 #define USE_ITG3200
@@ -181,6 +182,7 @@ bool ow_loop(); // OneWireSerial.ino
 #define CPPM_PINBIT 0
 #define FLP_OUT_PIN 9
 #define THR_OUT_PIN 10
+#define AUX2_OUT_PIN 11
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
@@ -400,7 +402,6 @@ volatile int16_t aux_in = RX_WIDTH_LOW_FULL; // assume max RATE MODE gain if no 
 volatile int16_t aux2_in = RX_WIDTH_MID;
 volatile int16_t thr_in = RX_WIDTH_LOW_FULL;
 volatile int16_t flp_in = RX_WIDTH_MID;
-volatile int16_t tmp_in = RX_WIDTH_MID;
 int16_t ail_in2, ailr_in2, ele_in2, rud_in2, aux_in2, aux2_in2, thr_in2, flp_in2;
 
 int16_t ail_in2_mid = RX_WIDTH_MID; // calibration sets stick-neutral-position offsets
@@ -423,7 +424,8 @@ volatile int16_t rud_out;
 volatile int16_t ailr_out;
 volatile int16_t thr_out;
 volatile int16_t flp_out;
-int16_t ail_out2, ele_out2, rud_out2, ailr_out2, thr_out2, flp_out2;
+volatile int16_t aux2_out;
+int16_t ail_out2, ele_out2, rud_out2, ailr_out2, thr_out2, flp_out2, aux2_out2;
 
 int16_t mixer_out2_low_limit[4];
 int16_t mixer_out2_high_limit[4];
@@ -1769,7 +1771,6 @@ void copy_rx_in()
   ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
   aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
   aux2_in2 = (tmp = aux2_in) == aux2_in ? tmp : aux2_in2;
-//  aux2_in2 = (tmp = ailr_in) == ailr_in ? tmp : aux2_in2; // johnrb
   thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
   flp_in2 = (tmp = flp_in) == flp_in ? tmp : flp_in2;
   
@@ -1825,9 +1826,10 @@ void apply_mixer_change(int16_t *change)
     break;
   }
 
-  // throttle and flap pass through
+  // throttle, flap and aux2 pass through
   thr_out2 = thr_in2;  
   flp_out2 = flp_in2;  
+  aux2_out2 = aux2_in2;  
 }
 
 void set_mixer_limits(int16_t low, int16_t high)
@@ -1873,6 +1875,7 @@ void start_servo_frame()
     ailr_out = ailr_out2;
     thr_out = thr_out2;
     flp_out = flp_out2;
+    aux2_out = aux2_out2;
     
     TIMSK1 |= (1 << OCIE1A); // enable interrupt on TCNT1 == OCR1A
     TIFR1 |= (1 << OCF1A); // clear any pending interrupt
@@ -1944,8 +1947,8 @@ void dump_sensors()
       servo_out = constrain(servo_out, RX_WIDTH_LOW_FULL, RX_WIDTH_HIGH_FULL);
       servo_dir = -servo_dir;
     }
-    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = flp_out2 = servo_out;
-//    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = flp_out2 = RX_WIDTH_MID;
+    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = flp_out2 = aux2_out2 = servo_out;
+//    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = flp_out2 = aux2_out2 = RX_WIDTH_MID;
     if (servo_sync && !servo_busy) {
       servo_sync = false;
       start_servo_frame();
@@ -2367,14 +2370,19 @@ void setup()
 #if !defined(NO_CPPM)
   if (cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
+    // PB1 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
+    // PB3 11 AUX2_OUT instead of AUX_IN
     rx_portb[0] = NULL; // disable ail_in
     rx_portb[1] = NULL; // disable ele_in
     rx_portb[2] = NULL; // disable rud_in
+    rx_portb[3] = NULL; // disable aux_in
     pwm_out_var[4] = &thr_out; // enable thr_out
     pwm_out_pin[4] = THR_OUT_PIN; //
     pwm_out_var[5] = &flp_out; // enable flp_out
     pwm_out_pin[5] = FLP_OUT_PIN; //
+    pwm_out_var[6] = &aux2_out; // enable aux2_out
+    pwm_out_pin[6] = AUX2_OUT_PIN; //
   }
 #endif // !NO_CPPM
 #endif // RX3S_V2
