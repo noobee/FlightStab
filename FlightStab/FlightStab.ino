@@ -141,7 +141,7 @@ bool ow_loop(); // OneWireSerial.ino
  PB3 11 AILR_IN instead of AUX_IN (no remote gain)
 
  AIL_DUAL mode B
- PD2 2 AILR_IN instead of ELE_SW
+ PD1 1 AILR_IN instead of AIL_SW
  
  CPPM enabled
  PB0 8 CPPM_IN instead of AIL_IN
@@ -204,13 +204,6 @@ bool ow_loop(); // OneWireSerial.ino
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN 4
 #define EEPROM_RESET_IN_PIN 5
-
-//#define MOD_PCINT0 // (JohnRB) alternate PCINT0 ISR. only for RX3S_V2
-#if defined(MOD_PCINT0)
-#warning MOD_PCINT0 defined
-#endif
-
-int8_t rx3s_v2_wing_dual_ailB; // true if AIL_DUAL mode B
 
 #endif
 /* RX3S_V2 *****************************************************************************************************/
@@ -920,91 +913,6 @@ ISR(TIMER1_CAPT_vect)
   }
 #endif // !NO_CPPM
 }
-
-#if !(defined(RX3S_V2) && defined(MOD_PCINT0))
-ISR(PCINT0_vect) 
-{
-  pcint0_vect();
-}
-#else // !(defined(RX3S_V2) && defined(MOD_PCINT0))
-
-// contributed by JohnRB
-//*********************************************************************************/
-//  Excessive delay in processing interrupts for port B bit changes causes        */
-//  inaccurate pulse width measurements which may result in jitter seen/heard on  */
-//  the attached servos.                                                          */
-//                                                                                */
-//  This version of the interrupt handler was an attempt to get the fastest       */
-//  possible execution time with the minimal use of stack space.  This ISR does   */
-//  not enable interrupts again until it completes (about 6.35us at 16MHz).	      */
-//                                                                                */
-//  The downside of using this option is increased use of Flash memory (about 150 */
-//  bytes).	                                                                      */
-//	                                                                              */
-//  The original ISR is reentrant and runs disabled for about 1.6us less than this*/
-//  version but takes about 23.5us to complete (at 16MHz).  The original is also  */
-//  reentrant and each new invocation requires an additonal 25 bytes of stack     */
-//  space.	                                                                      */
-//	                                                                              */
-//  Bottom Line - If stack space becomes critical and/or processor is starting to */
-//  get overloaded, use this replacement ISR, otherwise just stick with the       */
-//  original ISR.	                                                                */
-//*********************************************************************************/
-// 
-// this ISR uses a fixed map of (AIL, ELE, RUD, AUX)_IN_PINs assigned to PB(0,1,2,3)
-
-#define    AIL_PORT_BIT  0
-#define    ELE_PORT_BIT  1
-#define    RUD_PORT_BIT  2
-#define    AUX_PORT_BIT  3	// Also AILR_PORT_BIT in DUAL AILERON mode
-
-#define CHECK_CHANNEL(PORT_BIT, RISE_VAR, PORT_VAR) \
-  if (diff & (1 << PORT_BIT))	{ \
-    if (rise & (1 << PORT_BIT)) { \
-      RISE_VAR = now; \
-    } else { \
-      width = (now - RISE_VAR) >> (F_CPU == F_16MHZ ? 1 : 0); \
-      if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) { \
-        PORT_VAR = width; \
-        if (rx_frame_sync_ref == PORT_BIT) \
-          rx_frame_sync = true; \
-      } \
-    } \
-  }
-
-ISR(PCINT0_vect)
-{
-  static uint16_t ail_rise, ele_rise, rud_rise, aux_rise;
-  static uint8_t last_pin;
-
-  uint16_t now;        // current timer value
-  uint8_t rise;	       // rising edge pulses
-  uint8_t diff;        // portb changed bits     
-  uint8_t last_pin2;   // temporary save for previous Port B value
-  uint16_t width;      // work register to verify width
-
-  now = TCNT1;         
-  last_pin2 = last_pin;  // save previous Port B value
-  last_pin = PINB;
-
-  diff = last_pin ^ last_pin2;	// pins that just changed state
-  rise = last_pin & ~last_pin2;	// pins that just went positive (start of pulse)
-
-  // The following tests each input for change, 
-  // at rise captures time and at fall calculates and validates the width & saves it.
-  // If the channel is the reference port, indicate sync
-  
-  CHECK_CHANNEL(AIL_PORT_BIT, ail_rise, ail_in);
-  CHECK_CHANNEL(ELE_PORT_BIT, ele_rise, ele_in);
-  CHECK_CHANNEL(RUD_PORT_BIT, rud_rise, rud_in);
-  // In DUAL AILERON mode A, ailr_in replaces aux_in and there is no gain control
-  if (wing_mode == WING_DUAL_AIL && !rx3s_v2_wing_dual_ailB) {
-    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, ailr_in); // DUAL AILERON mode A
-  } else {
-    CHECK_CHANNEL(AUX_PORT_BIT, aux_rise, aux_in); // All other modes 
-  }
-}
-#endif // !(defined(RX3S_V2) && defined(MOD_PCINT0))
 
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
@@ -2353,17 +2261,15 @@ void setup()
   wing_mode = dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)];
   
   if (wing_mode == WING_DUAL_AIL) {
-    if (ail_sw) {
+    if (ele_sw) {
       // WING_DUAL_AIL mode A
       // PB3 11 AILR_IN instead of AUX_IN
       rx_portb[3] = &ailr_in; // replace aux_in
-      rx3s_v2_wing_dual_ailB = false;
     } else {
       // WING_DUAL_AIL mode B
-      // PD2 2 AILR_IN instead of ELE_SW
-      din_portd[2] = NULL; // disable ele_sw
-      rx_portd[2] = &ailr_in; // enable ailr_in
-      rx3s_v2_wing_dual_ailB = true;
+      // PD1 1 AILR_IN instead of AIL_SW
+      din_portd[1] = NULL; // disable ail_sw
+      rx_portd[1] = &ailr_in; // enable ailr_in
     }
   }
 

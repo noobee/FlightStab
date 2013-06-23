@@ -94,7 +94,6 @@ add_arduino_firmware(TEST_RX3S_V2_SERIAL_DEBUG FlightStab pro5v "RX3S_V2;SERIAL_
 add_arduino_firmware(TEST_RX3S_V2_DUMP_SENSORS FlightStab pro5v "RX3S_V2;DUMP_SENSORS")
 add_arduino_firmware(TEST_RX3S_V2_LED_TIMING FlightStab pro5v "RX3S_V2;LED_TIMING")
 add_arduino_firmware(TEST_RX3S_V2_I2CDEVLIB FlightStab pro5v "RX3S_V2;USE_I2CDEVLIB")
-add_arduino_firmware(TEST_RX3S_V2_MOD_PCINT0 FlightStab pro5v "RX3S_V2;MOD_PCINT0")
 add_arduino_firmware(TEST_RX3S_V2_NO_CPPM FlightStab pro5v "RX3S_V2;NO_CPPM")
 add_arduino_firmware(TEST_RX3S_V2_NO_ONEWIRE FlightStab pro5v "RX3S_V2;NO_ONEWIRE")
 add_arduino_firmware(TEST_RX3S_V2_NO_STICKCONFIG FlightStab pro5v "RX3S_V2;NO_STICKCONFIG")
