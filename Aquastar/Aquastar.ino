@@ -80,7 +80,6 @@ prog_char yaw_gain[] PROGMEM = "YAW GAIN";
 prog_char mixer_epa_mode[] PROGMEM = "EPA MODE";
 prog_char cppm_mode[] PROGMEM = "CPPM MODE";
 prog_char mount_orient[] PROGMEM = "MOUNT ORIENT";
-prog_char hold_axes[] PROGMEM = "HOLD AXES";
 prog_char eeprom[] PROGMEM = "EEPROM";
 
 prog_char status_device_id[] PROGMEM = "ID=";
@@ -105,10 +104,6 @@ prog_char mount_normal[] PROGMEM = "Normal";
 prog_char mount_roll90left[] PROGMEM = "Roll 90" XSTR(CHAR_DEGREE) " Left";
 prog_char mount_roll90right[] PROGMEM = "Roll 90" XSTR(CHAR_DEGREE) " Right";
 
-prog_char hold_axes_aer[] PROGMEM = "[AER]";
-prog_char hold_axes_ae_r[] PROGMEM = "[AE][R]";
-prog_char hold_axes_a_e_r[] PROGMEM = "[A][E][R]";
-
 prog_char eeprom_instr[] PROGMEM = "Up/Dn then " XSTR(CHAR_RIGHT_ARROW);
 prog_char eeprom_update_cfg[] PROGMEM = "Update Config " XSTR(CHAR_RIGHT_ARROW);
 prog_char eeprom_erase_cfg[] PROGMEM = "Erase Config " XSTR(CHAR_RIGHT_ARROW);
@@ -123,7 +118,6 @@ enum SCREEN_PAGES { // must be in sync with menu_heading
   EPA_MODE_PAGE, 
   CPPM_MODE_PAGE, 
   MOUNT_ORIENT_PAGE, 
-  HOLD_AXES_PAGE, 
   EEPROM_PAGE
 };
 
@@ -136,7 +130,6 @@ prog_char *menu_heading[] PROGMEM = {
   mixer_epa_mode,
   cppm_mode,
   mount_orient,
-  hold_axes,
   eeprom,
 };
 
@@ -161,18 +154,15 @@ prog_char *menu_item[][4] PROGMEM = {
   {mount_normal,
    mount_roll90left,
    mount_roll90right},
-  {hold_axes_aer,
-   hold_axes_ae_r,
-   hold_axes_a_e_r},
   {eeprom_instr,
    eeprom_update_cfg,
    eeprom_erase_cfg,
    eeprom_erase_stats},
 };
 
-const int8_t menu_count[] = {3, 4, 0, 0, 0, 3, 4, 3, 3, 4};
-const int8_t param_min[] = {1, WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL,  CPPM_NONE,     MOUNT_NORMAL,        HOLD_AXES_AER,   1};
-const int8_t param_max[] = {3, WING_DUAL_AIL,   +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, HOLD_AXES_A_E_R, 4};
+const int8_t menu_count[] = {3, 4, 0, 0, 0, 3, 4, 3, 4};
+const int8_t param_min[] = {1, WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL,  CPPM_NONE,     MOUNT_NORMAL,        1};
+const int8_t param_max[] = {3, WING_DUAL_AIL,   +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 4};
 
 const int8_t menu_num_pages = sizeof(menu_count)/sizeof(menu_count[0]);
 
