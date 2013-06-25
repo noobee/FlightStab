@@ -1723,8 +1723,9 @@ void stick_config(struct _stick_zone *psz)
   const int8_t param_ymin[] = {WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , 1};
   const int8_t param_ymax[] = {WING_DUAL_AIL  , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 2};
   const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
-  int8_t param_yval[param_xcount];
-
+  int8_t *pparam_yval[param_xcount];
+  int8_t exit_option = 1;
+  
   const int16_t servo_swing = 300;
   const int32_t servo_interval[] = {100000L, 400000L};
 
@@ -1733,17 +1734,17 @@ void stick_config(struct _stick_zone *psz)
   uint32_t last_servo_update_time=0;
   int32_t wait_interval = servo_interval[1];
   
-  param_yval[0] = (int8_t) cfg.wing_mode;
-  param_yval[1] = cfg.vr_notch[0];
-  param_yval[2] = cfg.vr_notch[1];
-  param_yval[3] = cfg.vr_notch[2];
-  param_yval[4] = (int8_t) cfg.mixer_epa_mode;
-  param_yval[5] = (int8_t) cfg.cppm_mode;
-  param_yval[6] = (int8_t) cfg.mount_orient;
-  param_yval[7] = 1; // exit option
+  pparam_yval[0] = (int8_t *) &cfg.wing_mode;
+  pparam_yval[1] = &cfg.vr_notch[0];
+  pparam_yval[2] = &cfg.vr_notch[1];
+  pparam_yval[3] = &cfg.vr_notch[2];
+  pparam_yval[4] = (int8_t *) &cfg.mixer_epa_mode;
+  pparam_yval[5] = (int8_t *) &cfg.cppm_mode;
+  pparam_yval[6] = (int8_t *) &cfg.mount_orient;
+  pparam_yval[7] = &exit_option;
   
   int8_t update_x = (x + 1) << 1;
-  int8_t update_y = param_yval[x] << 1;
+  int8_t update_y = *pparam_yval[x] << 1;
   while (true) {
     uint32_t t = micros1();
   
@@ -1776,20 +1777,26 @@ void stick_config(struct _stick_zone *psz)
     } 
 
     if (update_x == 0 && /*update_y == 0 &&*/ stick_zone_update(psz)) {
+    
+      bool refresh_x = false;
+      bool refresh_y = false;
+      
       switch (psz->move) {
-        case 0x54: x = max(x - 1, 0); update_x = (x + 1) << 1; break; // left
-        case 0x56: x = min(x + 1, param_xcount - 1); update_x = (x + 1) << 1; break; // right
-        case 0x52: param_yval[x] = min(param_yval[x] + 1, param_ymax[x]); update_y = param_yval[x] << 1; break; // up
-        case 0x58: param_yval[x] = max(param_yval[x] - 1, param_ymin[x]); update_y = param_yval[x] << 1; break; // down
+        case 0x54: x = max(x - 1, 0); refresh_x = true; break; // left
+        case 0x56: x = min(x + 1, param_xcount - 1); refresh_x = true; break; // right
+        case 0x52: *pparam_yval[x] = min(*pparam_yval[x] + 1, param_ymax[x]); refresh_y = true; break; // up
+        case 0x58: *pparam_yval[x] = max(*pparam_yval[x] - 1, param_ymin[x]); refresh_y = true; break; // down
       }
 
-      // if updating x (index) servo then update y (value) servo as well
-      if (update_x > 0) {
-        update_y = param_yval[x] << 1;
+      // check if update_x and/or update_y need to be refreshed
+      if (refresh_x || refresh_y) {
+        update_y = *pparam_yval[x] << 1;
+        if (refresh_x)
+          update_x = (x + 1) << 1;
       }
-
+      
       // check for exit option
-      if (x == (param_xcount - 1) && param_yval[x] == 2) {
+      if (exit_option == 2) {
         break;
       }
  
@@ -1798,20 +1805,13 @@ void stick_config(struct _stick_zone *psz)
       Serial.print(psz->prev, HEX); Serial.print(' ');
       Serial.print(psz->curr, HEX); Serial.print(' ');
       Serial.print(x); Serial.print(' ');
-      Serial.print(param_yval[x]); Serial.print(' ');
+      Serial.print(*pparam_yval[x]); Serial.print(' ');
       Serial.println();
   #endif      
     }
   }
 
   // write eeprom;
-  cfg.wing_mode = (enum WING_MODE) param_yval[0];
-  cfg.vr_notch[0] = param_yval[1];
-  cfg.vr_notch[1] = param_yval[2];
-  cfg.vr_notch[2] = param_yval[3];
-  cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) param_yval[4];
-  cfg.cppm_mode = (enum CPPM_MODE) param_yval[5];
-  cfg.mount_orient = (enum MOUNT_ORIENT) param_yval[6];
   eeprom_write_cfg(&cfg, eeprom_cfg1_addr);
   eeprom_write_cfg(&cfg, eeprom_cfg2_addr);
 }
@@ -1848,7 +1848,7 @@ void setup()
     cfg.vr_override_gain[i] = 0;  
   }
   cfg.mixer_epa_mode = MIXER_EPA_FULL;
-  cfg.cppm_mode = CPPM_NONE; // or CPPM_RETA1a2F
+  cfg.cppm_mode = CPPM_NONE;
   cfg.mount_orient = MOUNT_NORMAL;
   cfg.stick_gain_throw = STICK_GAIN_THROW_FULL;
   cfg.max_rotate = MAX_ROTATE_391;
@@ -1872,7 +1872,7 @@ void setup()
   }
   cfg.pid_param_hold.output_shift = 8;
 
-  cfg.inflight_calibrate = false;
+  cfg.inflight_calibrate = true;
   
   // eeprom processing
   struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
@@ -1924,6 +1924,8 @@ void setup()
     // replace main cfg with copy good eeprom cfg 
     cfg = *pcfg;
   }
+
+//  cfg.cppm_mode = CPPM_RETA1a2F; // XXX
   
   if (ret != 0x00) {
     // update stats to eeprom if at least one cfg was written
@@ -2125,6 +2127,10 @@ void setup()
   calibrate_init_stat(&imu_cal, 3);
   last_calibration_wag_time = t;
 
+  // inflight calibration
+  uint32_t last_stab_mode_time = t;
+  int8_t stab_mode_count;
+
 again:
   t = micros1();
   update_led(t);
@@ -2177,8 +2183,38 @@ again:
   if (!rx_cal.done || !imu_cal.done) {
     goto again;
   }
-   
+
   if ((int32_t)(t - last_pid_time) > PID_PERIOD) {
+
+    // stabilization mode
+    enum STAB_MODE stab_mode2 = 
+      (stab_mode == STAB_HOLD && aux_in2 <= RX_WIDTH_MID - 25) ? STAB_RATE : 
+      (stab_mode == STAB_RATE && aux_in2 >= RX_WIDTH_MID + 25) ? STAB_HOLD : stab_mode; // hysteresis
+
+    if (stab_mode2 != stab_mode) {
+      stab_mode = stab_mode2;
+      set_led_msg(1, (stab_mode == STAB_RATE) ? 0 : 4, LED_SHORT);
+
+      // reset attitude error on mode change
+      for (i=0; i<3; i++) 
+        pid_state.sum_err[i] = 0;
+
+      // check for inflight rx calibration
+      if (cfg.inflight_calibrate) {
+        if ((int32_t)(t - last_stab_mode_time) > 500000L) {
+          stab_mode_count = 0;
+        }
+        last_stab_mode_time = t;
+
+        if (++stab_mode_count >= 3) {
+          ail_in2_mid = ail_in2;
+          ele_in2_mid = ele_in2;
+          rud_in2_mid = rud_in2;
+          ailr_in2_mid = ailr_in2;
+        }
+      }        
+    }
+  
     // determine how much sticks are off center (from neutral)
     int16_t ail_stick_pos = abs(((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1);
     int16_t ele_stick_pos = abs(ele_in2 - ele_in2_mid);
@@ -2197,16 +2233,6 @@ again:
     // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
     master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, master_gain_max);     
         
-    // stabilization mode
-    enum STAB_MODE stab_mode2 = (aux_in2 <= RX_WIDTH_MID) ? STAB_RATE : STAB_HOLD;
-    if (stab_mode2 != stab_mode) {
-      stab_mode = stab_mode2;
-      // reset attitude error on mode change
-      for (i=0; i<3; i++) 
-        pid_state.sum_err[i] = 0;
-      set_led_msg(1, (stab_mode == STAB_RATE) ? 0 : 4, LED_SHORT);
-    }
-  
     // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
     if (stab_mode == STAB_HOLD || (stab_mode == STAB_RATE && cfg.rate_mode_stick_rotate)) {
       // stick controlled roll rate
