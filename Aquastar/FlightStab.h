@@ -31,7 +31,6 @@ struct _pid_param {
   int16_t kp[3]; // [0, 1000] 11b signed
   int16_t ki[3];
   int16_t kd[3];
-  int32_t i_limit[3];
   int8_t output_shift;
 };
 

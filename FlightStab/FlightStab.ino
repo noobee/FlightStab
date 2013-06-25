@@ -1135,6 +1135,7 @@ struct _pid_state {
   int16_t input[3];
   int16_t last_err[3];
   int32_t sum_err[3];
+  int32_t i_limit[3];
   int16_t output[3];
 };
 
@@ -1146,7 +1147,7 @@ void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param)
     int32_t err, sum_err, diff_err, pterm, iterm, dterm;
     err = ppid_state->input[i] - ppid_state->setpoint[i];
     // accumulate the error up to an i_limit threshold
-    sum_err = ppid_state->sum_err[i] = constrain(ppid_state->sum_err[i] + err, -ppid_param->i_limit[i], ppid_param->i_limit[i]);
+    sum_err = ppid_state->sum_err[i] = constrain(ppid_state->sum_err[i] + err, -ppid_state->i_limit[i], ppid_state->i_limit[i]);
     diff_err = err - ppid_state->last_err[i]; // difference the error
     ppid_state->last_err[i] = err;    
         
@@ -1859,7 +1860,6 @@ void setup()
     cfg.pid_param_rate.kp[i] = 500;
     cfg.pid_param_rate.ki[i] = 0;
     cfg.pid_param_rate.kd[i] = 500;
-    cfg.pid_param_rate.i_limit[i] = 0;
   }
   cfg.pid_param_rate.output_shift = 8;
 
@@ -1868,12 +1868,11 @@ void setup()
     cfg.pid_param_hold.kp[i] = 500;
     cfg.pid_param_hold.ki[i] = 500;
     cfg.pid_param_hold.kd[i] = 500;
-    cfg.pid_param_hold.i_limit[i] = 0; // will be updated dynamically
   }
   cfg.pid_param_hold.output_shift = 8;
 
   cfg.inflight_calibrate = true;
-  
+
   // eeprom processing
   struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
   struct _eeprom_stats eeprom_stats;
@@ -2195,9 +2194,11 @@ again:
       stab_mode = stab_mode2;
       set_led_msg(1, (stab_mode == STAB_RATE) ? 0 : 4, LED_SHORT);
 
-      // reset attitude error on mode change
-      for (i=0; i<3; i++) 
+      // reset attitude error and i_limit threshold on mode change
+      for (i=0; i<3; i++) {
         pid_state.sum_err[i] = 0;
+        pid_state.i_limit[i] = 0;
+      }
 
       // check for inflight rx calibration
       if (cfg.inflight_calibrate) {
@@ -2254,7 +2255,7 @@ again:
       // max attitude error (bounding box)    
       for (i=0; i<3; i++) {
         // 2000 deg/s == 32768 units, so 1 deg/(PID_PERIOD=10ms) == 32768/20 units
-        cfg.pid_param_hold.i_limit[i] = ((int32_t)30 * (32768 / 2 / (PID_PERIOD / 1000)) * stick_gain[i]) >> 9; 
+        pid_state.i_limit[i] = ((int32_t)30 * (32768 / 2 / (PID_PERIOD / 1000)) * stick_gain[i]) >> 9; 
       }
     }
     
