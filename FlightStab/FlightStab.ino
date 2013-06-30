@@ -368,12 +368,9 @@ bool ow_loop(); // OneWireSerial.ino
 #endif
 
 // adc
-volatile uint8_t ail_vr; // initialized with vr_notch_table[vr_notch[0]] = 255
-volatile uint8_t ele_vr; //
-volatile uint8_t rud_vr; //
-
- // for eeprom config
-int8_t vr_notch_table[4+1+4] = {0, 32, 64, 96, 128, 160, 192, 224, 255};
+volatile uint8_t ail_vr = 255;
+volatile uint8_t ele_vr = 255;
+volatile uint8_t rud_vr = 255;
 
 // rx
 #define RX_WIDTH_MIN 900
@@ -431,6 +428,9 @@ int16_t mixer_out2_high_limit[4];
 
 // configuration
 struct _eeprom_cfg cfg;
+
+// local copy of config
+enum WING_MODE wing_mode;
 
 // cppm modes
 const int8_t rx_chan_list_size = 8;
@@ -1429,7 +1429,7 @@ void copy_rx_in()
   thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
   flp_in2 = (tmp = flp_in) == flp_in ? tmp : flp_in2;
   
-  if (cfg.wing_mode == WING_SINGLE_AIL)
+  if (wing_mode == WING_SINGLE_AIL)
     ailr_in2 = ail_in2;
 }
 
@@ -1442,7 +1442,7 @@ void apply_mixer_change(int16_t *change)
   
   // mixer
   int16_t tmp0, tmp1, tmp2;
-  switch (cfg.wing_mode) {
+  switch (wing_mode) {
   case WING_SINGLE_AIL:
   case WING_DUAL_AIL:
     ail_out2 = ail_in2 + change[0];
@@ -1612,6 +1612,7 @@ void dump_sensors()
     Serial.print("MISC "); 
     Serial.print(i2c_errors); Serial.print(' ');
     Serial.print(cfg.wing_mode); Serial.print(' ');
+    Serial.print(wing_mode); Serial.print(' ');
     Serial.print(cfg.mixer_epa_mode); Serial.print(' ');
     Serial.print(cfg.cppm_mode); Serial.print(' ');
     Serial.print(cfg.mount_orient); Serial.print(' ');
@@ -1713,7 +1714,7 @@ bool stick_zone_update(struct _stick_zone *psz)
 void stick_config(struct _stick_zone *psz)
 {
 // 1= wing_mode (see enum WING_MODE)
-// 2,3,4= [roll|pitch|yaw]_gain (see vr_notch_table[])
+// 2,3,4= [roll|pitch|yaw]_gain
 // 5= mixer_epa_mode (see enum MIXER_EPA_MODE)
 // 6= cppm_mode (see enum CPPM_MODE)
 // 7= mount_orient (see enum MOUNT_ORIENT)
@@ -1721,8 +1722,8 @@ void stick_config(struct _stick_zone *psz)
 
 // note: be careful about off-by-one errors in this function
 
-  const int8_t param_ymin[] = {WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , 1};
-  const int8_t param_ymax[] = {WING_DUAL_AIL  , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 2};
+  const int8_t param_ymin[] = {WING_USE_DIPSW, -5, -5, -5, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , 1};
+  const int8_t param_ymax[] = {WING_DUAL_AIL , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 2};
   const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
   int8_t *pparam_yval[param_xcount];
   int8_t exit_option = 1;
@@ -1735,10 +1736,12 @@ void stick_config(struct _stick_zone *psz)
   uint32_t last_servo_update_time=0;
   int32_t wait_interval = servo_interval[1];
   
+  int8_t vr_notch[3] = {0, 0, 0}; // XXX vr_notch non-functional
+
   pparam_yval[0] = (int8_t *) &cfg.wing_mode;
-  pparam_yval[1] = &cfg.vr_notch[0];
-  pparam_yval[2] = &cfg.vr_notch[1];
-  pparam_yval[3] = &cfg.vr_notch[2];
+  pparam_yval[1] = &vr_notch[0];
+  pparam_yval[2] = &vr_notch[1];
+  pparam_yval[3] = &vr_notch[2];
   pparam_yval[4] = (int8_t *) &cfg.mixer_epa_mode;
   pparam_yval[5] = (int8_t *) &cfg.cppm_mode;
   pparam_yval[6] = (int8_t *) &cfg.mount_orient;
@@ -1842,18 +1845,17 @@ void setup()
 #endif // RX3S_V1 || RX3S_V2
 
   // set up default parameters  
-  cfg.wing_mode = WING_SINGLE_AIL;
+  cfg.wing_mode = WING_USE_DIPSW;
   for (i=0; i<3; i++) {
-    cfg.vr_notch[i] = +4;
-    cfg.vr_override_enable[i] = false;
-    cfg.vr_override_gain[i] = 0;  
+    cfg.vr_gain[i] = vr_gain_use_pot;  
   }
   cfg.mixer_epa_mode = MIXER_EPA_FULL;
   cfg.cppm_mode = CPPM_NONE;
   cfg.mount_orient = MOUNT_NORMAL;
   cfg.stick_gain_throw = STICK_GAIN_THROW_FULL;
   cfg.max_rotate = MAX_ROTATE_391;
-  cfg.rate_mode_stick_rotate = true;
+  cfg.rate_mode_stick_rotate = RATE_MODE_STICK_ROTATE_DISABLE;
+  cfg.inflight_calibrate = INFLIGHT_CALIBRATE_ENABLE;
   
   // set up default RATE pid parameters
   for (i=0; i<3; i++) {
@@ -1871,13 +1873,16 @@ void setup()
   }
   cfg.pid_param_hold.output_shift = 8;
 
-  cfg.inflight_calibrate = true;
-
   // eeprom processing
   struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
   struct _eeprom_stats eeprom_stats;
   
-  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0xff : 0x00;
+  // ret
+  // bit0 = boot_check (reboot after cfg reset)
+  // bit1 = write cfg1
+  // bit2 = write cfg2
+  // bit3 = write stats
+  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0x07 : 0x00;
     
   eeprom_read_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
   if (ret || (eeprom_stats.device_id != DEVICE_ID || eeprom_stats.device_ver != DEVICE_VER)) {
@@ -1887,30 +1892,31 @@ void setup()
     eeprom_stats.eeprom_cfg1_err = 0;
     eeprom_stats.eeprom_cfg2_err = 0;
     eeprom_stats.eeprom_cfg12_reset = 0;
+    ret |= 0x08; // mark to update stats
   }
 
   if (eeprom_read_cfg(&eeprom_cfg1, eeprom_cfg1_addr, eeprom_cfg_ver) < 0)
-    ret |= 0x01;
+    ret |= 0x02; // mark to update cfg1
   if (eeprom_read_cfg(&eeprom_cfg2, eeprom_cfg2_addr, eeprom_cfg_ver) < 0)
-    ret |= 0x10;
+    ret |= 0x04; // mark to update cfg2
     
   calibration_wag_count = 3;
   struct _eeprom_cfg *pcfg = NULL;
-  switch (ret) {
+  switch (ret & 0x06) {
   case 0x00: // both copy 1 and 2 good
     pcfg = &eeprom_cfg1;
     break;
-  case 0x01: // copy 1 bad, copy 2 good
-    eeprom_write_cfg(&eeprom_cfg2, eeprom_cfg1_addr);
-    eeprom_stats.eeprom_cfg1_err++;
+  case 0x02: // copy 1 bad, copy 2 good
     pcfg = &eeprom_cfg2;
+    eeprom_write_cfg(pcfg, eeprom_cfg1_addr);
+    eeprom_stats.eeprom_cfg1_err++;
     break;
-  case 0x10: // copy 1 good, copy 2 bad
-    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg2_addr);
-    eeprom_stats.eeprom_cfg2_err++;
+  case 0x04: // copy 1 good, copy 2 bad
     pcfg = &eeprom_cfg1;
+    eeprom_write_cfg(pcfg, eeprom_cfg2_addr);
+    eeprom_stats.eeprom_cfg2_err++;
     break;
-  default: // both copy 1 and 2 bad (ret=0x11), or boot_check (ret=0xff)
+  default: // both copy 1 and 2 bad (ret=0x06)
     cfg.ver = eeprom_cfg_ver;
     eeprom_write_cfg(&cfg, eeprom_cfg1_addr);
     eeprom_write_cfg(&cfg, eeprom_cfg2_addr);
@@ -1923,15 +1929,13 @@ void setup()
     // replace main cfg with copy good eeprom cfg 
     cfg = *pcfg;
   }
-
-//  cfg.cppm_mode = CPPM_RETA1a2F; // XXX
   
-  if (ret != 0x00) {
-    // update stats to eeprom if at least one cfg was written
+  if (ret & 0x0e) {
+    // update stats to eeprom if at least one cfg, or stats, was marked for update
     eeprom_write_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
   }
   
-  if (ret == 0xff) {
+  if (ret & 0x01) {
     // boot_check initiated, halt and flash led indefinitely
     while (true) {
       set_led(LED_INVERT);
@@ -1985,11 +1989,13 @@ void setup()
     WING_SINGLE_AIL // 1=norm / 1=norm
   };
   
+  wing_mode = cfg.wing_mode;
+  
 #if defined(RX3S_V1)
 
-  cfg.wing_mode = dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)];
+  wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
 
-  switch (cfg.wing_mode) {
+  switch (wing_mode) {
   case WING_SINGLE_AIL:
   case WING_DELTA:
   case WING_VTAIL:
@@ -2024,9 +2030,9 @@ void setup()
 
 #if defined(RX3S_V2)
 
-  cfg.wing_mode = dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)];
+  wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)] : cfg.wing_mode;
   
-  if (cfg.wing_mode == WING_DUAL_AIL) {
+  if (wing_mode == WING_DUAL_AIL) {
     if (ele_sw) {
       // WING_DUAL_AIL mode A
       // PB3 11 AILR_IN instead of AUX_IN
@@ -2073,7 +2079,7 @@ void setup()
 #endif // !NO_CPPM
 #endif // NANOWII
 
-  set_led_msg(0, cfg.wing_mode, LED_LONG);
+  set_led_msg(0, wing_mode, LED_LONG);
 
   init_analog_in(); // vr
   init_digital_in_rx(); // rx
@@ -2201,7 +2207,7 @@ again:
       }
 
       // check for inflight rx calibration
-      if (cfg.inflight_calibrate) {
+      if (cfg.inflight_calibrate == INFLIGHT_CALIBRATE_ENABLE) {
         if ((int32_t)(t - last_stab_mode_time) > 500000L) {
           stab_mode_count = 0;
         }
@@ -2235,7 +2241,8 @@ again:
     master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, master_gain_max);     
         
     // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
-    if (stab_mode == STAB_HOLD || (stab_mode == STAB_RATE && cfg.rate_mode_stick_rotate)) {
+    if (stab_mode == STAB_HOLD || 
+       (stab_mode == STAB_RATE && cfg.rate_mode_stick_rotate == RATE_MODE_STICK_ROTATE_ENABLE)) {
       // stick controlled roll rate
       // cfg.max_rotate shift = [1, 5]
       // eg. max stick == 400, cfg.max_rotate == 4. then 400 << 4 = 6400 => 6400/32768*2000 = 391deg/s (32768 == 2000deg/s)
@@ -2292,22 +2299,17 @@ again:
   }
 
   if ((int32_t)(t - last_vr_time) > 500123) {
-    // sample all adc channels
-    uint8_t ail_vr2, ele_vr2, rud_vr2;
-    ail_vr2 = ail_vr;
-    ele_vr2 = ele_vr;
-    rud_vr2 = rud_vr;
-
+    // *_vr are adc channel output
     // vr_gain[] [-128, 0, 127] => [-100%, 0%, 100%] = [-128, 0, 127]
-    vr_gain[0] = (int16_t)ail_vr2 - 128;
-    vr_gain[1] = (int16_t)ele_vr2 - 128;
-    vr_gain[2] = (int16_t)rud_vr2 - 128;
+    vr_gain[0] = (cfg.vr_gain[0] == vr_gain_use_pot) ? (int16_t)ail_vr - 128 : cfg.vr_gain[0];
+    vr_gain[1] = (cfg.vr_gain[1] == vr_gain_use_pot) ? (int16_t)ele_vr - 128 : cfg.vr_gain[1];
+    vr_gain[2] = (cfg.vr_gain[2] == vr_gain_use_pot) ? (int16_t)rud_vr - 128 : cfg.vr_gain[2];
     
     // deadband filter
-    const int8_t vr_deadband = 8;
+    const int16_t vr_deadband = 8;
     for (i=0; i<3; i++) {
-      if (vr_gain[i] > -vr_deadband && vr_gain[i] < vr_deadband) 
-        vr_gain[i] = 0; 
+      if (abs(vr_gain[i]) < vr_deadband) 
+        vr_gain[i] = 0;
     }
 
     start_next_adc(0);
