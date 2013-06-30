@@ -78,8 +78,8 @@ prog_char *device_name[] PROGMEM = { // must match enum DEVICE_IDS in eeprom_sta
 // status
 prog_char status[] PROGMEM = "STATUS";
 prog_char status_device_id[] PROGMEM = "ID=";
-prog_char status_device_ver[] PROGMEM = "VER= ";
-prog_char status_device_eeprom[] PROGMEM = "1/2/R= ";
+prog_char status_device_ver[] PROGMEM = "VER=";
+prog_char status_device_eeprom[] PROGMEM = "1E/2E/R=";
 
 // eeprom
 prog_char eeprom[] PROGMEM = "EEPROM";
@@ -112,31 +112,31 @@ prog_char mount_normal[] PROGMEM = "Normal";
 prog_char mount_roll90left[] PROGMEM = "Roll 90" XSTR(CHAR_DEGREE) " Left";
 prog_char mount_roll90right[] PROGMEM = "Roll 90" XSTR(CHAR_DEGREE) " Right";
 
-prog_char stick_gain_throw[] PROGMEM = "STK-GAIN THRW";
+prog_char stick_gain_throw[] PROGMEM = "STK-GAIN THROW";
 prog_char stick_gain_throw_full[] PROGMEM = "Full";
 prog_char stick_gain_throw_half[] PROGMEM = "Half";
 prog_char stick_gain_throw_quarter[] PROGMEM = "Quarter";
 
-prog_char max_rotate[] PROGMEM = "STICK ROTATE";
+prog_char max_rotate[] PROGMEM = "MAX STK-ROTATE";
 prog_char max_rotate_48[] PROGMEM = "48" XSTR(CHAR_DEGREE) "/s";
 prog_char max_rotate_98[] PROGMEM = "98" XSTR(CHAR_DEGREE) "/s";
 prog_char max_rotate_196[] PROGMEM = "196" XSTR(CHAR_DEGREE) "/s";
 prog_char max_rotate_391[] PROGMEM = "391" XSTR(CHAR_DEGREE) "/s";
 prog_char max_rotate_782[] PROGMEM = "782" XSTR(CHAR_DEGREE) "/s";
 
-prog_char rate_mode_stick_rotate[] PROGMEM = "RATE STK-ROT";
+prog_char rate_mode_stick_rotate[] PROGMEM = "RATE STK-ROTATE";
 prog_char disabled[] PROGMEM = "Disabled";
 prog_char enabled[] PROGMEM = "Enabled";
 
 prog_char inflight_calibrate[] PROGMEM = "INFLIGHT CALIB";
 
-prog_char vr_gain[] PROGMEM = "VR_GAIN A/E/R";
+prog_char vr_gain[] PROGMEM = "VR-GAIN A/E/R";
 
-prog_char pid_rate[] PROGMEM = "RATE P/I/D ";
-prog_char pid_hold[] PROGMEM = "HOLD P/I/D ";
-prog_char pid_roll[] PROGMEM = "AIL";
-prog_char pid_pitch[] PROGMEM = "ELE";
-prog_char pid_yaw[] PROGMEM = "RUD";
+prog_char pid_rate[] PROGMEM = "RATE ";
+prog_char pid_hold[] PROGMEM = "HOLD ";
+prog_char pid_roll[] PROGMEM = "Ail ";
+prog_char pid_pitch[] PROGMEM = "Ele ";
+prog_char pid_yaw[] PROGMEM = "Rud ";
 
 prog_char *param_text[][6] PROGMEM = {
   {status, 
@@ -266,8 +266,8 @@ bool button_read()
   static uint32_t button_down_time[4];
   static uint32_t button_debounce_time[4]; // time of last button state change
   const int32_t button_debounce_delay = 50000; // debounce interval
-  const int32_t button_auto_delay = 700000; // time between first press and auto repeat start
-  const int32_t button_auto_period = 150000; // time between auto repeat events
+  const int32_t button_auto_delay = 600000; // time between first press and auto repeat start
+  const int32_t button_auto_period = 100000; // time between auto repeat events
   
   for (int8_t i=0; i<4; i++) {
     button_event[i] = BUTTON_NONE;    
@@ -501,7 +501,7 @@ void param_lcd_update(int8_t page, int8_t subpage)
       bool sel = (i == kpid_map[subpage]);
       if (sel) lcd.print('[');
       if (pvr_gain[i] == vr_gain_use_pot)
-        lcd.print("POT");
+        lcd.print(F("POT"));
       else 
         lcd.print(pvr_gain[i]);      
       if (sel) lcd.print(']');
@@ -517,6 +517,7 @@ void param_lcd_update(int8_t page, int8_t subpage)
     lcd.clear();
     lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][0]));
     lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][axis + 1]));
+    lcd.print(F("P/I/D"));
     lcd.setCursor(0, 1);
     for (int8_t i=0; i<3; i++) {
       bool sel = (i == kpid);
@@ -603,15 +604,16 @@ again:
     case OW_WAIT_CONNECT:
       lcd.print(F("OpenFlightStab"));
       lcd.setCursor(0, 1);
+      lcd.print(F("CfgVer="));
       lcd.print(eeprom_cfg_ver);
-      lcd.print(F(" "));
-      lcd.print(sizeof(cfg));
+//      lcd.print(F(" "));
+//      lcd.print(sizeof(cfg));
       break;
     case OW_CONNECTED:
       param_lcd_update(page, subpage);
       break;
     case OW_BAD_CFG_VER:
-      lcd.print(F("Cfg Ver Mismatch"));
+      lcd.print(F("CfgVer Mismatch"));
       lcd.setCursor(0, 1);
       lcd.print(F("read="));
       lcd.print(ow_msg.u.eeprom_cfg.ver);
@@ -633,12 +635,13 @@ again:
       if ((ptype == PARAM_VR_GAIN || ptype == PARAM_PID) && subpage > 0) {
         subpage--;
       } else {
-        if (page > 0) 
+        if (page > 0) {
           page--;
-        if (param_type[page] == PARAM_VR_GAIN) 
-          subpage = 2;
-        else if (param_type[page] == PARAM_PID) 
-          subpage = 8;
+          if (param_type[page] == PARAM_VR_GAIN) 
+            subpage = 2;
+          else if (param_type[page] == PARAM_PID) 
+            subpage = 8;
+        }
       }      
     }
     
@@ -669,27 +672,28 @@ again:
                  (ptype == PARAM_PID && subpage < 8)) {
         subpage++;
       } else {
-        if (page < param_num_pages - 1) 
+        if (page < param_num_pages - 1) {
           page++;
-        subpage = 0;
-        // reset to safe option (1=eeprom_instr) when paging into eeprom page.
-        // prevents user autorepeating right through it
-        if (param_type[page] == PARAM_EEPROM)
-          param_val_eeprom = 1;
+          subpage = 0;
+          // reset to safe option (1=eeprom_instr) when paging into eeprom page.
+          // prevents user autorepeating right through it
+          if (param_type[page] == PARAM_EEPROM)
+            param_val_eeprom = 1;
+        }
       }
     }
    
     int16_t diff = 0;
-    int16_t diff2 = param_type[page] == PARAM_PID ? -10 : -1;
+    int16_t diff2 = param_type[page] == PARAM_PID ? 10 : 1;
 
     if (button_event[BUTTON_ID_UP] == BUTTON_PRESS) {
-      diff = diff2;
+      diff = diff2; // up to increase
     }
     if (button_event[BUTTON_ID_DOWN] == BUTTON_PRESS) {
-      diff = -diff2;
+      diff = -diff2; // down to decrease
     }
 
-    if (diff) {
+    if (diff != 0) {
       int8_t axis;
       int8_t kpid;
       int8_t *pv;

@@ -1714,16 +1714,39 @@ bool stick_zone_update(struct _stick_zone *psz)
 void stick_config(struct _stick_zone *psz)
 {
 // 1= wing_mode (see enum WING_MODE)
-// 2,3,4= [roll|pitch|yaw]_gain
-// 5= mixer_epa_mode (see enum MIXER_EPA_MODE)
-// 6= cppm_mode (see enum CPPM_MODE)
-// 7= mount_orient (see enum MOUNT_ORIENT)
-// 8= exit
+// 2= mixer_epa_mode (see enum MIXER_EPA_MODE)
+// 3= cppm_mode (see enum CPPM_MODE)
+// 4= mount_orient (see enum MOUNT_ORIENT)
+// 5= stick_gain_throw (see enum STICK_GAIN_THROW)
+// 6= max_rotate (see enum MAX_ROTATE)
+// 7= rate_mode_stick_rotate (see enum RATE_MODE_STICK_ROTATE)
+// 8= inflight_calibrate (see enum INFLIGHT_CALIBRATE)
+// 9= exit
 
 // note: be careful about off-by-one errors in this function
 
-  const int8_t param_ymin[] = {WING_USE_DIPSW, -5, -5, -5, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , 1};
-  const int8_t param_ymax[] = {WING_DUAL_AIL , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 2};
+  const int8_t param_ymin[] = {
+    WING_USE_DIPSW, 
+    MIXER_EPA_FULL, 
+    CPPM_NONE,     
+    MOUNT_NORMAL, 
+    STICK_GAIN_THROW_FULL,
+    MAX_ROTATE_49,
+    RATE_MODE_STICK_ROTATE_DISABLE,
+    INFLIGHT_CALIBRATE_DISABLE,
+    1 // exit_option
+  };
+  const int8_t param_ymax[] = {
+    WING_DUAL_AIL,
+    MIXER_EPA_TRACK, 
+    CPPM_AETR1a2F, 
+    MOUNT_ROLL_90_RIGHT, 
+    STICK_GAIN_THROW_QUARTER,
+    MAX_ROTATE_782,
+    RATE_MODE_STICK_ROTATE_ENABLE,
+    INFLIGHT_CALIBRATE_ENABLE,
+    2 // exit_option
+  };
   const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
   int8_t *pparam_yval[param_xcount];
   int8_t exit_option = 1;
@@ -1733,19 +1756,18 @@ void stick_config(struct _stick_zone *psz)
 
   int8_t x = 0; // 0-based, x=0 => wing_mode
   int8_t servo_sync = false;
-  uint32_t last_servo_update_time=0;
+  uint32_t last_servo_update_time = 0;
   int32_t wait_interval = servo_interval[1];
   
-  int8_t vr_notch[3] = {0, 0, 0}; // XXX vr_notch non-functional
-
   pparam_yval[0] = (int8_t *) &cfg.wing_mode;
-  pparam_yval[1] = &vr_notch[0];
-  pparam_yval[2] = &vr_notch[1];
-  pparam_yval[3] = &vr_notch[2];
-  pparam_yval[4] = (int8_t *) &cfg.mixer_epa_mode;
-  pparam_yval[5] = (int8_t *) &cfg.cppm_mode;
-  pparam_yval[6] = (int8_t *) &cfg.mount_orient;
-  pparam_yval[7] = &exit_option;
+  pparam_yval[1] = (int8_t *) &cfg.mixer_epa_mode;
+  pparam_yval[2] = (int8_t *) &cfg.cppm_mode;
+  pparam_yval[3] = (int8_t *) &cfg.mount_orient;
+  pparam_yval[4] = (int8_t *) &cfg.stick_gain_throw;
+  pparam_yval[5] = (int8_t *) &cfg.max_rotate;
+  pparam_yval[6] = (int8_t *) &cfg.rate_mode_stick_rotate;
+  pparam_yval[7] = (int8_t *) &cfg.inflight_calibrate;
+  pparam_yval[8] = &exit_option;
   
   int8_t update_x = (x + 1) << 1;
   int8_t update_y = *pparam_yval[x] << 1;
