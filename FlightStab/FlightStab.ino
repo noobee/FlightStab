@@ -909,6 +909,12 @@ ISR(TIMER1_CAPT_vect)
 #endif // !NO_CPPM
 }
 
+// PORTB PCINT0-PCINT7
+ISR(PCINT0_vect) 
+{
+  pcint0_vect();
+}
+
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
