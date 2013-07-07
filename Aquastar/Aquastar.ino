@@ -118,11 +118,11 @@ prog_char stick_gain_throw_half[] PROGMEM = "Half";
 prog_char stick_gain_throw_quarter[] PROGMEM = "Quarter";
 
 prog_char max_rotate[] PROGMEM = "MAX STK-ROTATE";
-prog_char max_rotate_48[] PROGMEM = "48" XSTR(CHAR_DEGREE) "/s";
-prog_char max_rotate_98[] PROGMEM = "98" XSTR(CHAR_DEGREE) "/s";
-prog_char max_rotate_196[] PROGMEM = "196" XSTR(CHAR_DEGREE) "/s";
-prog_char max_rotate_391[] PROGMEM = "391" XSTR(CHAR_DEGREE) "/s";
-prog_char max_rotate_782[] PROGMEM = "782" XSTR(CHAR_DEGREE) "/s";
+prog_char max_rotate_vlow[] PROGMEM = "Very Low 0.25x";
+prog_char max_rotate_low[] PROGMEM = "Low 0.5x";
+prog_char max_rotate_med[] PROGMEM = "Medium 1x";
+prog_char max_rotate_high[] PROGMEM = "High 2x";
+prog_char max_rotate_vhigh[] PROGMEM = "Very High 4x";
 
 prog_char rate_mode_stick_rotate[] PROGMEM = "RATE STK-ROTATE";
 prog_char disabled[] PROGMEM = "Disabled";
@@ -152,7 +152,7 @@ prog_char *param_text[][6] PROGMEM = {
   {stick_gain_throw, 
    stick_gain_throw_full, stick_gain_throw_half, stick_gain_throw_quarter},
   {max_rotate, 
-   max_rotate_48, max_rotate_98, max_rotate_196, max_rotate_391, max_rotate_782},
+   max_rotate_vlow, max_rotate_low, max_rotate_med, max_rotate_high, max_rotate_vhigh},
   {rate_mode_stick_rotate, 
    disabled, enabled},
   {inflight_calibrate, 
@@ -174,7 +174,7 @@ const int8_t param_min[] = {
   CPPM_NONE,     
   MOUNT_NORMAL,    
   STICK_GAIN_THROW_FULL,
-  MAX_ROTATE_49,
+  MAX_ROTATE_VLOW,
   RATE_MODE_STICK_ROTATE_DISABLE,
   INFLIGHT_CALIBRATE_DISABLE,
   0, // vr_gain
@@ -190,7 +190,7 @@ const int8_t param_max[] = {
   CPPM_AETR1a2F,     
   MOUNT_ROLL_90_RIGHT,    
   STICK_GAIN_THROW_QUARTER,
-  MAX_ROTATE_782,
+  MAX_ROTATE_VHIGH,
   RATE_MODE_STICK_ROTATE_ENABLE,
   INFLIGHT_CALIBRATE_ENABLE,
   0, // vr_gain

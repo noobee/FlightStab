@@ -1737,7 +1737,7 @@ void stick_config(struct _stick_zone *psz)
     CPPM_NONE,     
     MOUNT_NORMAL, 
     STICK_GAIN_THROW_FULL,
-    MAX_ROTATE_49,
+    MAX_ROTATE_VLOW,
     RATE_MODE_STICK_ROTATE_DISABLE,
     INFLIGHT_CALIBRATE_DISABLE,
     1 // exit_option
@@ -1748,7 +1748,7 @@ void stick_config(struct _stick_zone *psz)
     CPPM_AETR1a2F, 
     MOUNT_ROLL_90_RIGHT, 
     STICK_GAIN_THROW_QUARTER,
-    MAX_ROTATE_782,
+    MAX_ROTATE_VHIGH,
     RATE_MODE_STICK_ROTATE_ENABLE,
     INFLIGHT_CALIBRATE_ENABLE,
     2 // exit_option
@@ -1881,7 +1881,7 @@ void setup()
   cfg.cppm_mode = CPPM_NONE;
   cfg.mount_orient = MOUNT_NORMAL;
   cfg.stick_gain_throw = STICK_GAIN_THROW_FULL;
-  cfg.max_rotate = MAX_ROTATE_391;
+  cfg.max_rotate = MAX_ROTATE_MED;
   cfg.rate_mode_stick_rotate = RATE_MODE_STICK_ROTATE_DISABLE;
   cfg.inflight_calibrate = INFLIGHT_CALIBRATE_ENABLE;
   
