@@ -368,13 +368,9 @@ bool ow_loop(); // OneWireSerial.ino
 #endif
 
 // adc
-volatile uint8_t ail_vr; // initialized with vr_notch_table[vr_notch[0]] = 255
-volatile uint8_t ele_vr; //
-volatile uint8_t rud_vr; //
-
- // for eeprom config
-int8_t vr_notch_table[4+1+4] = {0, 32, 64, 96, 128, 160, 192, 224, 255};
-int8_t vr_notch[3] = {4, 4, 4};
+volatile uint8_t ail_vr = 255;
+volatile uint8_t ele_vr = 255;
+volatile uint8_t rud_vr = 255;
 
 // rx
 #define RX_WIDTH_MIN 900
@@ -420,23 +416,23 @@ volatile int16_t flp_out;
 volatile int16_t aux2_out;
 int16_t ail_out2, ele_out2, rud_out2, ailr_out2, thr_out2, flp_out2, aux2_out2;
 
-int16_t mixer_out2_low_limit[4];
-int16_t mixer_out2_high_limit[4];
-
 // imu
 int16_t gyro0[3] = {0, 0, 0}; // calibration sets zero-movement-measurement offsets
 int16_t gyro[3] = {0, 0, 0}; // full scale = 16b-signed = +/-2000 deg/sec
 int16_t accel[3] = {0, 0, 0}; // full scale = 16b-signed = 16g? (TODO)
 
-int16_t correction[3] = {0, 0, 0}; // final correction values
+// stabilizer output
+int16_t correction[3] = {0, 0, 0};
+int16_t mixer_out2_low_limit[4];
+int16_t mixer_out2_high_limit[4];
 
-// wing mode
-enum WING_MODE wing_mode = WING_SINGLE_AIL;
-enum MIXER_EPA_MODE mixer_epa_mode = MIXER_EPA_FULL;
-enum CPPM_MODE cppm_mode = CPPM_NONE;
-enum MOUNT_ORIENT mount_orient = MOUNT_NORMAL;
-enum HOLD_AXES hold_axes = HOLD_AXES_AE_R;
+// configuration
+struct _eeprom_cfg cfg;
 
+// local copy of config
+enum WING_MODE wing_mode;
+
+// cppm modes
 const int8_t rx_chan_list_size = 8;
 volatile int16_t *rx_chan[][rx_chan_list_size] = {
   {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_RETA1a2F (FrSky)
@@ -445,12 +441,11 @@ volatile int16_t *rx_chan[][rx_chan_list_size] = {
 };
 
 // stabilization mode
-enum STAB_MODE {STAB_UNDEF, STAB_RATE, STAB_HOLD};
-enum STAB_MODE stab_mode = STAB_UNDEF; // undefined
+enum STAB_MODE {STAB_RATE, STAB_HOLD};
+enum STAB_MODE stab_mode = STAB_RATE;
 
-#define VR_GAIN_MAX 127
-#define STICK_GAIN_MAX 400 // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
-#define MASTER_GAIN_MAX 400 // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
+const int16_t stick_gain_max = 400; // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
+const int16_t master_gain_max = 400; // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
 
 /***************************************************************************************************************
  * TIMER1 AND MISC
@@ -847,7 +842,7 @@ void read_switches()
  ***************************************************************************************************************/
 
 volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
-int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cppm_mode-2][<n>] var for CPPM
+int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cfg.cppm_mode-2][<n>] var for CPPM
 // non cppm mode
 volatile int16_t *rx_portb[] = RX_PORTB;
 volatile int16_t *rx_portd[] = RX_PORTD;
@@ -906,7 +901,7 @@ ISR(TIMER1_CAPT_vect)
     ch = 0;
     ch0_synced = true;
   } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-    *rx_chan[cppm_mode-2][ch] = width;
+    *rx_chan[cfg.cppm_mode-2][ch] = width;
     if (ch == rx_frame_sync_ref)
       rx_frame_sync = true;
     ch++;
@@ -1006,7 +1001,7 @@ inline void int6_vect_cppm()
       ch = 0;
       ch0_synced = true;
     } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-      *rx_chan[cppm_mode-2][ch] = width;
+      *rx_chan[cfg.cppm_mode-2][ch] = width;
       if (ch == rx_frame_sync_ref)
         rx_frame_sync = true;
       ch++;
@@ -1017,7 +1012,7 @@ inline void int6_vect_cppm()
 
 ISR(INT6_vect) 
 { 
-  if (cppm_mode != CPPM_NONE)
+  if (cfg.cppm_mode != CPPM_NONE)
     int6_vect_cppm();
   else
     int6_vect_non_cppm();
@@ -1033,7 +1028,7 @@ ISR(PCINT0_vect)
 void init_digital_in_rx()
 {
 #if !defined(NO_CPPM)
-  if (cppm_mode != CPPM_NONE) {
+  if (cfg.cppm_mode != CPPM_NONE) {
 #if defined(NANOWII)
     // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
     EICRB |= (1 << ISC60); // interrupt on pin change
@@ -1133,18 +1128,12 @@ void init_digital_out()
  ***************************************************************************************************************/
 
 #define PID_PERIOD 10000
-// relative weights kp:ki:kd
+// relative exponential weights kp:ki:kd
 #define PID_KP_SHIFT 3 
 #define PID_KI_SHIFT 6
 #define PID_KD_SHIFT 2
 
-struct _pid_param {
-  int16_t kp[3]; // [0, 1000] 11b signed
-  int16_t ki[3];
-  int16_t kd[3];
-  int32_t i_limit[3];
-  int8_t output_shift;
-};
+// struct _pid_param defined in FlightStab.h
 
 struct _pid_state {
   // setpoint, input [-8192, 8191]
@@ -1152,11 +1141,10 @@ struct _pid_state {
   int16_t input[3];
   int16_t last_err[3];
   int32_t sum_err[3];
+  int32_t i_limit[3];
   int16_t output[3];
 };
 
-struct _pid_param pid_param_rate; // rate mode pid parameters
-struct _pid_param pid_param_hold; // hold mode pid parameters
 struct _pid_state pid_state; // pid engine state
 
 void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param) 
@@ -1165,7 +1153,7 @@ void compute_pid(struct _pid_state *ppid_state, struct _pid_param *ppid_param)
     int32_t err, sum_err, diff_err, pterm, iterm, dterm;
     err = ppid_state->input[i] - ppid_state->setpoint[i];
     // accumulate the error up to an i_limit threshold
-    sum_err = ppid_state->sum_err[i] = constrain(ppid_state->sum_err[i] + err, -ppid_param->i_limit[i], ppid_param->i_limit[i]);
+    sum_err = ppid_state->sum_err[i] = constrain(ppid_state->sum_err[i] + err, -ppid_state->i_limit[i], ppid_state->i_limit[i]);
     diff_err = err - ppid_state->last_err[i]; // difference the error
     ppid_state->last_err[i] = err;    
         
@@ -1223,34 +1211,6 @@ int8_t eeprom_read_cfg(struct _eeprom_cfg *pcfg, uint16_t eeprom_addr, uint8_t e
   return 0;
 }
 
-void eeprom_copy_to_cfg(struct _eeprom_cfg *pcfg)
-{
-  int8_t i;        
-  pcfg->wing_mode = wing_mode;
-  for (i=0; i<3; i++) {   
-    pcfg->vr_notch[i] = vr_notch[i];
-  }
-  pcfg->mixer_epa_mode = mixer_epa_mode;
-  pcfg->cppm_mode = cppm_mode;
-  pcfg->mount_orient = mount_orient;
-  pcfg->hold_axes = hold_axes;
-}
-
-void eeprom_copy_from_cfg(struct _eeprom_cfg *pcfg)
-{
-  int8_t i;
-  wing_mode = pcfg->wing_mode;
-  for (i=0; i<3; i++) {   
-    vr_notch[i] = pcfg->vr_notch[i];
-  }
-  ail_vr = vr_notch_table[vr_notch[0] + 4];
-  ele_vr = vr_notch_table[vr_notch[1] + 4];
-  rud_vr = vr_notch_table[vr_notch[2] + 4];
-  mixer_epa_mode = pcfg->mixer_epa_mode;
-  cppm_mode = pcfg->cppm_mode;
-  mount_orient = pcfg->mount_orient;
-  hold_axes = pcfg->hold_axes;
-}
 
 
 /***************************************************************************************************************
@@ -1276,7 +1236,7 @@ void read_imu()
 #endif
 #endif
   GYRO_ORIENTATION(gx, gy, gz);
-  switch (mount_orient) {
+  switch (cfg.mount_orient) {
   case MOUNT_NORMAL: break;
   case MOUNT_ROLL_90_LEFT: 
     tmp = gyro[1];
@@ -1458,219 +1418,6 @@ void calibrate_imu(struct _calibration *pimu_cal)
   }
 }
 
-
-/***************************************************************************************************************
- * SERIAL
- ***************************************************************************************************************/
-
-#if defined(SERIAL_DEBUG) && 0
-void serial_tx(void *buf, int8_t len);
-uint8_t serial_buf[48];
-
-void print_buf(void *buf, int8_t len)
-{
-  uint8_t *p = (uint8_t *)buf;
-  while (len--) {
-    Serial.println(*p++, HEX);    
-  }
-}
-
-#define REQUEST_GET_GYRO 100
-#define REQUEST_GET_ACCEL 102
-#define REQUEST_GET_RX 104
-#define REQUEST_GET_SW 106
-#define REQUEST_GET_VR 108
-
-struct _request_get_gyro {
-  uint8_t cmd;
-};
-
-struct _response_get_gyro {
-  uint8_t cmd;
-  int16_t gRoll;
-  int16_t gPitch;
-  int16_t gYaw;
-};
-
-struct _request_get_accel {
-  uint8_t cmd;
-};
-
-struct _response_get_accel {
-  uint8_t cmd;
-  int16_t aRoll;
-  int16_t aPitch;
-  int16_t aYaw;
-};
-
-struct _request_get_rx {
-  uint8_t cmd;
-};
-
-struct _response_get_rx {
-  uint8_t cmd;
-  int16_t ail;
-  int16_t ele;
-  int16_t rud;
-  int16_t aux;
-};
-
-struct _request_get_sw {
-  uint8_t cmd;
-};
-
-struct _response_get_sw {
-  uint8_t cmd;
-  int16_t ail;
-  int16_t ele;
-  int16_t rud;
-};
-
-struct _request_get_vr {
-  uint8_t cmd;
-};
-
-struct _response_get_vr {
-  uint8_t cmd;
-  int16_t ail;
-  int16_t ele;
-  int16_t rud;
-};
-
-union serial_request {
-  uint8_t cmd;
-  struct _request_get_gyro get_gyro;
-  struct _request_get_accel get_accel;
-  struct _request_get_rx get_rx;
-  struct _request_get_rx get_sw;
-  struct _request_get_vr get_vr;
-};
-
-union serial_response {
-  uint8_t cmd;
-  struct _response_get_gyro get_gyro;
-  struct _response_get_accel get_accel;
-  struct _response_get_rx get_rx;
-  struct _response_get_sw get_sw;
-  struct _response_get_vr get_vr;
-};
-
-void handle_command()
-{
-  int8_t len;
-  serial_request *preq = (serial_request *) serial_buf;
-  serial_response *presp = (serial_response *) serial_buf;
-
-  switch (serial_buf[0]) {
-  case REQUEST_GET_GYRO:
-    presp->get_gyro.gRoll = gRoll;
-    presp->get_gyro.gPitch = gPitch;
-    presp->get_gyro.gYaw = gYaw;
-    len = sizeof(presp->get_gyro);
-    break;
-  case REQUEST_GET_ACCEL:
-    presp->get_accel.aRoll = aRoll;
-    presp->get_accel.aPitch = aPitch;
-    presp->get_accel.aYaw = aYaw;
-    len = sizeof(presp->get_accel);
-    break;
-  case REQUEST_GET_RX:
-    presp->get_rx.ail = ail_in;
-    presp->get_rx.ele = ele_in;
-    presp->get_rx.rud = rud_in;
-    presp->get_rx.aux = aux_in;
-    len = sizeof(presp->get_rx);
-    break;
-  case REQUEST_GET_SW:
-    presp->get_sw.ail = ail_sw;
-    presp->get_sw.ele = ele_sw;
-    presp->get_sw.rud = rud_sw;
-    len = sizeof(presp->get_sw);
-    break;
-  case REQUEST_GET_VR:
-    presp->get_vr.ail = ail_vr;
-    presp->get_vr.ele = ele_vr;
-    presp->get_vr.rud = rud_vr;
-    len = sizeof(presp->get_vr);
-    break;
-  default:
-    preq->cmd = 254; // presp->cmd will be 255
-    len = 1;
-    break;
-  }
-  presp->cmd = preq->cmd + 1;
-  serial_tx(presp, len);
-}
-
-void serial_tx(void *buf, int8_t len)
-{
-  // TODO: use compute_checksum()
-  uint8_t chksum = len+1;
-  for (int8_t i=0; i<len; i++)
-    chksum += ((uint8_t *)buf)[i];
-  chksum = (chksum ^ 0xff) + 1; 
-
-  // TODO: enable non-blocking writes
-  Serial.write("$");
-  Serial.write(len+1);
-  Serial.write((uint8_t *)buf, len);
-  Serial.write(chksum);
-}
-
-void serial_rx()
-{
-  static enum _serial_rx_state {
-    IDLE, 
-    HEADER,
-    LENGTH
-  } 
-  state = IDLE;
-  static uint8_t chksum;
-  static uint8_t len;
-  static uint8_t i;
-  uint8_t ch;
-
-  while (Serial.available() > 0) { 
-    ch = Serial.read();
-    switch (state) {
-    case IDLE:
-      if (ch == '$') state = HEADER;
-      break;
-    case HEADER:
-      if (2 <= ch && ch <= sizeof(serial_buf)) {
-        len = ch;
-        chksum = ch;
-        i = 0;
-        state = LENGTH;
-      } else {
-        state = IDLE;
-      }
-      break;
-    case LENGTH:
-      serial_buf[i++] = ch;
-      chksum += ch;
-      if (--len == 0) {
-        if (chksum == 0) {
-          handle_command(); // invoke handler against serial_buf
-        } else {
-          // checksum error
-          for (int k=0; k<20; k++) {
-            set_led(LED_INVERT);
-            delay1(50);
-          }
-        }   
-        state = IDLE;
-      }
-      break;    
-    }
-
-    if (state == IDLE)
-      break;
-  }
-}
-
-#endif
-
 /***************************************************************************************************************
  * RX IN - MIXER - SERVO OUT
  ***************************************************************************************************************/
@@ -1762,7 +1509,7 @@ void apply_mixer()
   int8_t i;
   
   // if tracking servo limits, apply mixer with zero correction to determine output from rx alone (pass through)
-  if (mixer_epa_mode == MIXER_EPA_TRACK) {
+  if (cfg.mixer_epa_mode == MIXER_EPA_TRACK) {
     const int16_t zero_correction[4] = {0, 0, 0, 0};
     apply_mixer_change((int16_t *)zero_correction);
     for (i=0; i<4; i++) {
@@ -1870,10 +1617,11 @@ void dump_sensors()
 
     Serial.print("MISC "); 
     Serial.print(i2c_errors); Serial.print(' ');
+    Serial.print(cfg.wing_mode); Serial.print(' ');
     Serial.print(wing_mode); Serial.print(' ');
-    Serial.print(mixer_epa_mode); Serial.print(' ');
-    Serial.print(cppm_mode); Serial.print(' ');
-    Serial.print(mount_orient); Serial.print(' ');
+    Serial.print(cfg.mixer_epa_mode); Serial.print(' ');
+    Serial.print(cfg.cppm_mode); Serial.print(' ');
+    Serial.print(cfg.mount_orient); Serial.print(' ');
     Serial.print(get_free_sram()); Serial.print(' ');
     Serial.print(servo_out); Serial.print(' ');
     Serial.println();
@@ -1972,41 +1720,63 @@ bool stick_zone_update(struct _stick_zone *psz)
 void stick_config(struct _stick_zone *psz)
 {
 // 1= wing_mode (see enum WING_MODE)
-// 2,3,4= [roll|pitch|yaw]_gain (see vr_notch_table[])
-// 5= mixer_epa_mode (see enum MIXER_EPA_MODE)
-// 6= cppm_mode (see enum CPPM_MODE)
-// 7= mount_orient (see enum MOUNT_ORIENT)
-// 8= exit
+// 2= mixer_epa_mode (see enum MIXER_EPA_MODE)
+// 3= cppm_mode (see enum CPPM_MODE)
+// 4= mount_orient (see enum MOUNT_ORIENT)
+// 5= stick_gain_throw (see enum STICK_GAIN_THROW)
+// 6= max_rotate (see enum MAX_ROTATE)
+// 7= rate_mode_stick_rotate (see enum RATE_MODE_STICK_ROTATE)
+// 8= inflight_calibrate (see enum INFLIGHT_CALIBRATE)
+// 9= exit
 
 // note: be careful about off-by-one errors in this function
 
-  const int8_t param_ymin[] = {WING_SINGLE_AIL, -4, -4, -4, MIXER_EPA_FULL , CPPM_NONE,     MOUNT_NORMAL       , 1};
-  const int8_t param_ymax[] = {WING_DUAL_AIL  , +4, +4, +4, MIXER_EPA_TRACK, CPPM_AETR1a2F, MOUNT_ROLL_90_RIGHT, 2};
+  const int8_t param_ymin[] = {
+    WING_USE_DIPSW, 
+    MIXER_EPA_FULL, 
+    CPPM_NONE,     
+    MOUNT_NORMAL, 
+    STICK_GAIN_THROW_FULL,
+    MAX_ROTATE_VLOW,
+    RATE_MODE_STICK_ROTATE_DISABLE,
+    INFLIGHT_CALIBRATE_DISABLE,
+    1 // exit_option
+  };
+  const int8_t param_ymax[] = {
+    WING_DUAL_AIL,
+    MIXER_EPA_TRACK, 
+    CPPM_AETR1a2F, 
+    MOUNT_ROLL_90_RIGHT, 
+    STICK_GAIN_THROW_QUARTER,
+    MAX_ROTATE_VHIGH,
+    RATE_MODE_STICK_ROTATE_ENABLE,
+    INFLIGHT_CALIBRATE_ENABLE,
+    2 // exit_option
+  };
   const int8_t param_xcount = sizeof(param_ymin)/sizeof(param_ymin[0]);
-  int8_t param_yval[param_xcount];
-
+  int8_t *pparam_yval[param_xcount];
+  int8_t exit_option = 1;
+  
   const int16_t servo_swing = 300;
   const int32_t servo_interval[] = {100000L, 400000L};
 
   int8_t x = 0; // 0-based, x=0 => wing_mode
   int8_t servo_sync = false;
-  uint32_t last_servo_update_time=0;
+  uint32_t last_servo_update_time = 0;
   int32_t wait_interval = servo_interval[1];
-  struct _eeprom_cfg eeprom_cfg;
   
-  // read eeprom
-  eeprom_read_cfg(&eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
-  param_yval[0] = (int8_t) eeprom_cfg.wing_mode;
-  param_yval[1] = eeprom_cfg.vr_notch[0];
-  param_yval[2] = eeprom_cfg.vr_notch[1];
-  param_yval[3] = eeprom_cfg.vr_notch[2];
-  param_yval[4] = (int8_t) eeprom_cfg.mixer_epa_mode;
-  param_yval[5] = (int8_t) eeprom_cfg.cppm_mode;
-  param_yval[6] = (int8_t) eeprom_cfg.mount_orient;
-  param_yval[7] = 1; // exit option
+  pparam_yval[0] = (int8_t *) &cfg.wing_mode;
+  pparam_yval[1] = (int8_t *) &cfg.mixer_epa_mode;
+  pparam_yval[2] = (int8_t *) &cfg.cppm_mode;
+  pparam_yval[3] = (int8_t *) &cfg.mount_orient;
+  pparam_yval[4] = (int8_t *) &cfg.stick_gain_throw;
+  pparam_yval[5] = (int8_t *) &cfg.max_rotate;
+  pparam_yval[6] = (int8_t *) &cfg.rate_mode_stick_rotate;
+  pparam_yval[7] = (int8_t *) &cfg.inflight_calibrate;
+  pparam_yval[8] = &exit_option;
   
   int8_t update_x = (x + 1) << 1;
-  int8_t update_y = param_yval[x] << 1;
+  int8_t update_y = *pparam_yval[x] << 1;
   while (true) {
     uint32_t t = micros1();
   
@@ -2039,20 +1809,26 @@ void stick_config(struct _stick_zone *psz)
     } 
 
     if (update_x == 0 && /*update_y == 0 &&*/ stick_zone_update(psz)) {
+    
+      bool refresh_x = false;
+      bool refresh_y = false;
+      
       switch (psz->move) {
-        case 0x54: x = max(x - 1, 0); update_x = (x + 1) << 1; break; // left
-        case 0x56: x = min(x + 1, param_xcount - 1); update_x = (x + 1) << 1; break; // right
-        case 0x52: param_yval[x] = min(param_yval[x] + 1, param_ymax[x]); update_y = param_yval[x] << 1; break; // up
-        case 0x58: param_yval[x] = max(param_yval[x] - 1, param_ymin[x]); update_y = param_yval[x] << 1; break; // down
+        case 0x54: x = max(x - 1, 0); refresh_x = true; break; // left
+        case 0x56: x = min(x + 1, param_xcount - 1); refresh_x = true; break; // right
+        case 0x52: *pparam_yval[x] = min(*pparam_yval[x] + 1, param_ymax[x]); refresh_y = true; break; // up
+        case 0x58: *pparam_yval[x] = max(*pparam_yval[x] - 1, param_ymin[x]); refresh_y = true; break; // down
       }
 
-      // if updating x (index) servo then update y (value) servo as well
-      if (update_x > 0) {
-        update_y = param_yval[x] << 1;
+      // check if update_x and/or update_y need to be refreshed
+      if (refresh_x || refresh_y) {
+        update_y = *pparam_yval[x] << 1;
+        if (refresh_x)
+          update_x = (x + 1) << 1;
       }
-
+      
       // check for exit option
-      if (x == (param_xcount - 1) && param_yval[x] == 2) {
+      if (exit_option == 2) {
         break;
       }
  
@@ -2061,22 +1837,15 @@ void stick_config(struct _stick_zone *psz)
       Serial.print(psz->prev, HEX); Serial.print(' ');
       Serial.print(psz->curr, HEX); Serial.print(' ');
       Serial.print(x); Serial.print(' ');
-      Serial.print(param_yval[x]); Serial.print(' ');
+      Serial.print(*pparam_yval[x]); Serial.print(' ');
       Serial.println();
   #endif      
     }
   }
 
   // write eeprom;
-  eeprom_cfg.wing_mode = (enum WING_MODE) param_yval[0];
-  eeprom_cfg.vr_notch[0] = param_yval[1];
-  eeprom_cfg.vr_notch[1] = param_yval[2];
-  eeprom_cfg.vr_notch[2] = param_yval[3];
-  eeprom_cfg.mixer_epa_mode = (enum MIXER_EPA_MODE) param_yval[4];
-  eeprom_cfg.cppm_mode = (enum CPPM_MODE) param_yval[5];
-  eeprom_cfg.mount_orient = (enum MOUNT_ORIENT) param_yval[6];
-  eeprom_write_cfg(&eeprom_cfg, eeprom_cfg1_addr);
-  eeprom_write_cfg(&eeprom_cfg, eeprom_cfg2_addr);
+  eeprom_write_cfg(&cfg, eeprom_cfg1_addr);
+  eeprom_write_cfg(&cfg, eeprom_cfg2_addr);
 }
 
 
@@ -2103,29 +1872,45 @@ void setup()
   wdt_disable();
 #endif // RX3S_V1 || RX3S_V2
 
+  // set up default parameters  
+  cfg.wing_mode = WING_USE_DIPSW;
+  for (i=0; i<3; i++) {
+    cfg.vr_gain[i] = vr_gain_use_pot;  
+  }
+  cfg.mixer_epa_mode = MIXER_EPA_FULL;
+  cfg.cppm_mode = CPPM_NONE;
+  cfg.mount_orient = MOUNT_NORMAL;
+  cfg.stick_gain_throw = STICK_GAIN_THROW_FULL;
+  cfg.max_rotate = MAX_ROTATE_MED;
+  cfg.rate_mode_stick_rotate = RATE_MODE_STICK_ROTATE_DISABLE;
+  cfg.inflight_calibrate = INFLIGHT_CALIBRATE_ENABLE;
+  
   // set up default RATE pid parameters
   for (i=0; i<3; i++) {
-    pid_param_rate.kp[i] = 500;
-    pid_param_rate.ki[i] = 0;
-    pid_param_rate.kd[i] = 500;
-    pid_param_rate.i_limit[i] = 0;
+    cfg.pid_param_rate.kp[i] = 500;
+    cfg.pid_param_rate.ki[i] = 0;
+    cfg.pid_param_rate.kd[i] = 500;
   }
-  pid_param_rate.output_shift = 8;
+  cfg.pid_param_rate.output_shift = 8;
 
    // set up default HOLD pid parameters
   for (i=0; i<3; i++) {
-    pid_param_hold.kp[i] = 500;
-    pid_param_hold.ki[i] = 500;
-    pid_param_hold.kd[i] = 500;
-    pid_param_hold.i_limit[i] = 0;
+    cfg.pid_param_hold.kp[i] = 500;
+    cfg.pid_param_hold.ki[i] = 500;
+    cfg.pid_param_hold.kd[i] = 500;
   }
-  pid_param_hold.output_shift = 8;
-  
+  cfg.pid_param_hold.output_shift = 8;
+
   // eeprom processing
   struct _eeprom_cfg eeprom_cfg1, eeprom_cfg2;
   struct _eeprom_stats eeprom_stats;
   
-  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0xff : 0x00;
+  // ret
+  // bit0 = boot_check (reboot after cfg reset)
+  // bit1 = write cfg1
+  // bit2 = write cfg2
+  // bit3 = write stats
+  uint8_t ret = boot_check(EEPROM_RESET_IN_PIN, EEPROM_RESET_OUT_PIN) ? 0x07 : 0x00;
     
   eeprom_read_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
   if (ret || (eeprom_stats.device_id != DEVICE_ID || eeprom_stats.device_ver != DEVICE_VER)) {
@@ -2135,43 +1920,50 @@ void setup()
     eeprom_stats.eeprom_cfg1_err = 0;
     eeprom_stats.eeprom_cfg2_err = 0;
     eeprom_stats.eeprom_cfg12_reset = 0;
+    ret |= 0x08; // mark to update stats
   }
 
   if (eeprom_read_cfg(&eeprom_cfg1, eeprom_cfg1_addr, eeprom_cfg_ver) < 0)
-    ret |= 0x01;
+    ret |= 0x02; // mark to update cfg1
   if (eeprom_read_cfg(&eeprom_cfg2, eeprom_cfg2_addr, eeprom_cfg_ver) < 0)
-    ret |= 0x10;
-
+    ret |= 0x04; // mark to update cfg2
+    
   calibration_wag_count = 3;
-  switch (ret) {
+  struct _eeprom_cfg *pcfg = NULL;
+  switch (ret & 0x06) {
   case 0x00: // both copy 1 and 2 good
+    pcfg = &eeprom_cfg1;
     break;
-  case 0x01: // copy 1 bad, copy 2 good
-    eeprom_write_cfg(&eeprom_cfg2, eeprom_cfg1_addr);
+  case 0x02: // copy 1 bad, copy 2 good
+    pcfg = &eeprom_cfg2;
+    eeprom_write_cfg(pcfg, eeprom_cfg1_addr);
     eeprom_stats.eeprom_cfg1_err++;
-    eeprom_cfg1 = eeprom_cfg2;
     break;
-  case 0x10: // copy 1 good, copy 2 bad
-    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg2_addr);
+  case 0x04: // copy 1 good, copy 2 bad
+    pcfg = &eeprom_cfg1;
+    eeprom_write_cfg(pcfg, eeprom_cfg2_addr);
     eeprom_stats.eeprom_cfg2_err++;
     break;
-  default: // both copy 1 and 2 bad (ret=0x11), or boot_check (ret=0xff)
-    eeprom_cfg1.ver = eeprom_cfg_ver;
-    eeprom_copy_to_cfg(&eeprom_cfg1);
-    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg1_addr);
-    eeprom_write_cfg(&eeprom_cfg1, eeprom_cfg2_addr);
+  default: // both copy 1 and 2 bad (ret=0x06)
+    cfg.ver = eeprom_cfg_ver;
+    eeprom_write_cfg(&cfg, eeprom_cfg1_addr);
+    eeprom_write_cfg(&cfg, eeprom_cfg2_addr);
     eeprom_stats.eeprom_cfg12_reset++;
     calibration_wag_count = 9;
     break;
   }
-  eeprom_copy_from_cfg(&eeprom_cfg1);
   
-  if (ret != 0x00) {
-    // update stats to eeprom if at least one cfg was written
+  if (pcfg) {
+    // replace main cfg with copy good eeprom cfg 
+    cfg = *pcfg;
+  }
+  
+  if (ret & 0x0e) {
+    // update stats to eeprom if at least one cfg, or stats, was marked for update
     eeprom_write_block(&eeprom_stats, (void *)eeprom_stats_addr, sizeof(eeprom_stats));
   }
   
-  if (ret == 0xff) {
+  if (ret & 0x01) {
     // boot_check initiated, halt and flash led indefinitely
     while (true) {
       set_led(LED_INVERT);
@@ -2200,7 +1992,7 @@ void setup()
   
   
   // set mixer limits based on configuration
-  switch (mixer_epa_mode) {
+  switch (cfg.mixer_epa_mode) {
   case MIXER_EPA_FULL: // 1000-2000
     set_mixer_limits(RX_WIDTH_LOW_FULL, RX_WIDTH_HIGH_FULL);
     break;
@@ -2225,9 +2017,11 @@ void setup()
     WING_SINGLE_AIL // 1=norm / 1=norm
   };
   
+  wing_mode = cfg.wing_mode;
+  
 #if defined(RX3S_V1)
 
-  wing_mode = dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)];
+  wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
 
   switch (wing_mode) {
   case WING_SINGLE_AIL:
@@ -2247,7 +2041,7 @@ void setup()
   }
         
 #if !defined(NO_CPPM)
-  if (cppm_mode != CPPM_NONE) {
+  if (cfg.cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB2 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
@@ -2264,7 +2058,7 @@ void setup()
 
 #if defined(RX3S_V2)
 
-  wing_mode = dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)];
+  wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)] : cfg.wing_mode;
   
   if (wing_mode == WING_DUAL_AIL) {
     if (ele_sw) {
@@ -2280,7 +2074,7 @@ void setup()
   }
 
 #if !defined(NO_CPPM)
-  if (cppm_mode != CPPM_NONE) {
+  if (cfg.cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN
     // PB1 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
@@ -2301,7 +2095,7 @@ void setup()
 
 #if defined(NANOWII)
 #if !defined(NO_CPPM)
-  if (cppm_mode != CPPM_NONE) {
+  if (cfg.cppm_mode != CPPM_NONE) {
     // PE6 7 CPPM_IN instead of THR/AUX2_IN
     // PC6 5 THR_OUT instead of M
     // PD7 6 FLP_OUT instead of M
@@ -2344,7 +2138,7 @@ void setup()
   uint32_t last_vr_time = t;
   int8_t servo_sync = false;
 
-  int16_t vr_gain[3]= {VR_GAIN_MAX, VR_GAIN_MAX, VR_GAIN_MAX};
+  int16_t vr_gain[3]= {0, 0, 0};
   int16_t stick_gain[3];
   int16_t master_gain;
 
@@ -2365,6 +2159,10 @@ void setup()
   calibrate_init_stat(&rx_cal, 4);
   calibrate_init_stat(&imu_cal, 3);
   last_calibration_wag_time = t;
+
+  // inflight calibration
+  uint32_t last_stab_mode_time = t;
+  int8_t stab_mode_count;
 
 again:
   t = micros1();
@@ -2418,8 +2216,40 @@ again:
   if (!rx_cal.done || !imu_cal.done) {
     goto again;
   }
-   
+
   if ((int32_t)(t - last_pid_time) > PID_PERIOD) {
+
+    // stabilization mode
+    enum STAB_MODE stab_mode2 = 
+      (stab_mode == STAB_HOLD && aux_in2 <= RX_WIDTH_MID - 25) ? STAB_RATE : 
+      (stab_mode == STAB_RATE && aux_in2 >= RX_WIDTH_MID + 25) ? STAB_HOLD : stab_mode; // hysteresis
+
+    if (stab_mode2 != stab_mode) {
+      stab_mode = stab_mode2;
+      set_led_msg(1, (stab_mode == STAB_RATE) ? 0 : 4, LED_SHORT);
+
+      // reset attitude error and i_limit threshold on mode change
+      for (i=0; i<3; i++) {
+        pid_state.sum_err[i] = 0;
+        pid_state.i_limit[i] = 0;
+      }
+
+      // check for inflight rx calibration
+      if (cfg.inflight_calibrate == INFLIGHT_CALIBRATE_ENABLE) {
+        if ((int32_t)(t - last_stab_mode_time) > 500000L) {
+          stab_mode_count = 0;
+        }
+        last_stab_mode_time = t;
+
+        if (++stab_mode_count >= 3) {
+          ail_in2_mid = ail_in2;
+          ele_in2_mid = ele_in2;
+          rud_in2_mid = rud_in2;
+          ailr_in2_mid = ailr_in2;
+        }
+      }        
+    }
+  
     // determine how much sticks are off center (from neutral)
     int16_t ail_stick_pos = abs(((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1);
     int16_t ele_stick_pos = abs(ele_in2 - ele_in2_mid);
@@ -2427,46 +2257,40 @@ again:
 
     // vr_gain[] [-128, 128] from VRs or config
     
+    // see enum STICK_GAIN_THROW. shift=0 => FULL, shift=1 => HALF, shift=2 => QUARTER
+    int8_t shift = cfg.stick_gain_throw - 1;
+    
     // stick_gain[] [1100, <ail*|ele|rud>_in2_mid, 1900] => [0%, 100%, 0%] = [0, STICK_GAIN_MAX, 0]
-    stick_gain[0] = STICK_GAIN_MAX - constrain(ail_stick_pos, 0, STICK_GAIN_MAX);
-    stick_gain[1] = STICK_GAIN_MAX - constrain(ele_stick_pos, 0, STICK_GAIN_MAX);
-    stick_gain[2] = STICK_GAIN_MAX - constrain(rud_stick_pos, 0, STICK_GAIN_MAX);
+    stick_gain[0] = stick_gain_max - min(ail_stick_pos << shift, stick_gain_max);
+    stick_gain[1] = stick_gain_max - min(ele_stick_pos << shift, stick_gain_max);
+    stick_gain[2] = stick_gain_max - min(rud_stick_pos << shift, stick_gain_max);    
     
     // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
-    master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, MASTER_GAIN_MAX);     
+    master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, master_gain_max);     
         
-    // stabilization mode
-    enum STAB_MODE stab_mode2 = (aux_in2 <= RX_WIDTH_MID) ? STAB_RATE : STAB_HOLD;
-    if (stab_mode2 != stab_mode) {
-      stab_mode = stab_mode2;
-      // reset attitude error on mode change
-      for (i=0; i<3; i++) 
-        pid_state.sum_err[i] = 0;
-      set_led_msg(1, (stab_mode == STAB_RATE) ? 0 : 4, LED_SHORT);
-    }
-  
     // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
-    
-    if (stab_mode == STAB_RATE) {
+    if (stab_mode == STAB_HOLD || 
+       (stab_mode == STAB_RATE && cfg.rate_mode_stick_rotate == RATE_MODE_STICK_ROTATE_ENABLE)) {
+      // stick controlled roll rate
+      // cfg.max_rotate shift = [1, 5]
+      // eg. max stick == 400, cfg.max_rotate == 4. then 400 << 4 = 6400 => 6400/32768*2000 = 391deg/s (32768 == 2000deg/s)
+      int16_t sp[3];
+      sp[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (cfg.max_rotate - 1);
+      sp[1] = (ele_in2 - ele_in2_mid) << cfg.max_rotate;
+      sp[2] = (rud_in2 - rud_in2_mid) << cfg.max_rotate;
+      for (i=0; i<3; i++)
+        pid_state.setpoint[i] = vr_gain[i] < 0 ? sp[i] : -sp[i];      
+    } else {
       // zero roll rate, stabilization only
       for (i=0; i<3; i++) 
         pid_state.setpoint[i] = 0;
     }
-    
+        
     if (stab_mode == STAB_HOLD) {
-      // stick controlled roll rate
-      // max stick == 400, if "<< 4" then 400*16 = 6400 => 6400/8192*500 = 391deg/s (32768 == 2000deg/s)
-      int16_t sp[3];
-      sp[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (2-1);
-      sp[1] = (ele_in2 - ele_in2_mid) << 2;
-      sp[2] = (rud_in2 - rud_in2_mid) << 2;
-      for (i=0; i<3; i++) {
-        pid_state.setpoint[i] = vr_gain[i] < 0 ? sp[i] : -sp[i];      
-      }
-
+      // max attitude error (bounding box)    
       for (i=0; i<3; i++) {
         // 2000 deg/s == 32768 units, so 1 deg/(PID_PERIOD=10ms) == 32768/20 units
-        pid_param_hold.i_limit[i] = ((int32_t)30 * (32768 / 2 / (PID_PERIOD / 1000)) * stick_gain[i]) >> 9; 
+        pid_state.i_limit[i] = ((int32_t)30 * (32768 / 2 / (PID_PERIOD / 1000)) * stick_gain[i]) >> 9; 
       }
     }
     
@@ -2476,7 +2300,7 @@ again:
     pid_state.input[2] = constrain(gyro[2] - gyro0[2], -8192, 8191);        
     
     // apply PID control
-    compute_pid(&pid_state, (stab_mode == STAB_RATE) ? &pid_param_rate : &pid_param_hold);
+    compute_pid(&pid_state, (stab_mode == STAB_RATE) ? &cfg.pid_param_rate : &cfg.pid_param_hold);
 
     // apply vr_gain, stick_gain and master_gain
     for (i=0; i<3; i++) {
@@ -2503,22 +2327,17 @@ again:
   }
 
   if ((int32_t)(t - last_vr_time) > 500123) {
-    // sample all adc channels
-    uint8_t ail_vr2, ele_vr2, rud_vr2;
-    ail_vr2 = ail_vr;
-    ele_vr2 = ele_vr;
-    rud_vr2 = rud_vr;
-
+    // *_vr are adc channel output
     // vr_gain[] [-128, 0, 127] => [-100%, 0%, 100%] = [-128, 0, 127]
-    vr_gain[0] = (int16_t)ail_vr2 - 128;
-    vr_gain[1] = (int16_t)ele_vr2 - 128;
-    vr_gain[2] = (int16_t)rud_vr2 - 128;
+    vr_gain[0] = (cfg.vr_gain[0] == vr_gain_use_pot) ? (int16_t)ail_vr - 128 : cfg.vr_gain[0];
+    vr_gain[1] = (cfg.vr_gain[1] == vr_gain_use_pot) ? (int16_t)ele_vr - 128 : cfg.vr_gain[1];
+    vr_gain[2] = (cfg.vr_gain[2] == vr_gain_use_pot) ? (int16_t)rud_vr - 128 : cfg.vr_gain[2];
     
     // deadband filter
-    const int8_t vr_deadband = 8;
+    const int16_t vr_deadband = 8;
     for (i=0; i<3; i++) {
-      if (vr_gain[i] > -vr_deadband && vr_gain[i] < vr_deadband) 
-        vr_gain[i] = 0; 
+      if (abs(vr_gain[i]) < vr_deadband) 
+        vr_gain[i] = 0;
     }
 
     start_next_adc(0);

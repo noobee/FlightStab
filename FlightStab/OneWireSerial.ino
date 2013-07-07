@@ -187,7 +187,7 @@ again:
       break;
     }
     // send response
-    ow_msg.cmd != 0x80;
+    ow_msg.cmd |= 0x80;
     ow_send_msg(&ow_msg, sizeof(ow_msg));
     
   } while (!done);
