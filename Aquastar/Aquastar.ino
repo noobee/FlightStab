@@ -546,6 +546,7 @@ void loop()
   } ow_state = OW_WAIT_CONNECT;
 
   struct _ow_msg ow_msg;
+  int8_t ow_send_len;
 
   int8_t page=0, subpage=0;
   bool update_lcd = true;
@@ -556,14 +557,15 @@ again:
   // connection state machine
   if ((int32_t)(t - last_msg_time) > 250000L) { // every 250ms
 
+    int8_t msg_len = 1; // + 1 for ow_msg.cmd
     switch (ow_state) {
       case OW_WAIT_CONNECT: ow_msg.cmd = OW_GET_CFG; break;
       case OW_WAIT_STATS: ow_msg.cmd = OW_GET_STATS; break;
       case OW_CONNECTED: ow_msg.cmd = OW_NULL; break;
-      case OW_SEND: break; // ow_msg already set up
+      case OW_SEND: msg_len += ow_send_len; break; // ow_msg already set up
       case OW_BAD_CFG_VER: ow_msg.cmd = OW_NULL; break;
     }
-    send_msg(&ow_msg, sizeof(ow_msg));
+    send_msg(&ow_msg, msg_len);
     
     if (recv_msg(&ow_msg, sizeof(ow_msg), 200)) { // wait 200ms for response
       switch (ow_state) {
@@ -655,17 +657,20 @@ again:
           ow_msg.u.eeprom_cfg = cfg;
           ow_msg.u.eeprom_cfg.ver = eeprom_cfg_ver;
           ow_msg.cmd = OW_SET_CFG;
-          ow_state = OW_SEND; 
+          ow_state = OW_SEND;
+          ow_send_len = sizeof(ow_msg.u.eeprom_cfg);
           break;
         case 3: // erase cfg
           ow_msg.u.eeprom_cfg.ver = 0; // invalidate ver
           ow_msg.cmd = OW_SET_CFG;
           ow_state = OW_SEND; 
+          ow_send_len = sizeof(ow_msg.u.eeprom_cfg);
           break;
         case 4: // erase stats
           ow_msg.u.eeprom_stats.device_id = 0; // invalidate device_id
           ow_msg.cmd = OW_SET_STATS;
           ow_state = OW_SEND; 
+          ow_send_len = sizeof(ow_msg.u.eeprom_stats);
           break;
         }
       } else if ((ptype == PARAM_VR_GAIN && subpage < 2) || 
