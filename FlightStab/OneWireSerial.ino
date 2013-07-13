@@ -167,11 +167,13 @@ again:
     // Serial.print("cmd=");
     // Serial.println(ow_msg.cmd, HEX);
 
+    int8_t msg_len = 1; // + 1 for ow_msg.cmd
     switch(ow_msg.cmd) {
     case OW_NULL:
       break;
     case OW_GET_STATS:
       eeprom_read_block(&ow_msg.u.eeprom_stats, (void *)eeprom_stats_addr, sizeof(ow_msg.u.eeprom_stats));
+      msg_len += sizeof(ow_msg.u.eeprom_stats);
       break;
     case OW_SET_STATS:
       eeprom_write_block(&ow_msg.u.eeprom_stats, (void *)eeprom_stats_addr, sizeof(ow_msg.u.eeprom_stats));
@@ -179,6 +181,7 @@ again:
       break;
     case OW_GET_CFG:
       eeprom_read_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg1_addr, eeprom_cfg_ver);
+      msg_len += sizeof(ow_msg.u.eeprom_cfg);
       break;
     case OW_SET_CFG:
       eeprom_write_cfg(&ow_msg.u.eeprom_cfg, eeprom_cfg1_addr);
@@ -188,7 +191,7 @@ again:
     }
     // send response
     ow_msg.cmd |= 0x80;
-    ow_send_msg(&ow_msg, sizeof(ow_msg));
+    ow_send_msg(&ow_msg, msg_len); 
     
   } while (!done);
   
