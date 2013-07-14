@@ -555,7 +555,7 @@ again:
   t = micros();
 
   // connection state machine
-  if ((int32_t)(t - last_msg_time) > 250000L) { // every 250ms
+  if ((int32_t)(t - last_msg_time) > (ow_state == OW_WAIT_CONNECT ? 50000L : 250000L)) { // 50ms to connect, else every 250ms
 
     int8_t msg_len = 1; // + 1 for ow_msg.cmd
     switch (ow_state) {
@@ -567,7 +567,7 @@ again:
     }
     send_msg(&ow_msg, msg_len);
     
-    if (recv_msg(&ow_msg, sizeof(ow_msg), 200)) { // wait 200ms for response
+    if (recv_msg(&ow_msg, sizeof(ow_msg), 20)) { // wait 20ms for response
       switch (ow_state) {
       case OW_WAIT_CONNECT:
         if (ow_msg.u.eeprom_cfg.ver != eeprom_cfg_ver) {
@@ -654,8 +654,7 @@ again:
       if (ptype == PARAM_EEPROM) {
         switch (param_val_eeprom) {
         case 2: // update cfg
-          ow_msg.u.eeprom_cfg = cfg;
-          ow_msg.u.eeprom_cfg.ver = eeprom_cfg_ver;
+          ow_msg.u.eeprom_cfg = cfg; // copy cfg to message buffer
           ow_msg.cmd = OW_SET_CFG;
           ow_state = OW_SEND;
           ow_send_len = sizeof(ow_msg.u.eeprom_cfg);

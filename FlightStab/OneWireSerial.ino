@@ -159,7 +159,7 @@ again:
   
   do {
     struct _ow_msg ow_msg;
-    if (!ow_recv_msg(&ow_msg, sizeof(ow_msg), 500)) { // 500ms to receive message
+    if (!ow_recv_msg(&ow_msg, sizeof(ow_msg), !connected ? 100 : 500)) { // 100ms for first connect, 500ms for heartbeat
       break; 
     }
     connected = true;
