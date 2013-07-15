@@ -566,8 +566,9 @@ again:
       case OW_BAD_CFG_VER: ow_msg.cmd = OW_NULL; break;
     }
     send_msg(&ow_msg, msg_len);
+    uint8_t resp_cmd = ow_msg.cmd | 0x80;
     
-    if (recv_msg(&ow_msg, sizeof(ow_msg), 20)) { // wait 20ms for response
+    if (recv_msg(&ow_msg, sizeof(ow_msg), 20) && (ow_msg.cmd == resp_cmd)) { // wait 20ms for response
       switch (ow_state) {
       case OW_WAIT_CONNECT:
         if (ow_msg.u.eeprom_cfg.ver != eeprom_cfg_ver) {
