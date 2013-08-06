@@ -79,7 +79,7 @@ add_arduino_firmware(${TODAY}_AQUASTAR Aquastar atmega8 "AQUASTAR")
 add_arduino_firmware(${TODAY}_DLUX Aquastar atmega8 "DLUX")
 
 # NANOWII
-add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
+#add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
 
 # RX3S_* 16MHz (standard)
 add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")
@@ -89,7 +89,7 @@ add_arduino_firmware(${TODAY}_RX3S_V2 FlightStab pro5v "RX3S_V2")
 add_arduino_firmware(${TODAY}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
 add_arduino_firmware(${TODAY}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
          
-# test permutations          
+# test permutations
 add_arduino_firmware(TEST_RX3S_V2_SERIAL_DEBUG FlightStab pro5v "RX3S_V2;SERIAL_DEBUG")
 add_arduino_firmware(TEST_RX3S_V2_DUMP_SENSORS FlightStab pro5v "RX3S_V2;DUMP_SENSORS")
 add_arduino_firmware(TEST_RX3S_V2_LED_TIMING FlightStab pro5v "RX3S_V2;LED_TIMING")

@@ -91,10 +91,12 @@ prog_char eeprom_erase_stats[] PROGMEM = "Erase Stats " XSTR(CHAR_RIGHT_ARROW);
 // config modes
 prog_char wing_mode[] PROGMEM = "WING MODE";
 prog_char wing_use_dipsw[] PROGMEM = "DIP SW";
-prog_char wing_single_ail[] PROGMEM = "Single Ail";
-prog_char wing_delta[] PROGMEM = "Delta";
-prog_char wing_vtail[] PROGMEM = "V-Tail";
-prog_char wing_dual_ail[] PROGMEM = "Dual Ail";
+prog_char wing_rud_ele_single_ail[] PROGMEM = "RudEle Sing Ail";
+prog_char wing_delta_single_ail[] PROGMEM = "Delta Sing Ail";
+prog_char wing_vtail_single_ail[] PROGMEM = "VTail Sing Ail";
+prog_char wing_rud_ele_dual_ail[] PROGMEM = "RudEle Dual Ail";
+prog_char wing_delta_dual_ail[] PROGMEM = "Delta Dual Ail";
+prog_char wing_vtail_dual_ail[] PROGMEM = "VTail Dual Ail";
 
 prog_char mixer_epa_mode[] PROGMEM = "EPA MODE";
 prog_char mixer_epa_full[] PROGMEM = "Full 1000-2000";
@@ -122,7 +124,6 @@ prog_char max_rotate_vlow[] PROGMEM = "Very Low 0.25x";
 prog_char max_rotate_low[] PROGMEM = "Low 0.5x";
 prog_char max_rotate_med[] PROGMEM = "Medium 1x";
 prog_char max_rotate_high[] PROGMEM = "High 2x";
-prog_char max_rotate_vhigh[] PROGMEM = "Very High 4x";
 
 prog_char rate_mode_stick_rotate[] PROGMEM = "RATE STK-ROTATE";
 prog_char disabled[] PROGMEM = "Disabled";
@@ -138,11 +139,12 @@ prog_char pid_roll[] PROGMEM = "Ail ";
 prog_char pid_pitch[] PROGMEM = "Ele ";
 prog_char pid_yaw[] PROGMEM = "Rud ";
 
-prog_char *param_text[][6] PROGMEM = {
+prog_char *param_text[][8] PROGMEM = {
   {status, 
    status_device_id, status_device_ver, status_device_eeprom},
   {wing_mode, 
-   wing_use_dipsw, wing_single_ail, wing_delta, wing_vtail, wing_dual_ail},
+   wing_use_dipsw, wing_rud_ele_single_ail, wing_delta_single_ail, wing_vtail_single_ail, 
+   wing_rud_ele_dual_ail, wing_delta_dual_ail, wing_vtail_dual_ail},
   {mixer_epa_mode, 
    mixer_epa_full, mixer_epa_norm, mixer_epa_track},
   {cppm_mode, 
@@ -152,7 +154,7 @@ prog_char *param_text[][6] PROGMEM = {
   {stick_gain_throw, 
    stick_gain_throw_full, stick_gain_throw_half, stick_gain_throw_quarter},
   {max_rotate, 
-   max_rotate_vlow, max_rotate_low, max_rotate_med, max_rotate_high, max_rotate_vhigh},
+   max_rotate_vlow, max_rotate_low, max_rotate_med, max_rotate_high},
   {rate_mode_stick_rotate, 
    disabled, enabled},
   {inflight_calibrate, 
@@ -185,12 +187,12 @@ const int8_t param_min[] = {
 
 const int8_t param_max[] = {
   3, // status
-  WING_DUAL_AIL, 
+  WING_VTAIL_DUAL_AIL, 
   MIXER_EPA_TRACK,  
   CPPM_AETR1a2F,     
   MOUNT_ROLL_90_RIGHT,    
   STICK_GAIN_THROW_QUARTER,
-  MAX_ROTATE_VHIGH,
+  MAX_ROTATE_HIGH,
   RATE_MODE_STICK_ROTATE_ENABLE,
   INFLIGHT_CALIBRATE_ENABLE,
   0, // vr_gain
