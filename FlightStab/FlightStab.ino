@@ -447,6 +447,10 @@ volatile int16_t *rx_chan[][rx_chan_list_size] = {
 enum STAB_MODE {STAB_RATE, STAB_HOLD};
 enum STAB_MODE stab_mode = STAB_RATE;
 
+// DELTA DUAL_AIL
+enum LINKED_MODE {LINKED_SLOW, LINKED_NORMAL, LINKED_AGGRESSIVE};
+enum LINKED_MODE linked_mode = LINKED_NORMAL;
+
 const int16_t stick_gain_max = 400; // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
 const int16_t master_gain_max = 400; // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
 
@@ -1461,7 +1465,12 @@ void apply_mixer_change(int16_t *change)
     break;
   case WING_DELTA_SINGLE_AIL:
   case WING_DELTA_DUAL_AIL:
-    tmp0 =  ail_in2_offset + RX_WIDTH_MID + change[0];
+    // delta1 servo == ail_out
+    // delta2 servo == ele_out
+    // ail servo == rud_out (left aileron)
+    // ailr servo == ailr_out
+    
+    tmp0 =  ail_in2_offset + RX_WIDTH_MID + change[0]; // XXX
     tmp1 =  ele_in2 + change[1];
     // apply 100% (1/1)
     //ail_out2 = ((tmp0 + tmp1) >> 1);
@@ -1478,12 +1487,33 @@ void apply_mixer_change(int16_t *change)
     //ele_out2 = tmp2 - (tmp2 >> 2) + RX_WIDTH_MID;
 
     if (wing_mode == WING_DELTA_SINGLE_AIL) {
+      // regular rudder and single aileron
       rud_out2 = rud_in2 + change[2];
       ailr_out2 = ailr_in2 + change[0];
     } else {
+
       // rud_in2 == LINKED
-      rud_out2 = ail_in2 + change[0];
-      ailr_out2 = ailr_in2 + change[0];
+      linked_mode = rud_in2 > 1400 && rud_in2 < 1600 ? LINKED_NORMAL : 
+        rud_in2 < 1250 ? LINKED_SLOW : 
+        rud_in2 > 1750 ? LINKED_AGGRESSIVE :
+        linked_mode;
+
+      switch (linked_mode) {
+      case LINKED_SLOW: // flaps
+        tmp0 = ((ail_in2 - ail_in2_mid) - (ailr_in2 - ailr_in2_mid)) >> 1; // flapperon_offset
+        rud_out2 = ail_in2_mid + tmp0; // rud_out2 == left aileron
+        ailr_out2 = ailr_in2_mid - tmp0;
+        break;
+      case LINKED_NORMAL: // ail and flaps
+        rud_out2 = ail_in2 + change[0]; // rud_out2 == ail_out2 (left aileron)
+        ailr_out2 = ailr_in2 + change[0];
+        break;
+      case LINKED_AGGRESSIVE: // ele, ail and flaps 
+        rud_out2 = (ail_in2 + change[0]) + (ele_in2_offset + change[1]);
+        ailr_out2 = (ailr_in2 + change[0]) - (ele_in2_offset + change[1]);
+        break;
+      }
+        
     }
     break;
   case WING_VTAIL_SINGLE_AIL:
