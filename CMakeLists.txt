@@ -79,15 +79,25 @@ add_arduino_firmware(${TODAY}_AQUASTAR Aquastar atmega8 "AQUASTAR")
 add_arduino_firmware(${TODAY}_DLUX Aquastar atmega8 "DLUX")
 
 # NANOWII
-add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
+add_arduino_firmware(${TODAY}_NANOWII_CPPM FlightStab leonardo "NANOWII")
+add_arduino_firmware(${TODAY}_NANOWII_NORMAL FlightStab leonardo "NANOWII;NO_CPPM")
 
 # RX3S_* 16MHz (standard)
 add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")
 add_arduino_firmware(${TODAY}_RX3S_V2 FlightStab pro5v "RX3S_V2")
+add_arduino_firmware(${TODAY}_RX3SM FlightStab pro5v "RX3SM")
 
 # RX3S_* 8MHz
 add_arduino_firmware(${TODAY}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
 add_arduino_firmware(${TODAY}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
+
+# RX3S_* Serial Receive
+add_arduino_firmware(${TODAY}_RX3S_V2_SBUS FlightStab pro5v "RX3S_V2;NO_CPPM;SERIALRX_SBUS")
+add_arduino_firmware(${TODAY}_RX3S_V2_SPEKTRUM FlightStab pro5v "RX3S_V2;NO_CPPM;SERIALRX_SPEKTRUM")
+
+# NANOWII_* Serial Receive
+add_arduino_firmware(${TODAY}_NANOWII_SPEKTRUM FlightStab leonardo "NANOWII;NO_CPPM;SERIALRX_SPEKTRUM")
+add_arduino_firmware(${TODAY}_NANOWII_SBUS FlightStab leonardo "NANOWII;NO_CPPM;SERIALRX_SBUS")
          
 # test permutations          
 add_arduino_firmware(TEST_RX3S_V2_SERIAL_DEBUG FlightStab pro5v "RX3S_V2;SERIAL_DEBUG")
@@ -97,6 +107,7 @@ add_arduino_firmware(TEST_RX3S_V2_I2CDEVLIB FlightStab pro5v "RX3S_V2;USE_I2CDEV
 add_arduino_firmware(TEST_RX3S_V2_NO_CPPM FlightStab pro5v "RX3S_V2;NO_CPPM")
 add_arduino_firmware(TEST_RX3S_V2_NO_ONEWIRE FlightStab pro5v "RX3S_V2;NO_ONEWIRE")
 add_arduino_firmware(TEST_RX3S_V2_NO_STICKCONFIG FlightStab pro5v "RX3S_V2;NO_STICKCONFIG")
+
 
 
 
