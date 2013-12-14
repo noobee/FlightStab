@@ -40,6 +40,9 @@
   {
     static uint8_t buf[25];
     static int8_t index = 0;
+    #if defined (SERIALRX_SBUS)
+      static bool sbus_return = false;
+    #endif // SERIALRX_SBUS  
     
   #if defined (SERIALRX_SPEKTRUM) 	// Used only for Spektrum    
     static uint32_t last_rx_time;
@@ -156,6 +159,7 @@ jrb*/
         *serialrx_chan[7] = (((((uint16_t)buf[10] >> 5) | ((uint16_t)buf[11] << 3)) & 0x7ff) >> 1) + SBUS_OFFSET;
         
         index = 0;
+        sbus_return = true;
       }
 
   //jrb add for debug  
@@ -172,7 +176,8 @@ jrb*/
       RXcount++; 
     #endif
   }
-  #endif // SERIALRX_SBUS 
+  return (sbus_return); 
+  #endif // SERIALRX_SBUS
 }
 #endif // SERIALRX_SPEKTRUM) || SERIALRX_SBUS 
 
