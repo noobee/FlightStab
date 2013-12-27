@@ -67,12 +67,14 @@ prog_char undef_device[] PROGMEM = " Undefined";
 prog_char rx3s_v1[] PROGMEM = " RX3S V1";
 prog_char rx3s_v2v3[] PROGMEM = " RX3S V2/V3";
 prog_char nanowii[] PROGMEM = " NanoWii";
+prog_char rx3sm[] PROGMEM = " RX3SM";
 
 prog_char *device_name[] PROGMEM = { // must match enum DEVICE_IDS in eeprom_stats.device_id
   undef_device,
   rx3s_v1,
   rx3s_v2v3,
-  nanowii
+  nanowii,
+  rx3sm
 };
 
 // status
