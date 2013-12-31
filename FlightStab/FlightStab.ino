@@ -276,8 +276,8 @@ bool ow_loop(); // OneWireSerial.ino
 */
 
 // Need to use RX3S_V2V3 device ID until Programming Box firmware is updated
-//jrb #define DEVICE_ID DEVICE_RX3SM
-#define DEVICE_ID DEVICE_RX3S_V2V3
+#define DEVICE_ID DEVICE_RX3SM
+//jrb#define DEVICE_ID DEVICE_RX3S_V2V3
 
 // <VR>
 #define AIN_PORTC {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL}
@@ -1971,7 +1971,13 @@ void stick_config(struct _stick_zone *psz)
        }
       last_servo_update_time = t;
     }
-    
+    //jrb additions
+#if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
+    if (serialrx_update() == true) {
+      rx_frame_sync = true;
+  }
+#endif 
+
     if (rx_frame_sync) {
       rx_frame_sync = false;
       copy_rx_in();
