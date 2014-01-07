@@ -19,6 +19,7 @@ bool ow_loop(); // OneWireSerial.ino
 //#define RX3S_V2
 //#define NANOWII
 //#define NANO_MPU6050
+//#define EAGLE_A3PRO
 
 //#define NO_CPPM // remove cppm code
 //#define NO_ONEWIRE // remove one-wire serial config code
@@ -297,6 +298,97 @@ bool ow_loop(); // OneWireSerial.ino
 #define F_I2C F_100KHZ // i2c bus speed
 #endif
 /* NANO_MPU6050 ************************************************************************************************/
+
+
+/* EAGLE_A3PRO *************************************************************************************************/
+#if defined(EAGLE_A3PRO)
+#warning EAGLE_A3PRO defined // emit device name
+
+ /*
+ Eagle A3 Pro Stabilizer EAGLE_A3PRO
+ PB0  8 AIL_IN  (OWTXRX)    PC0 14/A0 AIL_GAIN      PD0 0 AIL_SW  (RXD)
+ PB1  9 ELE_IN  (PWM)       PC1 15/A1 ELE_GAIN      PD1 1 ELE_SW  (TXD)
+ PB2 10 RUD_IN  (PWM)       PC2 16/A2 RUD_GAIN      PD2 2 RUD_SW
+ PB3 11 AUX_IN  (MOSI/PWM)  PC3 17/A3               PD3 3 LED
+ PB4 12 AILR_IN (MISO)      PC4 18/A4 (SDA)         PD4 4 AILR_OUT
+ PB5 13         (SCK)       PC5 19/A5 (SCL)         PD5 5 AILL_OUT
+ PB6 14         (XTAL1)     PC6       (RESET)       PD6 6 ELE_OUT (PWM)
+ PB7 15         (XTAL2)                             PD7 7 RUD_OUT (PWM)
+ 
+ AIL_SINGLE mode (DEFAULT SETTING)
+ no change
+
+ AIL_DUAL mode
+ PB3 11 AUX_IN instead of MOSI
+ PB4 12 AILR_IN instead of MISO
+
+ CPPM enabled
+ PB0 8 CPPM_IN instead of AIL_IN
+ PB1 9 FLP_OUT instead of ELE_IN
+ PB2 10 THR_OUT instead of RUD_IN
+ PB3 11 AUX2_OUT instead of AUX_IN
+*/
+
+#define DEVICE_ID DEVICE_EAGLE_A3PRO
+
+// <VR>
+#define AIN_PORTC {&ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL}
+
+// <RX> (must in PORT B/D due to ISR)
+#define RX_PORTB {&ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, NULL, NULL, NULL}
+#define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <SWITCH>
+#define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTD {&ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL, NULL}
+
+// <SERVO>
+#define AIL_OUT_PIN  4
+#define ELE_OUT_PIN  5
+#define RUD_OUT_PIN  6
+#define AILR_OUT_PIN 7 // dual aileron mode only
+
+#define PWM_OUT_VAR {&ailr_out, &ail_out, &ele_out, &rud_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AILR_OUT_PIN, AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, -1, -1, -1, -1}
+
+// <IMU>
+#define USE_ITG3200
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = (y); gyro[1] = (x); gyro[2] = (z);}
+
+// CPPM
+#define CPPM_PINREG PINB
+#define CPPM_PINBIT 0
+#define FLP_OUT_PIN 9
+#define THR_OUT_PIN 10
+#define AUX2_OUT_PIN 11
+
+#define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define F_I2C F_400KHZ // i2c bus speed
+#define SCL_PIN 19
+#define SDA_PIN 18
+
+// led register
+#define LED_DDR DDRD
+#define LED_PORT PORTD
+#define LED_BIT 3
+#define LED_XOR 0 // active high
+
+// one-wire port = PD7 (RUD_OUT)
+#define OW_BIT 7
+#define OW_DDR DDRD
+#define OW_PORT PORTD
+#define OW_PINREG PIND
+
+// eeprom clear pins. shorted on init means to clear eeprom
+#define EEPROM_RESET_OUT_PIN 5
+#define EEPROM_RESET_IN_PIN 6
+
+
+
+#endif
+/* EAGLE_A3PRO *************************************************************************************************/
+
 
 // standard frequency definitions
 #define F_8MHZ 8000000UL
@@ -732,7 +824,11 @@ void mpu6050_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
   *az = (buf[4] << 8) | (buf[5]);
 }
 
+#if defined(EAGLE_A3PRO)
+#define ITG3205_ADDR 0x69
+#else
 #define ITG3205_ADDR 0x68
+#endif // defined(EAGLE_A3PRO)
 
 int8_t itg3205_init()
 {
@@ -740,7 +836,6 @@ int8_t itg3205_init()
   delay1(50);
   i2c_write_reg(ITG3205_ADDR, 0x3E, 0x03); // clock=pll with z-gyro ref
   i2c_write_reg(ITG3205_ADDR, 0x16, 0x18 | 0x6); // fs=2000deg/s | lpf=5hz sample=1khz
-
   return ((i2c_read_reg(ITG3205_ADDR, 0x00) & 0x7E) >> 1) == 0x34; // chip id
 }
 
@@ -880,7 +975,7 @@ inline void pcint0_vect()
   }
 }
 
-#if defined(RX3S_V1) || defined(RX3S_V2)
+#if (defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO))
 // isr armed only if cppm enabled
 ISR(TIMER1_CAPT_vect)
 {
@@ -946,7 +1041,7 @@ ISR(PCINT2_vect)
   }
 }
 
-#endif // defined(RX3S_V1) || defined(RX3S_V2)
+#endif // defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO)
 
 #if defined(NANOWII)
 // PE6 = aux2_in
@@ -1866,11 +1961,11 @@ void setup()
   Serial.begin(115200L);
 #endif
   
-#if defined(RX3S_V1) || defined(RX3S_V2) // test should be if atmega168/328
+#if defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) // test should be if atmega168/328
   // clear wd reset bit and disable wdt in case it was enabled due to stick config reboot
   MCUSR &= ~(1 << WDRF);
   wdt_disable();
-#endif // RX3S_V1 || RX3S_V2
+#endif // RX3S_V1 || RX3S_V2 || EAGLE_A3PRO
 
   // set up default parameters  
   cfg.wing_mode = WING_USE_DIPSW;
@@ -2107,6 +2202,40 @@ void setup()
 #endif // !NO_CPPM
 #endif // NANOWII
 
+#if defined(EAGLE_A3PRO)
+
+  wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
+
+  switch (wing_mode) {
+  case WING_DUAL_AIL:
+    // PB3 11 AUX_IN instead of MOSI
+    // PB4 12 AILR_IN instead of MISO
+    rx_portb[3] = &aux_in; // enable aux_in
+    rx_portb[4] = &ailr_in; // enable ailr_in
+    break;
+  }
+        
+#if !defined(NO_CPPM)
+  if (cfg.cppm_mode != CPPM_NONE) {
+    // PB0 8 CPPM_IN instead of AIL_IN
+    // PB2 9 FLP_OUT instead of ELE_IN
+    // PB2 10 THR_OUT instead of RUD_IN
+    // PB3 11 AUX2_OUT instead of AUX_IN
+    rx_portb[0] = NULL; // disable ail_in
+    rx_portb[1] = NULL; // disable ele_in
+    rx_portb[2] = NULL; // disable rud_in
+    rx_portb[3] = NULL; // disable aux_in
+    pwm_out_var[4] = &thr_out; // enable thr_out
+    pwm_out_pin[4] = THR_OUT_PIN; //
+    pwm_out_var[5] = &flp_out; // enable flp_out
+    pwm_out_pin[5] = FLP_OUT_PIN; //
+    pwm_out_var[6] = &aux2_out; // enable aux2_out
+    pwm_out_pin[6] = AUX2_OUT_PIN; //
+  }
+#endif // !NO_CPPM
+#endif // EAGLE_A3PRO
+
+
   set_led_msg(0, wing_mode, LED_LONG);
 
   init_analog_in(); // vr
@@ -2250,6 +2379,7 @@ again:
       }        
     }
   
+
     // determine how much sticks are off center (from neutral)
     int16_t ail_stick_pos = abs(((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1);
     int16_t ele_stick_pos = abs(ele_in2 - ele_in2_mid);
