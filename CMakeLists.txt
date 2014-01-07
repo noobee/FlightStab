@@ -14,8 +14,8 @@
 # ================================
 # install C:\Program Files (x86)\CMake 2.8
 # ensure PATH includes C:\Program Files (x86)\CMake 2.8\bin
-# install C:\Program Files\arduino-1.0.3 (this exact path is important!)
-# ensure PATH includes C:\Program Files\arduino-1.0.3\hardware\tools\avr\utils\bin
+# install C:\Program Files\arduino-1.0.5 (this exact path is important!)
+# ensure PATH includes C:\Program Files\arduino-1.0.5\hardware\tools\avr\utils\bin
 
 # other useful commands
 # =====================
@@ -24,7 +24,7 @@
 # avr-nm -Cn <filename>.elf
 # avr-size [-C] <filename>.elf
 # avr-strings <filename>.elf
-# avrdude -C "C:\Program Files\arduino-1.0.3\hardware\tools\avr\etc\avrdude.conf" -c usbasp -p m168p -U flash:r:<filename>.hex
+# avrdude -C "C:\Program Files\arduino-1.0.5\hardware\tools\avr\etc\avrdude.conf" -c usbasp -p m168p -U flash:r:<filename>.hex
 
 set(CMAKE_TOOLCHAIN_FILE cmake/ArduinoToolchain.cmake)
 cmake_minimum_required(VERSION 2.8)
@@ -89,6 +89,10 @@ add_arduino_firmware(${TODAY}_RX3S_V2 FlightStab pro5v "RX3S_V2")
 add_arduino_firmware(${TODAY}_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
 add_arduino_firmware(${TODAY}_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
          
+# EagleA3Pro
+add_arduino_firmware(${TODAY}_EAGLE_A3PRO FlightStab pro5v "EAGLE_A3PRO")
+add_arduino_firmware(${TODAY}_EAGLE_A3PRO_NO_STICKCONFIG FlightStab pro5v "EAGLE_A3PRO;NO_STICKCONFIG")
+
 # test permutations          
 add_arduino_firmware(TEST_RX3S_V2_SERIAL_DEBUG FlightStab pro5v "RX3S_V2;SERIAL_DEBUG")
 add_arduino_firmware(TEST_RX3S_V2_DUMP_SENSORS FlightStab pro5v "RX3S_V2;DUMP_SENSORS")
