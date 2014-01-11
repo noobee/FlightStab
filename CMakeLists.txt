@@ -80,11 +80,17 @@ add_arduino_firmware(${TODAY}_DLUX Aquastar atmega8 "DLUX")
 
 # NANOWII
 add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
+add_arduino_firmware(${TODAY}_NANOWII_NOCPPM FlightStab leonardo "NANOWII;NO_CPPM")
+add_arduino_firmware(${TODAY}_NANOWII_SPEKTRUM FlightStab leonardo "NANOWII;NO_CPPM;SERIALRX_SPEKTRUM")
+add_arduino_firmware(${TODAY}_NANOWII_SBUS FlightStab leonardo "NANOWII;NO_CPPM;SERIALRX_SBUS")
 
 # RX3S V1/V2V3 16MHz
 add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")
 add_arduino_firmware(${TODAY}_RX3S_V2 FlightStab pro5v "RX3S_V2")
-
+add_arduino_firmware(${TODAY}_RX3SM FlightStab pro5v "RX3SM")
+add_arduino_firmware(${TODAY}_RX3S_V2_SPEKTRUM FlightStab pro5v "RX3S_V2;NO_CPPM;SERIALRX_SPEKTRUM")
+add_arduino_firmware(${TODAY}_RX3S_V2_SBUS FlightStab pro5v "RX3S_V2;NO_CPPM;SERIALRX_SBUS")
+         
 # EagleA3Pro
 add_arduino_firmware(${TODAY}_EAGLE_A3PRO FlightStab pro5v "EAGLE_A3PRO")
 add_arduino_firmware(${TODAY}_EAGLE_A3PRO_NO_STICKCONFIG FlightStab pro5v "EAGLE_A3PRO;NO_STICKCONFIG")
@@ -99,9 +105,5 @@ add_arduino_firmware(TEST_RX3S_V2_NO_ONEWIRE FlightStab pro5v "RX3S_V2;NO_ONEWIR
 add_arduino_firmware(TEST_RX3S_V2_NO_STICKCONFIG FlightStab pro5v "RX3S_V2;NO_STICKCONFIG")
 add_arduino_firmware(TEST_RX3S_V1_8MHZ FlightStab pro "RX3S_V1")
 add_arduino_firmware(TEST_RX3S_V2_8MHZ FlightStab pro "RX3S_V2")
-
-
-
-
 
          

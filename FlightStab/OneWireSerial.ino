@@ -5,10 +5,21 @@
 ***************************************************************************************************************/
 
 // required OW_* definitions
-//#define OW_BIT 7
-//#define OW_DDR DDRD
-//#define OW_PORT PORTD
-//#define OW_PINREG PIND
+//#define OW_BIT ?
+//#define OW_DDR DDR?
+//#define OW_PORT PORT?
+//#define OW_PINREG PIN?
+//#define OW_FIRST_CONNECT_WAIT mmm	// Time in Milliseconds
+//#define OW_HEARTBEAT_WAIT mmm		// Time in Milliseconds
+
+#if !defined(OW_FIRST_CONNECT_WAIT)
+// TODO(noobee): check why 600 and not lower? (previously 100)
+#define OW_FIRST_CONNECT_WAIT 600 // in ms
+#endif
+
+#if !defined(OW_HEARTBEAT_WAIT)
+#define OW_HEARTBEAT_WAIT 500 // in ms
+#endif
 
 const uint16_t ow_pulse_width_ticks = 139; // 1/115200 at 16mhz == 139 ticks
 
@@ -159,7 +170,8 @@ again:
   
   do {
     struct _ow_msg ow_msg;
-    if (!ow_recv_msg(&ow_msg, sizeof(ow_msg), !connected ? 100 : 500)) { // 100ms for first connect, 500ms for heartbeat
+		// wait up to M ms for first connect, then up to N ms for each heartbeat
+    if (!ow_recv_msg(&ow_msg, sizeof(ow_msg), !connected ? OW_FIRST_CONNECT_WAIT : OW_HEARTBEAT_WAIT)) { 
       break; 
     }
     connected = true;
