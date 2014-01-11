@@ -8,7 +8,7 @@ aquastar programming box to be in sync with the flightstab firmware.
 #if !defined(FLIGHTSTAB_H)
 #define FLIGHTSTAB_H
 
-const int8_t eeprom_cfg_ver = 4;
+const int8_t eeprom_cfg_ver = 5;
 
 enum DEVICE_IDS {DEVICE_UNDEF, DEVICE_RX3S_V1, DEVICE_RX3S_V2V3, DEVICE_NANOWII, DEVICE_EAGLE_A3PRO};
 

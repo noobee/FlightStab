@@ -18,8 +18,8 @@ bool ow_loop(); // OneWireSerial.ino
 //#define RX3S_V1
 //#define RX3S_V2
 //#define NANOWII
-//#define NANO_MPU6050
 //#define EAGLE_A3PRO
+//#define NANO_MPU6050
 
 //#define NO_CPPM // remove cppm code
 //#define NO_ONEWIRE // remove one-wire serial config code
@@ -286,20 +286,6 @@ bool ow_loop(); // OneWireSerial.ino
 #endif
 /* NANOWII ****************************************************************************************************/
 
-
-/* NANO_MPU6050 ************************************************************************************************/
-#if defined(NANO_MPU6050)
-#warning NANO_MPU6050 defined // emit device name
-#undef USE_ITG3200
-#define USE_MPU6050
-#undef GYRO_ORIENTATION
-#define GYRO_ORIENTATION(x, y, z) {gyro[0] = -(x); gyro[1] = (y); gyro[2] = (z);}
-#undef F_I2C
-#define F_I2C F_100KHZ // i2c bus speed
-#endif
-/* NANO_MPU6050 ************************************************************************************************/
-
-
 /* EAGLE_A3PRO *************************************************************************************************/
 #if defined(EAGLE_A3PRO)
 #warning EAGLE_A3PRO defined // emit device name
@@ -367,6 +353,7 @@ bool ow_loop(); // OneWireSerial.ino
 #define F_I2C F_400KHZ // i2c bus speed
 #define SCL_PIN 19
 #define SDA_PIN 18
+#define ITG3205_ADDR 0x69
 
 // led register
 #define LED_DDR DDRD
@@ -389,6 +376,17 @@ bool ow_loop(); // OneWireSerial.ino
 #endif
 /* EAGLE_A3PRO *************************************************************************************************/
 
+/* NANO_MPU6050 ************************************************************************************************/
+#if defined(NANO_MPU6050)
+#warning NANO_MPU6050 defined // emit device name
+#undef USE_ITG3200
+#define USE_MPU6050
+#undef GYRO_ORIENTATION
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = -(x); gyro[1] = (y); gyro[2] = (z);}
+#undef F_I2C
+#define F_I2C F_100KHZ // i2c bus speed
+#endif
+/* NANO_MPU6050 ************************************************************************************************/
 
 // standard frequency definitions
 #define F_8MHZ 8000000UL
@@ -824,11 +822,9 @@ void mpu6050_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
   *az = (buf[4] << 8) | (buf[5]);
 }
 
-#if defined(EAGLE_A3PRO)
-#define ITG3205_ADDR 0x69
-#else
+#if !defined(ITG3205_ADDR)
 #define ITG3205_ADDR 0x68
-#endif // defined(EAGLE_A3PRO)
+#endif
 
 int8_t itg3205_init()
 {
@@ -2235,7 +2231,6 @@ void setup()
 #endif // !NO_CPPM
 #endif // EAGLE_A3PRO
 
-
   set_led_msg(0, wing_mode, LED_LONG);
 
   init_analog_in(); // vr
@@ -2379,7 +2374,6 @@ again:
       }        
     }
   
-
     // determine how much sticks are off center (from neutral)
     int16_t ail_stick_pos = abs(((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1);
     int16_t ele_stick_pos = abs(ele_in2 - ele_in2_mid);

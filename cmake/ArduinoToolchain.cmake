@@ -6,15 +6,10 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this file,
 # You can obtain one at http://mozilla.org/MPL/2.0/.
 #=============================================================================#
-
-# include (CMakeForceCompiler)
 set(CMAKE_SYSTEM_NAME Arduino)
 
 set(CMAKE_C_COMPILER   avr-gcc)
 set(CMAKE_CXX_COMPILER avr-g++)
-
-# CMAKE_FORCE_C_COMPILER   (avr-gcc GNU)
-# CMAKE_FORCE_CXX_COMPILER (avr-g++ GNU)
 
 # Add current directory to CMake Module path automatically
 if(EXISTS  ${CMAKE_CURRENT_LIST_DIR}/Platform/Arduino.cmake)
