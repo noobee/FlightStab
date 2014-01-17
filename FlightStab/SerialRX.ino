@@ -8,16 +8,12 @@
 ***************************************************************************************************************/
       
 #if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
+  volatile int16_t *serialrx_chan[8] = {&thr_in, &ail_in, &ele_in, &rud_in, &flp_in, &ailr_in, &aux2_in, &aux_in}; // TAERFa12 
   #if defined(NANOWII)
     HardwareSerial *pSerial = &Serial1; // TODO: hardcoded for NanoWii for now
-//jrb SerialRX
-      volatile int16_t *serialrx_chan[8] = {&thr_in, &ail_in, &ele_in, &rud_in, &ailr_in, &flp_in, &aux2_in, &aux_in}; // TAERG123 for Spektrum 
-//		volatile int16_t *serialrx_chan[8] = {&thr_in, &ail_in, &ele_in, &rud_in, &flp_in, &ailr_in, &aux_in, &aux2_in}; // TAERG123 for Spektrum DX7s  
-//      volatile int16_t *serialrx_chan[8] = {&ele_in, &rud_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}; // ERTA1a2F
   #else
     HardwareSerial *pSerial = &Serial; 
-    volatile int16_t *serialrx_chan[8] = {&thr_in, &ail_in, &ele_in, &rud_in, &ailr_in, &flp_in, &aux2_in, &aux_in}; // TAERG123   
-  #endif // SERIALRX_SPEKTRUM
+  #endif // NANOWI
   
   //jrb add for debug  
   #if defined(SERIAL_DEBUG) && 1

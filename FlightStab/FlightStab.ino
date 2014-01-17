@@ -9,6 +9,13 @@
 
 bool ow_loop(); // OneWireSerial.ino
 
+// JRB - you may wish to move this to FlightStab.h
+// This is required because some of the serial protocols sent data at a 9ms-10ms
+// rate which cause the data to be sent to quickly to the servos.  Analog servos
+// dont' like fast frame rates
+
+#define MINIMUM_FRAME_TIME 18000	// Minimum time between servo output frames in microseconds
+
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 /***************************************************************************************************************
@@ -30,7 +37,7 @@ bool ow_loop(); // OneWireSerial.ino
 #endif
 
 #if defined(SERIALRX_SPEKTRUM)
-#define SERIALRX_SPEKTRUM_RESOLUTION 10 // 10 for 1024 levels, 11 for 2048 levels
+#define SERIALRX_SPEKTRUM_RESOLUTION 11 // 10 for 1024 levels, 11 for 2048 levels
 #endif
 
 //#define RX3S_V1
@@ -190,15 +197,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
 
-// TODO(noobee): is this needed since we are reassigning var and pins later? AUX2_OUT is new here
-//jrb SerialRX
-#if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
-#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, &thr_out, &flp_out, &aux2_out, NULL, NULL}
-#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, THR_OUT_PIN, FLP_OUT_PIN, AUX2_OUT_PIN, -1, -1}
-#else
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL /*&aux2_out*/, NULL, NULL}
 #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1, -1}
-#endif
 
 // <IMU>
 #define USE_ITG3200
@@ -357,22 +357,14 @@ bool ow_loop(); // OneWireSerial.ino
 #define RUD_OUT_PIN 11
 #define AILR_OUT_PIN 13 // dual aileron mode only
 
-// TODO(noobee): i think this is also not needed, the #else part is enough
-//jrb SerialRX
-#if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
-  #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, &thr_out, &flp_out, NULL, NULL}
-  #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, THR_OUT_PIN, FLP_OUT_PIN, -1, -1}
-#else
-  #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
-  #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
-#endif
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
 
 // <IMU>
 #define USE_MPU6050
 #define GYRO_ORIENTATION(x, y, z) {gyro[0] = (-y); gyro[1] = (-x); gyro[2] = (z);}
 
-// TODO(noobee): confirm this comment -- SERIALRX_SPEKTRUM uses PE6?
-// CPPM & SERIALRX_SPEKTRUM
+// CPPM
 #define CPPM_PINREG PINE 
 #define CPPM_PINBIT 6
 
@@ -2319,7 +2311,7 @@ void setup()
     }
   }
 
-#if !defined(NO_CPPM) || (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
+#if !defined(NO_CPPM)
   if (cfg.cppm_mode != CPPM_NONE) {
     // PB0 8 CPPM_IN instead of AIL_IN for !NO_CPPM
     // PB0 8 UNUSED instead of AIL_IN for SERIALRX_*
@@ -2337,7 +2329,26 @@ void setup()
     pwm_out_var[6] = &aux2_out; // enable aux2_out
     pwm_out_pin[6] = AUX2_OUT_PIN; //
   }
-#endif // !NO_CPPM || (SERIALRX_SPEKTRUM || SERIALRX_SBUS)
+#endif // !NO_CPPM
+
+#if defined(NO_CPPM) && (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
+    // PB0 8 CPPM_IN instead of AIL_IN for !NO_CPPM
+    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_*
+    // PB1 9 FLP_OUT instead of ELE_IN
+    // PB2 10 THR_OUT instead of RUD_IN
+    // PB3 11 AUX2_OUT instead of AUX_IN
+    rx_portb[0] = NULL; // disable ail_in
+    rx_portb[1] = NULL; // disable ele_in
+    rx_portb[2] = NULL; // disable rud_in
+    rx_portb[3] = NULL; // disable aux_in
+    pwm_out_var[4] = &thr_out; // enable thr_out
+    pwm_out_pin[4] = THR_OUT_PIN; //
+    pwm_out_var[5] = &flp_out; // enable flp_out
+    pwm_out_pin[5] = FLP_OUT_PIN; //
+    pwm_out_var[6] = &aux2_out; // enable aux2_out
+    pwm_out_pin[6] = AUX2_OUT_PIN; //
+
+#endif // NO_CPPM) && (SERIALRX_SPEKTRUM || SERIALRX_SBUS)
 #endif // RX3S_V2  || RX3SM
 
 #if defined(NANOWII)
@@ -2456,7 +2467,8 @@ again:
 #endif 
 
   // update rx frame data with rx ISR received reference channel or after timeout
-  if (rx_frame_sync || (int32_t)(t - last_rx_time) > 30000) {
+  // Don't allow minimum time between servo frames be too fast - Analog servos will not be happy!!!
+  if ((rx_frame_sync && (int32_t)(t - last_rx_time) > MINIMUM_FRAME_TIME)|| (int32_t)(t - last_rx_time) > 30000) {
     rx_frame_sync = false;
     copy_rx_in();
     if (!rx_cal.done) {
