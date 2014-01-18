@@ -6,9 +6,19 @@
 * see http://paparazzi.github.io/docs/latest/stm32_2subsystems_2radio__control_2spektrum__arch_8c_source.html
 *
 ***************************************************************************************************************/
+
+#if defined(SERIALRX_SPEKTRUM)
+#define SERIALRX_SPEKTRUM_RESOLUTION 11 // 10 for 1024 levels, 11 for 2048 levels
+#endif
+
+#if defined(SERIALRX_SBUS)
+// The following value is added to the received pulse count
+// to make the center pulse width = 1500 when the TX output is 1500
+// TODO(noobee): i guess we would need to make this configurable..
+#define SBUS_OFFSET 1003 // 1003 for Taranis FRSKY X8R, 984 for Orange R800x
+#endif
       
 #if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
-  volatile int16_t *serialrx_chan[8] = {&thr_in, &ail_in, &ele_in, &rud_in, &flp_in, &ailr_in, &aux2_in, &aux_in}; // TAERFa12 
   #if defined(NANOWII)
     HardwareSerial *pSerial = &Serial1; // TODO: hardcoded for NanoWii for now
   #else
@@ -89,7 +99,7 @@ jrb*/
             uint16_t w = ((uint16_t)buf[i] << 8) | (uint16_t)buf[i+1];
             int8_t chan = (w >> rshift) & 0xf;
             if (chan < 8) {
-              *serialrx_chan[chan] = ((w << (11 - rshift) & 0x7ff) - 1024 + 1500); // scale to 11 bits 1024 +/- 684
+              *rx_chan[cfg.cppm_mode-2][chan] = ((w << (11 - rshift) & 0x7ff) - 1024 + 1500); // scale to 11 bits 1024 +/- 684;
             }          
           }
         }  
@@ -110,7 +120,7 @@ jrb*/
         
         for (PrintIndex = 0; PrintIndex < 8; PrintIndex++)
         {
-          Serial.print(*serialrx_chan[PrintIndex]); Serial.print(' ');
+          Serial.print(*rx_chan[cfg.cppm_mode-2][PrintIndex]); Serial.print(' ');
         }
         Serial.println(' '); 
               
@@ -145,14 +155,15 @@ jrb*/
       }
       buf[index++] = ch;
       if (index >= 25) {
-        *serialrx_chan[0] = (((((uint16_t)buf[1]  >> 0) | ((uint16_t)buf[2]  << 8)) & 0x7ff) >> 1) + SBUS_OFFSET;
-        *serialrx_chan[1] = (((((uint16_t)buf[2]  >> 3) | ((uint16_t)buf[3]  << 5)) & 0x7ff) >> 1) + SBUS_OFFSET; 
-        *serialrx_chan[2] = (((((uint16_t)buf[3]  >> 6) | ((uint16_t)buf[4]  << 2) | ((uint16_t)buf[5] << 10)) & 0x7ff) >> 1) + SBUS_OFFSET; 
-        *serialrx_chan[3] = (((((uint16_t)buf[5]  >> 1) | ((uint16_t)buf[6]  << 7)) & 0x7ff) >> 1) + SBUS_OFFSET; 
-        *serialrx_chan[4] = (((((uint16_t)buf[6]  >> 4) | ((uint16_t)buf[7]  << 4)) & 0x7ff) >> 1) + SBUS_OFFSET; 
-        *serialrx_chan[5] = (((((uint16_t)buf[7]  >> 7) | ((uint16_t)buf[8]  << 1) | ((uint16_t)buf[9] << 9)) & 0x7ff) >> 1) + SBUS_OFFSET;
-        *serialrx_chan[6] = (((((uint16_t)buf[9]  >> 2) | ((uint16_t)buf[10] << 6)) & 0x7ff) >> 1) + SBUS_OFFSET; 
-        *serialrx_chan[7] = (((((uint16_t)buf[10] >> 5) | ((uint16_t)buf[11] << 3)) & 0x7ff) >> 1) + SBUS_OFFSET;
+        volatile int16_t **p = rx_chan[cfg.cppm_mode-2];
+        *p[0] = (((((uint16_t)buf[1]  >> 0) | ((uint16_t)buf[2]  << 8)) & 0x7ff) >> 1) + SBUS_OFFSET;
+        *p[1] = (((((uint16_t)buf[2]  >> 3) | ((uint16_t)buf[3]  << 5)) & 0x7ff) >> 1) + SBUS_OFFSET; 
+        *p[2] = (((((uint16_t)buf[3]  >> 6) | ((uint16_t)buf[4]  << 2) | ((uint16_t)buf[5] << 10)) & 0x7ff) >> 1) + SBUS_OFFSET; 
+        *p[3] = (((((uint16_t)buf[5]  >> 1) | ((uint16_t)buf[6]  << 7)) & 0x7ff) >> 1) + SBUS_OFFSET; 
+        *p[4] = (((((uint16_t)buf[6]  >> 4) | ((uint16_t)buf[7]  << 4)) & 0x7ff) >> 1) + SBUS_OFFSET; 
+        *p[5] = (((((uint16_t)buf[7]  >> 7) | ((uint16_t)buf[8]  << 1) | ((uint16_t)buf[9] << 9)) & 0x7ff) >> 1) + SBUS_OFFSET;
+        *p[6] = (((((uint16_t)buf[9]  >> 2) | ((uint16_t)buf[10] << 6)) & 0x7ff) >> 1) + SBUS_OFFSET; 
+        *p[7] = (((((uint16_t)buf[10] >> 5) | ((uint16_t)buf[11] << 3)) & 0x7ff) >> 1) + SBUS_OFFSET;
         
         index = 0;
         sbus_return = true;
@@ -164,7 +175,7 @@ jrb*/
       {
         for (index = 0; index < 8; index++)
         {
-          Serial.print(*serialrx_chan[index]); Serial.print(' ');
+          Serial.print(*rx_chan[cfg.cppm_mode-2][index]); Serial.print(' ');
         }
         Serial.println(' '); 
        RXcount = 0; 

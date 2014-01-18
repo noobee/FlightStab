@@ -9,36 +9,11 @@
 
 bool ow_loop(); // OneWireSerial.ino
 
-// JRB - you may wish to move this to FlightStab.h
-// This is required because some of the serial protocols sent data at a 9ms-10ms
-// rate which cause the data to be sent to quickly to the servos.  Analog servos
-// dont' like fast frame rates
-
-#define MINIMUM_FRAME_TIME 18000	// Minimum time between servo output frames in microseconds
-
 // GYRO_ORIENTATION: roll right => -ve, pitch up => -ve, yaw right => -ve
 
 /***************************************************************************************************************
  * device definitions (TODO: move to separate files)
  ***************************************************************************************************************/
-
-//#define SERIALRX_SPEKTRUM
-//#define SERIALRX_SBUS
-
-#if defined(SERIALRX_SPEKTRUM) && defined(SERIALRX_SBUS)
-#error Cannot define both SERIALRX_SPEKTRUM and SERIALRX_SBUS
-#endif
-
-#if defined(SERIALRX_SBUS)
-// The following value is added to the received pulse count
-// to make the center pulse width = 1500 when the TX output is 1500
-//#define SBUS_OFFSET 984		// OrangeRx R800x
-#define SBUS_OFFSET 1003		// Taranis FRSKY X8R
-#endif
-
-#if defined(SERIALRX_SPEKTRUM)
-#define SERIALRX_SPEKTRUM_RESOLUTION 11 // 10 for 1024 levels, 11 for 2048 levels
-#endif
 
 //#define RX3S_V1
 //#define RX3S_V2
@@ -47,7 +22,10 @@ bool ow_loop(); // OneWireSerial.ino
 //#define EAGLE_A3PRO
 //#define NANO_MPU6050
 
-//#define NO_CPPM // remove cppm code
+//#define SERIALRX_CPPM // over a digital-in pin (preferably ICP)
+//#define SERIALRX_SPEKTRUM // over the serial port
+//#define SERIALRX_SBUS // over the serial port
+
 //#define NO_ONEWIRE // remove one-wire serial config code
 //#define NO_STICKCONFIG // remove stick config code
 
@@ -109,6 +87,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define ELE_OUT_PIN 5
 #define RUD_OUT_PIN 6
 #define AILR_OUT_PIN 7 // dual aileron mode only
+#define FLP_OUT_PIN 9  // when SERIALRX_* defined
+#define THR_OUT_PIN 10 // when SERIALRX_* defined
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
 #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
@@ -120,8 +100,6 @@ bool ow_loop(); // OneWireSerial.ino
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
-#define FLP_OUT_PIN 9
-#define THR_OUT_PIN 10
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
@@ -141,8 +119,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define OW_PINREG PIND
 
 // eeprom clear pins. shorted on init means to clear eeprom
-#define EEPROM_RESET_OUT_PIN 4
-#define EEPROM_RESET_IN_PIN 5
+#define EEPROM_RESET_OUT_PIN AIL_OUT_PIN
+#define EEPROM_RESET_IN_PIN ELE_OUT_PIN
 
 #endif 
 /* RX3S_V1 *****************************************************************************************************/
@@ -195,7 +173,10 @@ bool ow_loop(); // OneWireSerial.ino
 #define AIL_OUT_PIN 4
 #define ELE_OUT_PIN 5
 #define RUD_OUT_PIN 6
-#define AILR_OUT_PIN 7 // dual aileron mode only
+#define AILR_OUT_PIN 7  // dual aileron mode only
+#define FLP_OUT_PIN 9   // when SERIALRX_* defined
+#define THR_OUT_PIN 10  // when SERIALRX_* defined
+#define AUX2_OUT_PIN 11 // when SERIALRX_* defined
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL /*&aux2_out*/, NULL, NULL}
 #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1, -1}
@@ -207,11 +188,6 @@ bool ow_loop(); // OneWireSerial.ino
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
-
-// CPPM, SERIALRX_SPEKTRUM and SERIALRX_SBUS
-#define FLP_OUT_PIN 9
-#define THR_OUT_PIN 10
-#define AUX2_OUT_PIN 11
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
@@ -231,8 +207,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define OW_PINREG PIND
 
 // eeprom clear pins. shorted on init means to clear eeprom
-#define EEPROM_RESET_OUT_PIN 4
-#define EEPROM_RESET_IN_PIN 5
+#define EEPROM_RESET_OUT_PIN AIL_OUT_PIN
+#define EEPROM_RESET_IN_PIN ELE_OUT_PIN
 
 #endif
 /* RX3S_V2 *****************************************************************************************************/
@@ -273,6 +249,9 @@ bool ow_loop(); // OneWireSerial.ino
 #define AIL_OUT_PIN 5
 #define ELE_OUT_PIN 6
 #define RUD_OUT_PIN 7
+#define FLP_OUT_PIN 9   // when SERIALRX_* defined
+#define THR_OUT_PIN 10  // when SERIALRX_* defined
+#define AUX2_OUT_PIN 11 // when SERIALRX_* defined
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, NULL, NULL, NULL, NULL, NULL, NULL}
 #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, -1, -1, -1, -1, -1, -1}
@@ -284,11 +263,6 @@ bool ow_loop(); // OneWireSerial.ino
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
-
-// CPPM, SERIALRX_SPEKTRUM and SERIALRX_SBUS
-#define FLP_OUT_PIN 9
-#define THR_OUT_PIN 10
-#define AUX2_OUT_PIN 11
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
@@ -308,8 +282,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define OW_PINREG PIND
 
 // eeprom clear pins. shorted on init means to clear eeprom
-#define EEPROM_RESET_OUT_PIN 5
-#define EEPROM_RESET_IN_PIN 6
+#define EEPROM_RESET_OUT_PIN AIL_OUT_PIN
+#define EEPROM_RESET_IN_PIN ELE_OUT_PIN
 
 #endif
 /* RX3SM  *****************************************************************************************************/
@@ -356,6 +330,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define ELE_OUT_PIN 10
 #define RUD_OUT_PIN 11
 #define AILR_OUT_PIN 13 // dual aileron mode only
+#define THR_OUT_PIN 5   // when SERIALRX_* defined
+#define FLP_OUT_PIN 6   // when SERIALRX_* defined
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
 #define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, -1, -1, -1, -1}
@@ -367,10 +343,6 @@ bool ow_loop(); // OneWireSerial.ino
 // CPPM
 #define CPPM_PINREG PINE 
 #define CPPM_PINBIT 6
-
-// CPPM, SERIALRX_SPEKTRUM and SERIALRX_SBUS
-#define THR_OUT_PIN 5
-#define FLP_OUT_PIN 6
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
@@ -390,8 +362,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define OW_PINREG PINC
 
 // eeprom clear pins. shorted on init means to clear eeprom
-#define EEPROM_RESET_OUT_PIN 6 // also used for flap_out in cppm mode
-#define EEPROM_RESET_IN_PIN 5 // also used for thr_out in cppm mode
+#define EEPROM_RESET_OUT_PIN FLP_OUT_PIN
+#define EEPROM_RESET_IN_PIN THR_OUT_PIN
 
 #endif
 /* NANOWII ****************************************************************************************************/
@@ -443,27 +415,27 @@ bool ow_loop(); // OneWireSerial.ino
 #define AIL_OUT_PIN  4
 #define ELE_OUT_PIN  5
 #define RUD_OUT_PIN  6
-#define AILR_OUT_PIN 7 // dual aileron mode only
+#define AILR_OUT_PIN 7  // dual aileron mode only
+#define FLP_OUT_PIN 9   // when SERIALRX_* defined
+#define THR_OUT_PIN 10  // when SERIALRX_* defined
+#define AUX2_OUT_PIN 11 // when SERIALRX_* defined
 
 #define PWM_OUT_VAR {&ailr_out, &ail_out, &ele_out, &rud_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
 #define PWM_OUT_PIN {AILR_OUT_PIN, AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, -1, -1, -1, -1}
 
 // <IMU>
 #define USE_ITG3200
+#define ITG3205_ADDR 0x69 // override default addr
 #define GYRO_ORIENTATION(x, y, z) {gyro[0] = (y); gyro[1] = (x); gyro[2] = (z);}
 
 // CPPM
 #define CPPM_PINREG PINB
 #define CPPM_PINBIT 0
-#define FLP_OUT_PIN 9
-#define THR_OUT_PIN 10
-#define AUX2_OUT_PIN 11
 
 #define F_XTAL F_16MHZ // external crystal oscillator frequency
 #define F_I2C F_400KHZ // i2c bus speed
 #define SCL_PIN 19
 #define SDA_PIN 18
-#define ITG3205_ADDR 0x69
 
 // led register
 #define LED_DDR DDRD
@@ -525,6 +497,13 @@ bool ow_loop(); // OneWireSerial.ino
 // verify single imu defined
 #if defined(USE_MPU6050) && defined(USE_ITG3200)
 #error Cannot define both USE_MPU6050 and USE_ITG3200
+#endif
+
+// verify not more than one serialrx_* mode defined
+#if (defined(SERIALRX_CPPM) && (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))) || \
+    (defined(SERIALRX_SPEKTRUM) && (defined(SERIALRX_CPPM) || defined(SERIALRX_SBUS))) || \
+    (defined(SERIALRX_SBUS) && (defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM)))
+#error Cannot define mode than one SERIALRX_* mode (CPPM/SPEKTRUM/SBUS)
 #endif
 
 // i2cdevlib includes
@@ -630,11 +609,11 @@ struct _eeprom_cfg cfg;
 // local copy of config
 enum WING_MODE wing_mode;
 
-// cppm modes
+// serialrx_* modes
 const int8_t rx_chan_list_size = 8;
 volatile int16_t *rx_chan[][rx_chan_list_size] = {
   {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_RETA1a2F (FrSky)
-  {&thr_in, &ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_TAERF1a2F (JR/Spektrum)
+  {&thr_in, &ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_TAER1a2F (JR/Spektrum)
   {&ail_in, &ele_in, &thr_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in} // CPPM_AETR1a2F (Futaba)
 };
 
@@ -644,6 +623,9 @@ enum STAB_MODE stab_mode = STAB_RATE;
 
 const int16_t stick_gain_max = 400; // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
 const int16_t master_gain_max = 400; // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
+
+const int32_t minimum_servo_frame_time = 18000; // min time between servo updates in us
+const int32_t maximum_rx_frame_time = 30000; // max time to wait for rx_frame_sync in us
 
 /***************************************************************************************************************
  * TIMER1 AND MISC
@@ -1047,7 +1029,6 @@ int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cfg.cppm_mode-2][<n
 volatile int16_t *rx_portb[] = RX_PORTB;
 volatile int16_t *rx_portd[] = RX_PORTD;
 
-#if (!defined(SERIALRX_SPEKTRUM) && !defined(SERIALRX_SBUS))
 // PORTB PCINT0-PCINT7
 inline void pcint0_vect()
 {
@@ -1080,13 +1061,12 @@ inline void pcint0_vect()
     }
   }
 }
-#endif // !defined(SERIALRX_SPEKTRUM) && !defined(SERIALRX_SBUS)
 
 #if (defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM))
-// isr armed only if cppm enabled
+#if defined(SERIALRX_CPPM)
+// isr armed only if serialrx_cppm enabled
 ISR(TIMER1_CAPT_vect)
 {
-#if !defined(NO_CPPM)
   static int8_t ch0_synced = false;
   static uint16_t rise_time;
   static uint8_t ch;
@@ -1108,10 +1088,10 @@ ISR(TIMER1_CAPT_vect)
       rx_frame_sync = true;
     ch++;
   }
-#endif // !NO_CPPM
 }
+#endif // SERIALRX_CPPM
 
-#if (!defined(SERIALRX_SPEKTRUM) && !defined(SERIALRX_SBUS))
+#if !(defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect) 
 {
@@ -1148,39 +1128,14 @@ ISR(PCINT2_vect)
     }
   }
 }
-#endif // !defined(SERIALRX_SPEKTRUM) && !defined(SERIALRX_SBUS)
+#endif // !(SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS)
 #endif // defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM)
 
-#if (defined(NANOWII) && (!defined(SERIALRX_SPEKTRUM) && !defined(SERIALRX_SBUS)))
-// PE6 = aux2_in
-inline void int6_vect_non_cppm() 
-{
-  static uint16_t rise_time;
-  static uint8_t last_pin;
-  uint16_t now;
-  uint8_t pin, last_pin2, rise;
-
-  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
-  last_pin2 = last_pin;
-  pin = PINE;
-  last_pin = pin;
-  sei();
-
-  rise = pin & ~last_pin2;
-  if (rise & (1 << 6)) {
-    rise_time = now;
-  } else {
-    uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
-    if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-      aux2_in = width;
-    }
-  }
-}
-
+#if defined(NANOWII)
+#if defined(SERIALRX_CPPM)
 // PE6 = cppm_in
-inline void int6_vect_cppm() 
+ISR(INT6_vect) 
 {
-#if !defined(NO_CPPM)
   static int8_t ch0_synced = false;
   static uint16_t rise_time;
   static uint8_t last_pin;
@@ -1210,28 +1165,46 @@ inline void int6_vect_cppm()
       ch++;
     }
   }
-#endif // !NO_CPPM
 }
+#endif // SERIALRX_CPPM
 
-ISR(INT6_vect) 
-{ 
-  if (cfg.cppm_mode != CPPM_NONE)
-    int6_vect_cppm();
-  else
-    int6_vect_non_cppm();
-}
- 
+#if !(defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
+// PORTB PCINT0-PCINT7
 ISR(PCINT0_vect) 
 {
   pcint0_vect();
 }
-#endif // (defined(NANOWII) && (!defined(SERIALRX_SPEKTRUM) && !defined(SERIALRX_SBUS)))
 
+// PE6 = aux2_in
+ISR(INT6_vect)
+{
+  static uint16_t rise_time;
+  static uint8_t last_pin;
+  uint16_t now;
+  uint8_t pin, last_pin2, rise;
+
+  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
+  last_pin2 = last_pin;
+  pin = PINE;
+  last_pin = pin;
+  sei();
+
+  rise = pin & ~last_pin2;
+  if (rise & (1 << 6)) {
+    rise_time = now;
+  } else {
+    uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+    if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+      aux2_in = width;
+    }
+  }
+}
+#endif // !(SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS)
+#endif // NANOWII
 
 void init_digital_in_rx()
 {
-#if !defined(NO_CPPM)
-  if (cfg.cppm_mode != CPPM_NONE) {
+#if defined(SERIALRX_CPPM)
 #if defined(NANOWII)
     // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
     EICRB |= (1 << ISC60); // interrupt on pin change
@@ -1245,8 +1218,14 @@ void init_digital_in_rx()
 #endif // NANOWII
     rx_frame_sync_ref = 3; // sync on rx_chan[][3] first, but isr will track the sync gap
     return;
-  }
-#endif // !NO_CPPM
+#endif // SERIALRX_CPPM
+
+#if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
+	return;
+#endif
+
+	// from this point we are setting up standard RX IN
+	// rx_portb and rx_portd (and PE6 for nanowii)
 
   // PORTB RX
   PCICR |= (1 << PCIE0); // interrupt on pin change
@@ -2111,7 +2090,15 @@ void setup()
     cfg.vr_gain[i] = vr_gain_use_pot;  
   }
   cfg.mixer_epa_mode = MIXER_EPA_FULL;
+#if defined(SERIALRX_CPPM)
+  cfg.cppm_mode = CPPM_RETA1a2F;
+#elif defined(SERIALRX_SPEKTRUM)
+  cfg.cppm_mode = CPPM_TAER1a2F;
+#elif defined(SERIALRX_SBUS)
+  cfg.cppm_mode = CPPM_AETR1a2F;
+#else
   cfg.cppm_mode = CPPM_NONE;
+#endif
   cfg.mount_orient = MOUNT_NORMAL;
   cfg.stick_gain_throw = STICK_GAIN_THROW_FULL;
   cfg.max_rotate = MAX_ROTATE_MED;
@@ -2278,9 +2265,10 @@ void setup()
     break;
   }
         
-#if !defined(NO_CPPM)
+#if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
   if (cfg.cppm_mode != CPPM_NONE) {
-    // PB0 8 CPPM_IN instead of AIL_IN
+    // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
+    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
     // PB2 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
     rx_portb[0] = NULL; // disable ail_in
@@ -2291,7 +2279,7 @@ void setup()
     pwm_out_var[5] = &flp_out; // enable flp_out
     pwm_out_pin[5] = FLP_OUT_PIN; //
   }
-#endif // !NO_CPPM
+#endif // SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS
 #endif // RX3S_V1
 
 #if defined(RX3S_V2) || defined(RX3SM)
@@ -2311,10 +2299,10 @@ void setup()
     }
   }
 
-#if !defined(NO_CPPM)
+#if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
   if (cfg.cppm_mode != CPPM_NONE) {
-    // PB0 8 CPPM_IN instead of AIL_IN for !NO_CPPM
-    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_*
+    // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
+    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
     // PB1 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
     // PB3 11 AUX2_OUT instead of AUX_IN
@@ -2329,33 +2317,14 @@ void setup()
     pwm_out_var[6] = &aux2_out; // enable aux2_out
     pwm_out_pin[6] = AUX2_OUT_PIN; //
   }
-#endif // !NO_CPPM
-
-#if defined(NO_CPPM) && (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
-    // PB0 8 CPPM_IN instead of AIL_IN for !NO_CPPM
-    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_*
-    // PB1 9 FLP_OUT instead of ELE_IN
-    // PB2 10 THR_OUT instead of RUD_IN
-    // PB3 11 AUX2_OUT instead of AUX_IN
-    rx_portb[0] = NULL; // disable ail_in
-    rx_portb[1] = NULL; // disable ele_in
-    rx_portb[2] = NULL; // disable rud_in
-    rx_portb[3] = NULL; // disable aux_in
-    pwm_out_var[4] = &thr_out; // enable thr_out
-    pwm_out_pin[4] = THR_OUT_PIN; //
-    pwm_out_var[5] = &flp_out; // enable flp_out
-    pwm_out_pin[5] = FLP_OUT_PIN; //
-    pwm_out_var[6] = &aux2_out; // enable aux2_out
-    pwm_out_pin[6] = AUX2_OUT_PIN; //
-
-#endif // NO_CPPM) && (SERIALRX_SPEKTRUM || SERIALRX_SBUS)
+#endif // SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS
 #endif // RX3S_V2  || RX3SM
 
 #if defined(NANOWII)
-#if !defined(NO_CPPM) || (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
+#if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
   if (cfg.cppm_mode != CPPM_NONE) {
-    // PE6 7 CPPM_IN instead of THR/AUX2_IN for !NO_CPPM
-    // PE6 7 UNUSED instead of THR/AUX2_IN for SERIALRX_*
+    // PE6 7 CPPM_IN instead of THR/AUX2_IN for SERIALRX_CPPM
+    // PE6 7 UNUSED instead of THR/AUX2_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
     // PC6 5 THR_OUT instead of M
     // PD7 6 FLP_OUT instead of M
     pwm_out_var[4] = &thr_out; // enable thr_out
@@ -2363,10 +2332,10 @@ void setup()
     pwm_out_var[5] = &flp_out; // enable flp_out
     pwm_out_pin[5] = FLP_OUT_PIN; //
   }
-#endif // !NO_CPPM || (SERIALRX_SPEKTRUM || SERIALRX_SBUS)
+#endif // SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS
 #endif // NANOWII
 
-#if defined(EAGLE_A3PRO)
+#if defined(EAGLE_A3PRO) // TODO(noobee): can be folded into rx3s v1?
 
   wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
 
@@ -2378,10 +2347,11 @@ void setup()
     rx_portb[4] = &ailr_in; // enable ailr_in
     break;
   }
-        
-#if !defined(NO_CPPM)
+
+#if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
   if (cfg.cppm_mode != CPPM_NONE) {
-    // PB0 8 CPPM_IN instead of AIL_IN
+    // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
+    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
     // PB2 9 FLP_OUT instead of ELE_IN
     // PB2 10 THR_OUT instead of RUD_IN
     // PB3 11 AUX2_OUT instead of AUX_IN
@@ -2396,7 +2366,7 @@ void setup()
     pwm_out_var[6] = &aux2_out; // enable aux2_out
     pwm_out_pin[6] = AUX2_OUT_PIN; //
   }
-#endif // !NO_CPPM
+#endif // SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS
 #endif // EAGLE_A3PRO
 
   set_led_msg(0, wing_mode, LED_LONG);
@@ -2467,15 +2437,17 @@ again:
 #endif 
 
   // update rx frame data with rx ISR received reference channel or after timeout
-  // Don't allow minimum time between servo frames be too fast - Analog servos will not be happy!!!
-  if ((rx_frame_sync && (int32_t)(t - last_rx_time) > MINIMUM_FRAME_TIME)|| (int32_t)(t - last_rx_time) > 30000) {
+  if (rx_frame_sync && (int32_t)(t - last_rx_time) > maximum_rx_frame_time) {
     rx_frame_sync = false;
     copy_rx_in();
     if (!rx_cal.done) {
       calibrate_rx(&rx_cal);
       calibrate_set_led(&rx_cal, &imu_cal);
     }
-    servo_sync = true;    
+	  // Don't allow minimum time between servo frames be too fast - Analog servos will not be happy!!!
+		if ((int32_t)(t - last_rx_time) > minimum_servo_frame_time) {
+	  	servo_sync = true;    
+		}
     last_rx_time = t;
   }
 
