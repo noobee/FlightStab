@@ -99,7 +99,7 @@ jrb*/
             uint16_t w = ((uint16_t)buf[i] << 8) | (uint16_t)buf[i+1];
             int8_t chan = (w >> rshift) & 0xf;
             if (chan < 8) {
-              *rx_chan[cfg.cppm_mode-2][chan] = ((w << (11 - rshift) & 0x7ff) - 1024 + 1500); // scale to 11 bits 1024 +/- 684;
+              *rx_chan[cfg.serialrx_order-2][chan] = ((w << (11 - rshift) & 0x7ff) - 1024 + 1500); // scale to 11 bits 1024 +/- 684;
             }          
           }
         }  
@@ -120,7 +120,7 @@ jrb*/
         
         for (PrintIndex = 0; PrintIndex < 8; PrintIndex++)
         {
-          Serial.print(*rx_chan[cfg.cppm_mode-2][PrintIndex]); Serial.print(' ');
+          Serial.print(*rx_chan[cfg.serialrx_order-2][PrintIndex]); Serial.print(' ');
         }
         Serial.println(' '); 
               
@@ -155,7 +155,7 @@ jrb*/
       }
       buf[index++] = ch;
       if (index >= 25) {
-        volatile int16_t **p = rx_chan[cfg.cppm_mode-2];
+        volatile int16_t **p = rx_chan[cfg.serialrx_order-2];
         *p[0] = (((((uint16_t)buf[1]  >> 0) | ((uint16_t)buf[2]  << 8)) & 0x7ff) >> 1) + SBUS_OFFSET;
         *p[1] = (((((uint16_t)buf[2]  >> 3) | ((uint16_t)buf[3]  << 5)) & 0x7ff) >> 1) + SBUS_OFFSET; 
         *p[2] = (((((uint16_t)buf[3]  >> 6) | ((uint16_t)buf[4]  << 2) | ((uint16_t)buf[5] << 10)) & 0x7ff) >> 1) + SBUS_OFFSET; 
@@ -175,7 +175,7 @@ jrb*/
       {
         for (index = 0; index < 8; index++)
         {
-          Serial.print(*rx_chan[cfg.cppm_mode-2][index]); Serial.print(' ');
+          Serial.print(*rx_chan[cfg.serialrx_order-2][index]); Serial.print(' ');
         }
         Serial.println(' '); 
        RXcount = 0; 

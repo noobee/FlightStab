@@ -612,9 +612,9 @@ enum WING_MODE wing_mode;
 // serialrx_* modes
 const int8_t rx_chan_list_size = 8;
 volatile int16_t *rx_chan[][rx_chan_list_size] = {
-  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_RETA1a2F (FrSky)
-  {&thr_in, &ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // CPPM_TAER1a2F (JR/Spektrum)
-  {&ail_in, &ele_in, &thr_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in} // CPPM_AETR1a2F (Futaba)
+  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // SERIALRX_RETA1a2F (FrSky)
+  {&thr_in, &ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // SERIALRX_TAER1a2F (JR/Spektrum)
+  {&ail_in, &ele_in, &thr_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in} // SERIALRX_AETR1a2F (Futaba)
 };
 
 // stabilization mode
@@ -1024,7 +1024,7 @@ void read_switches()
  ***************************************************************************************************************/
 
 volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
-int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cfg.cppm_mode-2][<n>] var for CPPM
+int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cfg.serialrx_order-2][<n>] var for CPPM
 // non cppm mode
 volatile int16_t *rx_portb[] = RX_PORTB;
 volatile int16_t *rx_portd[] = RX_PORTD;
@@ -1083,7 +1083,7 @@ ISR(TIMER1_CAPT_vect)
     ch = 0;
     ch0_synced = true;
   } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-    *rx_chan[cfg.cppm_mode-2][ch] = width;
+    *rx_chan[cfg.serialrx_order-2][ch] = width;
     if (ch == rx_frame_sync_ref)
       rx_frame_sync = true;
     ch++;
@@ -1159,7 +1159,7 @@ ISR(INT6_vect)
       ch = 0;
       ch0_synced = true;
     } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-      *rx_chan[cfg.cppm_mode-2][ch] = width;
+      *rx_chan[cfg.serialrx_order-2][ch] = width;
       if (ch == rx_frame_sync_ref)
         rx_frame_sync = true;
       ch++;
@@ -1818,7 +1818,7 @@ void dump_sensors()
     Serial.print(cfg.wing_mode); Serial.print(' ');
     Serial.print(wing_mode); Serial.print(' ');
     Serial.print(cfg.mixer_epa_mode); Serial.print(' ');
-    Serial.print(cfg.cppm_mode); Serial.print(' ');
+    Serial.print(cfg.serialrx_order); Serial.print(' ');
     Serial.print(cfg.mount_orient); Serial.print(' ');
     Serial.print(get_free_sram()); Serial.print(' ');
     Serial.print(servo_out); Serial.print(' ');
@@ -1919,7 +1919,7 @@ void stick_config(struct _stick_zone *psz)
 {
 // 1= wing_mode (see enum WING_MODE)
 // 2= mixer_epa_mode (see enum MIXER_EPA_MODE)
-// 3= cppm_mode (see enum CPPM_MODE)
+// 3= serialrx_order (see enum SERIALRX_ORDER)
 // 4= mount_orient (see enum MOUNT_ORIENT)
 // 5= stick_gain_throw (see enum STICK_GAIN_THROW)
 // 6= max_rotate (see enum MAX_ROTATE)
@@ -1932,7 +1932,7 @@ void stick_config(struct _stick_zone *psz)
   const int8_t param_ymin[] = {
     WING_USE_DIPSW, 
     MIXER_EPA_FULL, 
-    CPPM_NONE,     
+    SERIALRX_NONE,     
     MOUNT_NORMAL, 
     STICK_GAIN_THROW_FULL,
     MAX_ROTATE_VLOW,
@@ -1943,7 +1943,7 @@ void stick_config(struct _stick_zone *psz)
   const int8_t param_ymax[] = {
     WING_DUAL_AIL,
     MIXER_EPA_TRACK, 
-    CPPM_AETR1a2F, 
+    SERIALRX_AETR1a2F, 
     MOUNT_ROLL_90_RIGHT, 
     STICK_GAIN_THROW_QUARTER,
     MAX_ROTATE_VHIGH,
@@ -1965,7 +1965,7 @@ void stick_config(struct _stick_zone *psz)
   
   pparam_yval[0] = (int8_t *) &cfg.wing_mode;
   pparam_yval[1] = (int8_t *) &cfg.mixer_epa_mode;
-  pparam_yval[2] = (int8_t *) &cfg.cppm_mode;
+  pparam_yval[2] = (int8_t *) &cfg.serialrx_order;
   pparam_yval[3] = (int8_t *) &cfg.mount_orient;
   pparam_yval[4] = (int8_t *) &cfg.stick_gain_throw;
   pparam_yval[5] = (int8_t *) &cfg.max_rotate;
@@ -2091,13 +2091,13 @@ void setup()
   }
   cfg.mixer_epa_mode = MIXER_EPA_FULL;
 #if defined(SERIALRX_CPPM)
-  cfg.cppm_mode = CPPM_RETA1a2F;
+  cfg.serialrx_order = SERIALRX_RETA1a2F;
 #elif defined(SERIALRX_SPEKTRUM)
-  cfg.cppm_mode = CPPM_TAER1a2F;
+  cfg.serialrx_order = SERIALRX_TAER1a2F;
 #elif defined(SERIALRX_SBUS)
-  cfg.cppm_mode = CPPM_AETR1a2F;
+  cfg.serialrx_order = SERIALRX_AETR1a2F;
 #else
-  cfg.cppm_mode = CPPM_NONE;
+  cfg.serialrx_order = SERIALRX_NONE;
 #endif
   cfg.mount_orient = MOUNT_NORMAL;
   cfg.stick_gain_throw = STICK_GAIN_THROW_FULL;
@@ -2266,19 +2266,17 @@ void setup()
   }
         
 #if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
-  if (cfg.cppm_mode != CPPM_NONE) {
-    // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
-    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
-    // PB2 9 FLP_OUT instead of ELE_IN
-    // PB2 10 THR_OUT instead of RUD_IN
-    rx_portb[0] = NULL; // disable ail_in
-    rx_portb[1] = NULL; // disable ele_in
-    rx_portb[2] = NULL; // disable rud_in
-    pwm_out_var[4] = &thr_out; // enable thr_out
-    pwm_out_pin[4] = THR_OUT_PIN; //
-    pwm_out_var[5] = &flp_out; // enable flp_out
-    pwm_out_pin[5] = FLP_OUT_PIN; //
-  }
+  // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
+  // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
+  // PB2 9 FLP_OUT instead of ELE_IN
+  // PB2 10 THR_OUT instead of RUD_IN
+  rx_portb[0] = NULL; // disable ail_in
+  rx_portb[1] = NULL; // disable ele_in
+  rx_portb[2] = NULL; // disable rud_in
+  pwm_out_var[4] = &thr_out; // enable thr_out
+  pwm_out_pin[4] = THR_OUT_PIN; //
+  pwm_out_var[5] = &flp_out; // enable flp_out
+  pwm_out_pin[5] = FLP_OUT_PIN; //
 #endif // SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS
 #endif // RX3S_V1
 
@@ -2300,38 +2298,34 @@ void setup()
   }
 
 #if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
-  if (cfg.cppm_mode != CPPM_NONE) {
-    // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
-    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
-    // PB1 9 FLP_OUT instead of ELE_IN
-    // PB2 10 THR_OUT instead of RUD_IN
-    // PB3 11 AUX2_OUT instead of AUX_IN
-    rx_portb[0] = NULL; // disable ail_in
-    rx_portb[1] = NULL; // disable ele_in
-    rx_portb[2] = NULL; // disable rud_in
-    rx_portb[3] = NULL; // disable aux_in
-    pwm_out_var[4] = &thr_out; // enable thr_out
-    pwm_out_pin[4] = THR_OUT_PIN; //
-    pwm_out_var[5] = &flp_out; // enable flp_out
-    pwm_out_pin[5] = FLP_OUT_PIN; //
-    pwm_out_var[6] = &aux2_out; // enable aux2_out
-    pwm_out_pin[6] = AUX2_OUT_PIN; //
-  }
+  // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
+  // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
+  // PB1 9 FLP_OUT instead of ELE_IN
+  // PB2 10 THR_OUT instead of RUD_IN
+  // PB3 11 AUX2_OUT instead of AUX_IN
+  rx_portb[0] = NULL; // disable ail_in
+  rx_portb[1] = NULL; // disable ele_in
+  rx_portb[2] = NULL; // disable rud_in
+  rx_portb[3] = NULL; // disable aux_in
+  pwm_out_var[4] = &thr_out; // enable thr_out
+  pwm_out_pin[4] = THR_OUT_PIN; //
+  pwm_out_var[5] = &flp_out; // enable flp_out
+  pwm_out_pin[5] = FLP_OUT_PIN; //
+  pwm_out_var[6] = &aux2_out; // enable aux2_out
+  pwm_out_pin[6] = AUX2_OUT_PIN; //
 #endif // SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS
 #endif // RX3S_V2  || RX3SM
 
 #if defined(NANOWII)
 #if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
-  if (cfg.cppm_mode != CPPM_NONE) {
-    // PE6 7 CPPM_IN instead of THR/AUX2_IN for SERIALRX_CPPM
-    // PE6 7 UNUSED instead of THR/AUX2_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
-    // PC6 5 THR_OUT instead of M
-    // PD7 6 FLP_OUT instead of M
-    pwm_out_var[4] = &thr_out; // enable thr_out
-    pwm_out_pin[4] = THR_OUT_PIN; //
-    pwm_out_var[5] = &flp_out; // enable flp_out
-    pwm_out_pin[5] = FLP_OUT_PIN; //
-  }
+  // PE6 7 CPPM_IN instead of THR/AUX2_IN for SERIALRX_CPPM
+  // PE6 7 UNUSED instead of THR/AUX2_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
+  // PC6 5 THR_OUT instead of M
+  // PD7 6 FLP_OUT instead of M
+  pwm_out_var[4] = &thr_out; // enable thr_out
+  pwm_out_pin[4] = THR_OUT_PIN; //
+  pwm_out_var[5] = &flp_out; // enable flp_out
+  pwm_out_pin[5] = FLP_OUT_PIN; //
 #endif // SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS
 #endif // NANOWII
 
@@ -2349,23 +2343,21 @@ void setup()
   }
 
 #if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
-  if (cfg.cppm_mode != CPPM_NONE) {
-    // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
-    // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
-    // PB2 9 FLP_OUT instead of ELE_IN
-    // PB2 10 THR_OUT instead of RUD_IN
-    // PB3 11 AUX2_OUT instead of AUX_IN
-    rx_portb[0] = NULL; // disable ail_in
-    rx_portb[1] = NULL; // disable ele_in
-    rx_portb[2] = NULL; // disable rud_in
-    rx_portb[3] = NULL; // disable aux_in
-    pwm_out_var[4] = &thr_out; // enable thr_out
-    pwm_out_pin[4] = THR_OUT_PIN; //
-    pwm_out_var[5] = &flp_out; // enable flp_out
-    pwm_out_pin[5] = FLP_OUT_PIN; //
-    pwm_out_var[6] = &aux2_out; // enable aux2_out
-    pwm_out_pin[6] = AUX2_OUT_PIN; //
-  }
+  // PB0 8 CPPM_IN instead of AIL_IN for SERIALRX_CPPM
+  // PB0 8 UNUSED instead of AIL_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
+  // PB2 9 FLP_OUT instead of ELE_IN
+  // PB2 10 THR_OUT instead of RUD_IN
+  // PB3 11 AUX2_OUT instead of AUX_IN
+  rx_portb[0] = NULL; // disable ail_in
+  rx_portb[1] = NULL; // disable ele_in
+  rx_portb[2] = NULL; // disable rud_in
+  rx_portb[3] = NULL; // disable aux_in
+  pwm_out_var[4] = &thr_out; // enable thr_out
+  pwm_out_pin[4] = THR_OUT_PIN; //
+  pwm_out_var[5] = &flp_out; // enable flp_out
+  pwm_out_pin[5] = FLP_OUT_PIN; //
+  pwm_out_var[6] = &aux2_out; // enable aux2_out
+  pwm_out_pin[6] = AUX2_OUT_PIN; //
 #endif // SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS
 #endif // EAGLE_A3PRO
 

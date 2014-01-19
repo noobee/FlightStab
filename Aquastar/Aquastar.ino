@@ -105,11 +105,11 @@ prog_char mixer_epa_full[] PROGMEM = "Full 1000-2000";
 prog_char mixer_epa_norm[] PROGMEM = "Norm 1100-1900";
 prog_char mixer_epa_track[] PROGMEM = "Tracking";
 
-prog_char cppm_mode[] PROGMEM = "CPPM MODE";
-prog_char cppm_none[] PROGMEM = "None";
-prog_char cppm_RETA1a2f[] PROGMEM = "RETA1a2F";
-prog_char cppm_TAER1a2F[] PROGMEM = "TAER1a2F";
-prog_char cppm_AETR1a2F[] PROGMEM = "AETR1a2F";
+prog_char serialrx_order[] PROGMEM = "SERIALRX ORDER";
+prog_char serialrx_none[] PROGMEM = "None";
+prog_char serialrx_RETA1a2f[] PROGMEM = "RETA1a2F";
+prog_char serialrx_TAER1a2F[] PROGMEM = "TAER1a2F";
+prog_char serialrx_AETR1a2F[] PROGMEM = "AETR1a2F";
 
 prog_char mount_orient[] PROGMEM = "MOUNT ORIENT";
 prog_char mount_normal[] PROGMEM = "Normal";
@@ -149,8 +149,8 @@ prog_char *param_text[][6] PROGMEM = {
    wing_use_dipsw, wing_single_ail, wing_delta, wing_vtail, wing_dual_ail},
   {mixer_epa_mode, 
    mixer_epa_full, mixer_epa_norm, mixer_epa_track},
-  {cppm_mode, 
-   cppm_none, cppm_RETA1a2f, cppm_TAER1a2F, cppm_AETR1a2F},
+  {serialrx_order, 
+   serialrx_none, serialrx_RETA1a2f, serialrx_TAER1a2F, serialrx_AETR1a2F},
   {mount_orient, 
    mount_normal, mount_roll90left, mount_roll90right},
   {stick_gain_throw, 
@@ -175,7 +175,7 @@ const int8_t param_min[] = {
   1, // status
   WING_USE_DIPSW, 
   MIXER_EPA_FULL,  
-  CPPM_NONE,     
+  SERIALRX_NONE,     
   MOUNT_NORMAL,    
   STICK_GAIN_THROW_FULL,
   MAX_ROTATE_VLOW,
@@ -191,7 +191,7 @@ const int8_t param_max[] = {
   3, // status
   WING_DUAL_AIL, 
   MIXER_EPA_TRACK,  
-  CPPM_AETR1a2F,     
+  SERIALRX_AETR1a2F,     
   MOUNT_ROLL_90_RIGHT,    
   STICK_GAIN_THROW_QUARTER,
   MAX_ROTATE_VHIGH,
@@ -220,7 +220,7 @@ int8_t * const param_pval[] = {
   &param_val_status,
   (int8_t*) &cfg.wing_mode,
   (int8_t*) &cfg.mixer_epa_mode,
-  (int8_t*) &cfg.cppm_mode,
+  (int8_t*) &cfg.serialrx_order,
   (int8_t*) &cfg.mount_orient,
   (int8_t*) &cfg.stick_gain_throw,
   (int8_t*) &cfg.max_rotate,

@@ -88,7 +88,7 @@ add_arduino_firmware(${TODAY}_NANOWII_SBUS FlightStab leonardo "NANOWII;SERIALRX
 add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")
 add_arduino_firmware(${TODAY}_RX3S_V1_CPPM FlightStab pro5v "RX3S_V1;SERIALRX_CPPM")
 add_arduino_firmware(${TODAY}_RX3S_V1_SPEKTRUM FlightStab pro5v "RX3S_V1;SERIALRX_SPEKTRUM")
-add_arduino_firmware(${TODAY}_RX3S_V1_SBUS FlightStab pro5v "RX3S_V2;SERIALRX_SBUS")
+add_arduino_firmware(${TODAY}_RX3S_V1_SBUS FlightStab pro5v "RX3S_V1;SERIALRX_SBUS")
 add_arduino_firmware(${TODAY}_RX3S_V2 FlightStab pro5v "RX3S_V2")
 add_arduino_firmware(${TODAY}_RX3S_V2_CPPM FlightStab pro5v "RX3S_V2;SERIALRX_CPPM")
 add_arduino_firmware(${TODAY}_RX3S_V2_SPEKTRUM FlightStab pro5v "RX3S_V2;SERIALRX_SPEKTRUM")
