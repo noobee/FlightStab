@@ -1155,13 +1155,49 @@ inline void pcint0_vect()
   }
 }
 
+// interrupt handler for CPPM stream on non-ICP pin
+// CPPM_PINREG and CPPM_PINBIT must be defined
+// port/pin must be set up for interrupt on edge change and input mode in init_digital_in_rx()
+inline void non_icp_cppm_vect()
+{
+  static int8_t ch0_synced = false;
+  static uint16_t fall_time;
+  static uint8_t last_pin;
+  static uint8_t ch;
+  uint16_t now;
+  uint8_t pin, last_pin2, fall;
+
+  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
+  last_pin2 = last_pin;
+  pin = CPPM_PINREG;
+  last_pin = pin;
+  sei();
+
+  fall = ~pin & last_pin2; // falling edge as reference
+
+  if (fall & (1 << CPPM_PINBIT)) {
+    uint16_t width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+    fall_time = now;
+    if (width > 3000) {
+      rx_frame_sync_ref = ch - 1;
+      ch = 0;
+      ch0_synced = true;
+    } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+      *rx_chan[cfg.serialrx_order-2][ch] = width;
+      if (ch == rx_frame_sync_ref)
+        rx_frame_sync = true;
+      ch++;
+    }
+  }
+}
+
 #if (defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM) || defined(MINI_MWC))
 #if (defined(SERIALRX_CPPM) && defined(MINI_MWC_EXTERNAL_RX))
 // isr armed only if serialrx_cppm enabled
 ISR(TIMER1_CAPT_vect)
 {
   static int8_t ch0_synced = false;
-  static uint16_t rise_time;
+  static uint16_t fall_time;
   static uint8_t ch;
   uint16_t now;
   uint16_t width;
@@ -1169,8 +1205,8 @@ ISR(TIMER1_CAPT_vect)
   now = ICR1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
   sei();
 
-  width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
-  rise_time = now;
+  width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+  fall_time = now;
   if (width > 3000) {
     rx_frame_sync_ref = ch - 1;
     ch = 0;
@@ -1228,57 +1264,8 @@ ISR(PCINT2_vect)
 #if defined(SERIALRX_CPPM) && !defined(MINI_MWC_EXTERNAL_RX)
 ISR(PCINT2_vect)
 {
-  static int8_t ch0_synced = false;
-  static uint16_t rise_time;
-  static uint8_t last_pin;
-  static uint8_t ch;
-  uint16_t now;
-  uint8_t pin, last_pin2, diff;
-
-//jrb debug
- LED_TIMING_START;     
-
-  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
-  last_pin2 = last_pin;
-  pin = CPPM_PINREG;
-  last_pin = pin;
- 
-
-//  sei();
-   diff = pin ^ last_pin2;
-   if (!(diff & (1 << CPPM_PINBIT))) { 
-     // Exit if CPPM_PINBIT did not change state
-//jrb Never measured this time, never saw other inputs active during CPPM train - sei() disables    
-     LED_TIMING_STOP;
-     return;
-   }  
-     
-  // Only capture negative transitions
-  if (pin & (1 << CPPM_PINBIT)) {
-//jrb Never measured time to here as 1 microsecond - sei() disables
-//    LED_TIMING_STOP;
-    return;
-  }  
-
-  uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
-  rise_time = now;
-  
-  if (width > 3000) {
-    rx_frame_sync_ref = ch - 1;
-    ch = 0;
-    ch0_synced = true;
-  } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-    *rx_chan[cfg.serialrx_order-2][ch] = width;
-    if (ch == rx_frame_sync_ref)
-//jrb debug
-// LED_TIMING_START;      
-      rx_frame_sync = true;
-    ch++;
-  }
-//jrb debug
-//jrb Never measured time to here as 6 microsecond- sei() disables 
- LED_TIMING_STOP;     
-
+  // cppm stream on non-icp pin
+  non_icp_cppm_vect();
 }
 #endif // SERIALRX_CPPM && !MWC_EXTERNAL_RX
 #endif // MINI_MWC
@@ -1288,35 +1275,8 @@ ISR(PCINT2_vect)
 // PE6 = cppm_in
 ISR(INT6_vect) 
 {
-  static int8_t ch0_synced = false;
-  static uint16_t rise_time;
-  static uint8_t last_pin;
-  static uint8_t ch;
-  uint16_t now;
-  uint8_t pin, last_pin2, rise;
-
-  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
-  last_pin2 = last_pin;
-  pin = CPPM_PINREG;
-  last_pin = pin;
-  sei();
-
-  rise = pin & ~last_pin2;
-
-  if (rise & (1 << CPPM_PINBIT)) {
-    uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
-    rise_time = now;
-    if (width > 3000) {
-      rx_frame_sync_ref = ch - 1;
-      ch = 0;
-      ch0_synced = true;
-    } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-      *rx_chan[cfg.serialrx_order-2][ch] = width;
-      if (ch == rx_frame_sync_ref)
-        rx_frame_sync = true;
-      ch++;
-    }
-  }
+  // cppm stream on non-icp pin
+  non_icp_cppm_vect();
 }
 #endif // SERIALRX_CPPM
 
@@ -1366,14 +1326,14 @@ void init_digital_in_rx()
 #elif defined(MINI_MWC) && !defined(MINI_MWC_EXTERNAL_RX)
 	  // MINI_MWC CPPM is on D2 (INTERNAL RX)
 	  // (CPPM_PINREG, CPPM_PINBIT) MUST be (PIND, 2)
-	  PCICR |= (1 << PCIE2);
+	  PCICR |= (1 << PCIE2); // interrupt on pin change
 	  PCMSK2 |= (1 << CPPM_PINBIT);
 	  DDRD &= ~(1 << CPPM_PINBIT); // set input mode
     PORTD |= (1 << CPPM_PINBIT); // enable internal pullup
 #else // !NANO_WII && !(MINI_MWC && !MINI_MWC_EXTERNAL_RX)
     // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINB, 0)  
     TIMSK1 |= (1 << ICIE1); // enable interrupt on ICP
-    TCCR1B |= (1 << ICNC1) | (1 << ICES1); // enable noise canceler and interrupt on rising edge
+    TCCR1B |= (1 << ICNC1); // enable noise canceler and interrupt on falling edge
 #endif
     rx_frame_sync_ref = 3; // sync on rx_chan[][3] first, but isr will track the sync gap
     return;
