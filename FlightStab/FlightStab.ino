@@ -20,6 +20,8 @@ bool ow_loop(); // OneWireSerial.ino
 //#define RX3SM
 //#define NANOWII
 //#define EAGLE_A3PRO
+//#define MINI_MWC
+//#define MINI_MWC_EXTERNAL_RX  //Define this if using an External RX with MINI_MWC
 //#define NANO_MPU6050
 
 //#define SERIALRX_CPPM // over a digital-in pin (preferably ICP)
@@ -456,6 +458,94 @@ bool ow_loop(); // OneWireSerial.ino
 #endif
 /* EAGLE_A3PRO *************************************************************************************************/
 
+/* MINI_MWC ****************************************************************************************************/
+#if defined(MINI_MWC)
+#warning MINI_MWC defined // emit device name
+/*
+ HK MINI MWC with DSM2 RX
+ PB0 8/D8  CPPM_EXT	    PC0 14/A0 spare          PD0 0/D0 (RXD)
+ PB1 9/D9  THR_OUT (PWM)    PC1 15/A1 spare          PD1 1/D1 (TXD)
+ PB2 10/D10 FLP_OUT (PWM)   PC2 16/A2 Voltage Mon    PD2 2/D2 CPPM_INT
+ PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 AIL_OUT (PWM)
+ PB4 12/D12 no connection   PC4 18/A4 (SDA)          PD4 4/D4 spare
+ PB5 13/D13 LED (SCK)       PC5 19/A5 (SCL)          PD5 5/D5 ELE_OUT (PWM)
+ PB6 14/D14 (XTAL1)         PC6 (RESET)              PD6 6/D6 RUD_OUT (PWM)
+ PB7 15/D15 (XTAL2)                                  PD7 7/D7 AILR_OUT
+ 
+ CPPM enabled
+ PD2 D2 CPPM_IN for onboard RX 
+ PB0 D8 CPPM_IN External RX
+*/
+
+#define DEVICE_ID DEVICE_MINI_MWC
+
+// <VR>
+#define AIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <RX> (must in PORT B/D due to ISR)
+#define RX_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <SWITCH>
+#define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <SERVO>
+#define AIL_OUT_PIN 3
+#define ELE_OUT_PIN 5
+#define RUD_OUT_PIN 6
+#define THR_OUT_PIN 9
+#define FLP_OUT_PIN 10
+#define AILR_OUT_PIN 11 // dual aileron mode only
+
+#define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, &thr_out, &flp_out, NULL, NULL, NULL}
+#define PWM_OUT_PIN {AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, AILR_OUT_PIN, THR_OUT_PIN, FLP_OUT_PIN, -1, -1, -1}
+
+// <IMU>
+#define USE_MPU6050
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = (-y); gyro[1] = (-x); gyro[2] = (z);}
+
+// must use one of the SERIALRX modes
+#if !defined(SERIALRX_CPPM) && !defined(SERIALRX_SPEKTRUM) && !defined(SERIALRX_SBUS)
+#error "Exactly one of SERIALRX_CPPM or SERIALRX_SPEKTRUM or SERIALRX_SBUS must be defined"
+#endif
+
+// CPPM from external/internal RX
+#if defined(MINI_MWC_EXTERNAL_RX)
+// CPPM External RX
+#define CPPM_PINREG PINB
+#define CPPM_PINBIT 0
+#else  
+// CPPM Internal RX
+#define CPPM_PINREG PIND
+#define CPPM_PINBIT 2
+#endif 
+
+#define F_XTAL F_16MHZ // external crystal oscillator frequency
+#define F_I2C F_400KHZ // i2c bus speed
+#define SCL_PIN 19
+#define SDA_PIN 18
+
+// led register
+#define LED_DDR DDRB
+#define LED_PORT PORTB
+#define LED_BIT 5
+#define LED_XOR 0 // active high
+
+// one-wire port = PB3
+#define OW_BIT 3
+#define OW_DDR DDRB
+#define OW_PORT PORTB
+#define OW_PINREG PINB
+
+// eeprom clear pins. shorted on init means to clear eeprom
+#define EEPROM_RESET_OUT_PIN RUD_OUT_PIN
+#define EEPROM_RESET_IN_PIN ELE_OUT_PIN
+
+#endif // defined(MINI_MWC)
+/* MINI_MWC ****************************************************************************************************/
+
 /* NANO_MPU6050 ************************************************************************************************/
 #if defined(NANO_MPU6050)
 #warning NANO_MPU6050 defined // emit device name
@@ -542,6 +632,9 @@ bool ow_loop(); // OneWireSerial.ino
 #if defined(LED_TIMING)
 #define LED_TIMING_START do {LED_PORT |= (1 << LED_BIT);} while (false)
 #define LED_TIMING_STOP do {LED_PORT &= ~(1 << LED_BIT);} while (false)
+#else
+#define LED_TIMING_START do {} while (false) // no-op
+#define LED_TIMING_STOP do {} while (false) // no-op
 #endif
 
 // adc
@@ -1062,8 +1155,8 @@ inline void pcint0_vect()
   }
 }
 
-#if (defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM))
-#if defined(SERIALRX_CPPM)
+#if (defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM) || defined(MINI_MWC))
+#if (defined(SERIALRX_CPPM) && defined(MINI_MWC_EXTERNAL_RX))
 // isr armed only if serialrx_cppm enabled
 ISR(TIMER1_CAPT_vect)
 {
@@ -1089,7 +1182,7 @@ ISR(TIMER1_CAPT_vect)
     ch++;
   }
 }
-#endif // SERIALRX_CPPM
+#endif // SERIALRX_CPPM && MINI_MWC_EXTERNAL_RX
 
 #if !(defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
 // PORTB PCINT0-PCINT7
@@ -1130,6 +1223,65 @@ ISR(PCINT2_vect)
 }
 #endif // !(SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS)
 #endif // defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM)
+
+#if defined(MINI_MWC)
+#if defined(SERIALRX_CPPM) && !defined(MINI_MWC_EXTERNAL_RX)
+ISR(PCINT2_vect)
+{
+  static int8_t ch0_synced = false;
+  static uint16_t rise_time;
+  static uint8_t last_pin;
+  static uint8_t ch;
+  uint16_t now;
+  uint8_t pin, last_pin2, diff;
+
+//jrb debug
+ LED_TIMING_START;     
+
+  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
+  last_pin2 = last_pin;
+  pin = CPPM_PINREG;
+  last_pin = pin;
+ 
+
+//  sei();
+   diff = pin ^ last_pin2;
+   if (!(diff & (1 << CPPM_PINBIT))) { 
+     // Exit if CPPM_PINBIT did not change state
+//jrb Never measured this time, never saw other inputs active during CPPM train - sei() disables    
+     LED_TIMING_STOP;
+     return;
+   }  
+     
+  // Only capture negative transitions
+  if (pin & (1 << CPPM_PINBIT)) {
+//jrb Never measured time to here as 1 microsecond - sei() disables
+//    LED_TIMING_STOP;
+    return;
+  }  
+
+  uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+  rise_time = now;
+  
+  if (width > 3000) {
+    rx_frame_sync_ref = ch - 1;
+    ch = 0;
+    ch0_synced = true;
+  } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+    *rx_chan[cfg.serialrx_order-2][ch] = width;
+    if (ch == rx_frame_sync_ref)
+//jrb debug
+// LED_TIMING_START;      
+      rx_frame_sync = true;
+    ch++;
+  }
+//jrb debug
+//jrb Never measured time to here as 6 microsecond- sei() disables 
+ LED_TIMING_STOP;     
+
+}
+#endif // SERIALRX_CPPM && !MWC_EXTERNAL_RX
+#endif // MINI_MWC
 
 #if defined(NANOWII)
 #if defined(SERIALRX_CPPM)
@@ -1211,11 +1363,18 @@ void init_digital_in_rx()
     EIMSK |= (1 << INT6);
     DDRE &= ~(1 << CPPM_PINBIT);
     PORTE |= (1 << CPPM_PINBIT);
-#else // NANOWII
+#elif defined(MINI_MWC) && !defined(MINI_MWC_EXTERNAL_RX)
+	  // MINI_MWC CPPM is on D2 (INTERNAL RX)
+	  // (CPPM_PINREG, CPPM_PINBIT) MUST be (PIND, 2)
+	  PCICR |= (1 << PCIE2);
+	  PCMSK2 |= (1 << CPPM_PINBIT);
+	  DDRD &= ~(1 << CPPM_PINBIT); // set input mode
+    PORTD |= (1 << CPPM_PINBIT); // enable internal pullup
+#else // !NANO_WII && !(MINI_MWC && !MINI_MWC_EXTERNAL_RX)
     // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINB, 0)  
     TIMSK1 |= (1 << ICIE1); // enable interrupt on ICP
     TCCR1B |= (1 << ICNC1) | (1 << ICES1); // enable noise canceler and interrupt on rising edge
-#endif // NANOWII
+#endif
     rx_frame_sync_ref = 3; // sync on rx_chan[][3] first, but isr will track the sync gap
     return;
 #endif // SERIALRX_CPPM
@@ -1248,7 +1407,7 @@ void init_digital_in_rx()
   EIMSK |= (1 << INT6);
   DDRE &= ~(1 << 6);
   PORTE |= (1 << 6);
-#else // NANOWII
+#else
   // PORTD RX
   PCICR |= (1 << PCIE2); // interrupt on pin change
   for (int8_t i=0; i<8; i++) {
@@ -2084,11 +2243,19 @@ void setup()
   wdt_disable();
 #endif // RX3S_V1 || RX3S_V2  || EAGLE_A3PRO || RX3SM
 
+#if defined(NANO_WII) || defined(MINI_MWC)
+  // set up default parameters for No DIPSW and No POT
+  cfg.wing_mode = WING_DUAL_AIL;
+  for (i=0; i<3; i++) {
+    cfg.vr_gain[i] = 60;  
+  }
+#else
   // set up default parameters  
   cfg.wing_mode = WING_USE_DIPSW;
   for (i=0; i<3; i++) {
     cfg.vr_gain[i] = vr_gain_use_pot;  
   }
+#endif
   cfg.mixer_epa_mode = MIXER_EPA_FULL;
 #if defined(SERIALRX_CPPM)
   cfg.serialrx_order = SERIALRX_RETA1a2F;
