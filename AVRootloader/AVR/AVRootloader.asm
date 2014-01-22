@@ -2,6 +2,30 @@
 
 .nolist
 
+#if defined(AQUASTAR)
+.include "m8def.inc"				; ATmega8    
+.equ	RX_PORT			= PORTD		; Receive port and pin
+.equ	RX					= PD0
+.equ	TX_PORT			= PORTD		; Transmit port and pin
+.equ	TX					= PD0
+#endif
+
+#if defined(RX3S_V1V2V3_AILR_OUT)
+.include "m168PAdef.inc"		; ATmega168PA
+.equ	RX_PORT			= PORTD		; Receive port and pin
+.equ	RX					= PD7
+.equ	TX_PORT			= PORTD		; Transmit port and pin
+.equ	TX					= PD7
+#endif
+
+#if defined(MINI_MWC_AILR_OUT)
+.include "m328Pdef.inc"			; ATmega328P 
+.equ	RX_PORT			= PORTB		; Receive port and pin
+.equ	RX					= PD3
+.equ	TX_PORT			= PORTB		; Transmit port and pin
+.equ	TX					= PD3
+#endif
+
 ; supported devices
 ;.include "can128def.inc"				; AT90CAN128
 ;.include "can32def.inc"				; AT90CAN32
@@ -19,7 +43,7 @@
 ;.include "m165def.inc"					; ATmega165  
 ;.include "m165Pdef.inc"				; ATmega165P 
 ;.include "m168def.inc"					; ATmega168  
-.include "m168PAdef.inc"				; ATmega168PA
+;.include "m168PAdef.inc"				; ATmega168PA
 ;.include "m168Pdef.inc"				; ATmega168P 
 ;.include "m169def.inc"					; ATmega169
 ;.include "m169Pdef.inc"				; ATmega169P 
@@ -72,7 +96,7 @@
 ;.include "m88PAdef.inc"				; ATmega88PA 
 ;.include "m88Pdef.inc"					; ATmega88P  
 ;.include "m8Adef.inc"					; ATmega8A   
-;.include "m8def.inc"					; ATmega8    
+;.include "m8def.inc"           ; ATmega8    
 ;.include "m8HVAdef.inc"				; ATmega8HVA 
 ;.include "pwm216def.inc"				; AT90PWM216 
 ;.include "pwm2Bdef.inc"				; AT90PWM2B  
@@ -182,10 +206,10 @@
 .equ	UseRS485			= 0			; activate RS-485 Data Enable pin
 .equ	UseRS485Invert		= 0			; inverted logic of RS-485 DE pin (HIHGH for receive, LOW for transmit)
 
-.equ	RX_PORT				= PORTD		; Receive port and pin
-.equ	RX					= PD7
-.equ	TX_PORT				= PORTD		; Transmit port and pin
-.equ	TX					= PD7
+;;.equ	RX_PORT				= PORTD		; Receive port and pin
+;;.equ	RX					= PD7
+;;.equ	TX_PORT				= PORTD		; Transmit port and pin
+;;.equ	TX					= PD7
 
 .if UseRS485
 .equ	DE_PORT				= PORTB		; DE enable pin of RS-485 

@@ -285,7 +285,11 @@
 
 .macro	jmpapp
 .if BLS
+#if defined(AQUASTAR)
+		rjmp	FLASHEND +1							; run application
+#else
 		jmp	FLASHEND +1							; run application
+#endif
 .elif BootStart
 		rjmp	BootStart -1						; run application
 .else
