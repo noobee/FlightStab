@@ -463,14 +463,14 @@ bool ow_loop(); // OneWireSerial.ino
 #warning MINI_MWC defined // emit device name
 /*
  HK MINI MWC with DSM2 RX
- PB0 8/D8   CPPM_EXT	      PC0 14/A0 spare          PD0 0/D0 (RXD)
- PB1 9/D9   THR_OUT (PWM)   PC1 15/A1 spare          PD1 1/D1 (TXD)
+ PB0 8/D8   CPPM_EXT/pad    PC0 14/A0 spare/pin      PD0 0/D0 (RXD)
+ PB1 9/D9   THR_OUT (PWM)   PC1 15/A1 spare/pin      PD1 1/D1 (TXD)
  PB2 10/D10 FLP_OUT (PWM)   PC2 16/A2 Voltage Mon    PD2 2/D2 CPPM_INT
  PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 AIL_OUT (PWM)
- PB4 12/D12 no connection   PC4 18/A4 (SDA)          PD4 4/D4 spare
+ PB4 12/D12 no connection   PC4 18/A4 (SDA)          PD4 4/D4 spare/conn
  PB5 13/D13 LED (SCK)       PC5 19/A5 (SCL)          PD5 5/D5 ELE_OUT (PWM)
  PB6 14/D14 (XTAL1)         PC6 (RESET)              PD6 6/D6 RUD_OUT (PWM)
- PB7 15/D15 (XTAL2)                                  PD7 7/D7 AILR_OUT
+ PB7 15/D15 (XTAL2)                                  PD7 7/D7 spare/pad
  
  CPPM enabled
  PD2 D2 CPPM_IN for onboard RX 
@@ -717,7 +717,12 @@ enum STAB_MODE stab_mode = STAB_RATE;
 const int16_t stick_gain_max = 400; // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
 const int16_t master_gain_max = 400; // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
 
-const int32_t minimum_servo_frame_time = 18000; // min time between servo updates in us
+#if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
+const int32_t minimum_servo_frame_time = 18000; // min time between servo updates in us, 
+                                                // serial bus updates are too fast for analog servos
+#else
+const int32_t minimum_servo_frame_time = 0; // no min time, so sync with the rx
+#endif
 const int32_t maximum_rx_frame_time = 30000; // max time to wait for rx_frame_sync in us
 
 /***************************************************************************************************************
