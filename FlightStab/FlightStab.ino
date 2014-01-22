@@ -463,8 +463,8 @@ bool ow_loop(); // OneWireSerial.ino
 #warning MINI_MWC defined // emit device name
 /*
  HK MINI MWC with DSM2 RX
- PB0 8/D8  CPPM_EXT	    PC0 14/A0 spare          PD0 0/D0 (RXD)
- PB1 9/D9  THR_OUT (PWM)    PC1 15/A1 spare          PD1 1/D1 (TXD)
+ PB0 8/D8   CPPM_EXT	      PC0 14/A0 spare          PD0 0/D0 (RXD)
+ PB1 9/D9   THR_OUT (PWM)   PC1 15/A1 spare          PD1 1/D1 (TXD)
  PB2 10/D10 FLP_OUT (PWM)   PC2 16/A2 Voltage Mon    PD2 2/D2 CPPM_INT
  PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 AIL_OUT (PWM)
  PB4 12/D12 no connection   PC4 18/A4 (SDA)          PD4 4/D4 spare
@@ -790,8 +790,10 @@ int get_free_sram()
 
 bool boot_check(int8_t in_pin, int8_t out_pin)
 {
-  pinMode(in_pin, INPUT);
   pinMode(out_pin, OUTPUT);
+  pinMode(in_pin, INPUT);
+  digitalWrite(in_pin, HIGH); // enable pullup
+  delay1(10);
 
   bool result = true;
   for (int8_t i=0; i<8; i++) {
