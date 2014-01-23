@@ -1198,9 +1198,17 @@ inline void non_icp_cppm_vect()
   }
 }
 
-#if (defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM) || defined(MINI_MWC))
-#if (defined(SERIALRX_CPPM) && defined(MINI_MWC_EXTERNAL_RX))
-// isr armed only if serialrx_cppm enabled
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
+#if defined(SERIALRX_CPPM)
+
+#if defined(MINI_MWC) && !defined(MINI_MWC_EXTERNAL_RX)
+// cppm stream on non-ICP pin, must be in PORT D (PCINT2)
+ISR(PCINT2_vect)
+{
+  non_icp_cppm_vect();
+}
+#else
+// cppm stream on ICP pin
 ISR(TIMER1_CAPT_vect)
 {
   static int8_t ch0_synced = false;
@@ -1225,7 +1233,8 @@ ISR(TIMER1_CAPT_vect)
     ch++;
   }
 }
-#endif // SERIALRX_CPPM && MINI_MWC_EXTERNAL_RX
+#endif // MINI_MWC && !MINI_MWC_EXTERNAL_RX
+#endif // SERIALRX_CPPM
 
 #if !(defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
 // PORTB PCINT0-PCINT7
@@ -1265,17 +1274,7 @@ ISR(PCINT2_vect)
   }
 }
 #endif // !(SERIALRX_CPPM || SERIALRX_SPEKTRUM || SERIALRX_SBUS)
-#endif // defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM)
-
-#if defined(MINI_MWC)
-#if defined(SERIALRX_CPPM) && !defined(MINI_MWC_EXTERNAL_RX)
-ISR(PCINT2_vect)
-{
-  // cppm stream on non-icp pin
-  non_icp_cppm_vect();
-}
-#endif // SERIALRX_CPPM && !MWC_EXTERNAL_RX
-#endif // MINI_MWC
+#endif //__AVR_ATmega168__ || __AVR_ATmega328__
 
 #if defined(NANOWII)
 #if defined(SERIALRX_CPPM)
@@ -2204,11 +2203,12 @@ void setup()
   Serial.println("Serial Port Initialized."); 
 #endif
   
-#if defined(RX3S_V1) || defined(RX3S_V2) || defined(EAGLE_A3PRO) || defined(RX3SM) // test should be if atmega168/328
+  
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
   // clear wd reset bit and disable wdt in case it was enabled due to stick config reboot
   MCUSR &= ~(1 << WDRF);
   wdt_disable();
-#endif // RX3S_V1 || RX3S_V2  || EAGLE_A3PRO || RX3SM
+#endif // __AVR_ATmega168__ || __AVR_ATmega328__
 
 #if defined(NANO_WII) || defined(MINI_MWC)
   // set up default parameters for No DIPSW and No POT
@@ -2225,7 +2225,11 @@ void setup()
 #endif
   cfg.mixer_epa_mode = MIXER_EPA_FULL;
 #if defined(SERIALRX_CPPM)
+#if defined(MINI_MWC) && !defined(MINI_MWC_EXTERNAL_RX)
+  cfg.serialrx_order = SERIALRX_TAER1a2F; // mini mwc with spektrum rf plugin board that emits cppm TAER*
+#else
   cfg.serialrx_order = SERIALRX_RETA1a2F;
+#endif
 #elif defined(SERIALRX_SPEKTRUM)
   cfg.serialrx_order = SERIALRX_TAER1a2F;
 #elif defined(SERIALRX_SBUS)
