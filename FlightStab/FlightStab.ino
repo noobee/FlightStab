@@ -463,7 +463,7 @@ bool ow_loop(); // OneWireSerial.ino
 #warning MINI_MWC defined // emit device name
 /*
  HK MINI MWC with DSM2 RX
- PB0 8/D8   CPPM_EXT/pad    PC0 14/A0 spare/pin      PD0 0/D0 (RXD)
+ PB0 8/D8   CPPM_EXT/pad    PC0 14/A0 reserved       PD0 0/D0 (RXD)
  PB1 9/D9   THR_OUT (PWM)   PC1 15/A1 spare/pin      PD1 1/D1 (TXD)
  PB2 10/D10 FLP_OUT (PWM)   PC2 16/A2 Voltage Mon    PD2 2/D2 CPPM_INT
  PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 AIL_OUT (PWM)
@@ -471,6 +471,8 @@ bool ow_loop(); // OneWireSerial.ino
  PB5 13/D13 LED (SCK)       PC5 19/A5 (SCL)          PD5 5/D5 ELE_OUT (PWM)
  PB6 14/D14 (XTAL1)         PC6 (RESET)              PD6 6/D6 RUD_OUT (PWM)
  PB7 15/D15 (XTAL2)                                  PD7 7/D7 spare/pad
+ 
+ PC0 A0 is reserved for CPPM_EXT. connect PB0 D8 to A0 pin and use it for CPPM input.
  
  CPPM enabled
  PD2 D2 CPPM_IN for onboard RX 
@@ -488,7 +490,7 @@ bool ow_loop(); // OneWireSerial.ino
 
 // <SWITCH>
 #define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
-#define DIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTC {&dummy_sw, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 #define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SERVO>
@@ -533,11 +535,11 @@ bool ow_loop(); // OneWireSerial.ino
 #define LED_BIT 5
 #define LED_XOR 0 // active high
 
-// one-wire port = PB3
-#define OW_BIT 3
-#define OW_DDR DDRB
-#define OW_PORT PORTB
-#define OW_PINREG PINB
+// one-wire port = PC1
+#define OW_BIT 1
+#define OW_DDR DDRC
+#define OW_PORT PORTC
+#define OW_PINREG PINC
 
 // eeprom clear pins. shorted on init means to clear eeprom
 #define EEPROM_RESET_OUT_PIN RUD_OUT_PIN
@@ -675,6 +677,7 @@ int8_t rud_sw = false;
 int8_t vtail_sw = false;
 int8_t delta_sw = false;
 int8_t aux_sw = false;
+int8_t dummy_sw = false; // used to set pins to input mode
 
 // servo
 volatile int16_t ail_out;
