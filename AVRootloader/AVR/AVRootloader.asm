@@ -18,12 +18,12 @@
 .equ	TX					= PD7
 #endif
 
-#if defined(MINI_MWC_A1)
+#if defined(MINI_MWC_A0)
 .include "m328Pdef.inc"			; ATmega328P 
 .equ	RX_PORT			= PORTC		; Receive port and pin
-.equ	RX					= PC1
+.equ	RX					= PC0
 .equ	TX_PORT			= PORTC		; Transmit port and pin
-.equ	TX					= PC1
+.equ	TX					= PC0
 #endif
 
 ; supported devices

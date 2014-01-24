@@ -3,7 +3,7 @@ set AVRASM2PATH=c:\Program Files (x86)\Atmel\Atmel Toolchain\AVR Assembler\Nativ
 
 call :buildhex AQUASTAR
 call :buildhex RX3S_V1V2V3_AILR_OUT
-call :buildhex MINI_MWC_A1
+call :buildhex MINI_MWC_A0
 goto :eof
 
 :buildhex
