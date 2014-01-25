@@ -1872,7 +1872,8 @@ void start_servo_frame()
 void dump_sensors()
 {
   uint32_t t;
-  uint32_t last_rx_time = 0;
+  uint32_t last_rx_frame_time = 0;
+  uint32_t last_servo_frame_time = 0;
   int8_t servo_sync = false;
   int16_t servo_out = RX_WIDTH_MID;
   int8_t servo_dir = 20;
@@ -1881,15 +1882,15 @@ void dump_sensors()
     t = micros1();
 
 #if defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
-  if (serialrx_update())
-    rx_frame_sync = true;
+    if (serialrx_update())
+      rx_frame_sync = true;
 #endif 
 
-    if (rx_frame_sync || (int32_t)(t - last_rx_time) > 30000) {
+    if (rx_frame_sync || (int32_t)(t - last_rx_frame_time) > maximum_rx_frame_time) {
       rx_frame_sync = false;
       copy_rx_in();
       servo_sync = true;
-      last_rx_time = t;
+      last_rx_frame_time = t;
     }
 
     Serial.print("  RX "); 
@@ -1935,10 +1936,14 @@ void dump_sensors()
     }
     ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = flp_out2 = aux2_out2 = servo_out;
 //    ail_out2 = ele_out2 = rud_out2 = ailr_out2 = thr_out2 = flp_out2 = aux2_out2 = RX_WIDTH_MID;
-    if (servo_sync && !servo_busy) {
+
+    // sync servo frame when servo ISR is idle
+    // but ensure minimum time between servo frames, or Analog servos will not be happy!!!
+    if (!servo_busy && servo_sync && (int32_t)(t - last_servo_frame_time) > minimum_servo_frame_time) {
       servo_sync = false;
       start_servo_frame();
-    } 
+      last_servo_frame_time = t;
+    }   
 
     Serial.print("MISC "); 
     Serial.print(i2c_errors); Serial.print(' ');
@@ -2526,7 +2531,8 @@ void setup()
 { 
   int8_t i;
   uint32_t t = micros1();
-  uint32_t last_rx_time = t;
+  uint32_t last_rx_frame_time = t;
+  uint32_t last_servo_frame_time = t;
   uint32_t last_imu_time = t;
   uint32_t last_pid_time = t;
   uint32_t last_vr_time = t;
@@ -2569,25 +2575,24 @@ again:
 #endif 
 
   // update rx frame data with rx ISR received reference channel or after timeout
-  if (rx_frame_sync || (int32_t)(t - last_rx_time) > maximum_rx_frame_time) {
+  if (rx_frame_sync || (int32_t)(t - last_rx_frame_time) > maximum_rx_frame_time) {
     rx_frame_sync = false;
     copy_rx_in();
     if (!rx_cal.done) {
       calibrate_rx(&rx_cal);
       calibrate_set_led(&rx_cal, &imu_cal);
     }
-	  // Don't allow minimum time between servo frames be too fast - Analog servos will not be happy!!!
-		if ((int32_t)(t - last_rx_time) > minimum_servo_frame_time) {
-	  	servo_sync = true;    
-		}
-    last_rx_time = t;
+    servo_sync = true;
+    last_rx_frame_time = t;
   }
 
   // sync servo frame with rx frame immediately when servo ISR is idle
-  if (servo_sync && !servo_busy) {
+	// but ensure minimum time between servo frames, or Analog servos will not be happy!!!
+  if (!servo_busy && servo_sync && (int32_t)(t - last_servo_frame_time) > minimum_servo_frame_time) {
     servo_sync = false;
     apply_mixer();
     start_servo_frame();
+    last_servo_frame_time = t;
   }   
 
   // schedule imu read just after servo pulse start, if needed.
