@@ -463,8 +463,8 @@ bool ow_loop(); // OneWireSerial.ino
 #warning MINI_MWC defined // emit device name
 /*
  HK MINI MWC with DSM2 RX
- PB0 8/D8   CPPM_EXT/pad    PC0 14/A0 spare/pin      PD0 0/D0 (RXD)
- PB1 9/D9   THR_OUT (PWM)   PC1 15/A1 reserved       PD1 1/D1 (TXD)
+ PB0 8/D8   CPPM_EXT/pad    PC0 14/A0 One-Wire       PD0 0/D0 (RXD)
+ PB1 9/D9   THR_OUT (PWM)   PC1 15/A1 rsvd/CPPM_EXT  PD1 1/D1 (TXD)
  PB2 10/D10 FLP_OUT (PWM)   PC2 16/A2 Voltage Mon    PD2 2/D2 CPPM_INT
  PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 AIL_OUT (PWM)
  PB4 12/D12 no connection   PC4 18/A4 (SDA)          PD4 4/D4 spare/conn
@@ -472,8 +472,7 @@ bool ow_loop(); // OneWireSerial.ino
  PB6 14/D14 (XTAL1)         PC6 (RESET)              PD6 6/D6 RUD_OUT (PWM)
  PB7 15/D15 (XTAL2)                                  PD7 7/D7 spare/pad
  
- PC1 A1 is reserved for CPPM_EXT. connect PB0 D8 to A1 pin and use it for CPPM input.
- 
+ PC1 A1 is external facing and reserved for CPPM_EXT use. needs to connect to PB0 D8 
  CPPM enabled
  PD2 D2 CPPM_IN for onboard RX 
  PB0 D8 CPPM_IN External RX
@@ -494,11 +493,11 @@ bool ow_loop(); // OneWireSerial.ino
 #define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SERVO>
-#define AIL_OUT_PIN 3
+#define AIL_OUT_PIN 10
 #define ELE_OUT_PIN 5
 #define RUD_OUT_PIN 6
-#define THR_OUT_PIN 9
-#define FLP_OUT_PIN 10
+#define THR_OUT_PIN 3
+#define FLP_OUT_PIN 9
 #define AILR_OUT_PIN 11 // dual aileron mode only
 
 #define PWM_OUT_VAR {&ail_out, &ele_out, &rud_out, &ailr_out, &thr_out, &flp_out, NULL, NULL, NULL}
@@ -2570,7 +2569,7 @@ again:
 #endif 
 
   // update rx frame data with rx ISR received reference channel or after timeout
-  if (rx_frame_sync && (int32_t)(t - last_rx_time) > maximum_rx_frame_time) {
+  if (rx_frame_sync || (int32_t)(t - last_rx_time) > maximum_rx_frame_time) {
     rx_frame_sync = false;
     copy_rx_in();
     if (!rx_cal.done) {
