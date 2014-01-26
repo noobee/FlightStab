@@ -238,6 +238,8 @@ int8_t * const param_pval[] = {
   
 enum PARAM_TYPE {PARAM_STATUS, PARAM_ENUM, PARAM_VR_GAIN, PARAM_PID, PARAM_EEPROM};
 
+const int8_t subpage_max[] = {0, 0, 2, 8, 0}; // index is PARAM_TYPE enum
+
 enum PARAM_TYPE param_type[] = {
   PARAM_STATUS,
   PARAM_ENUM,
@@ -504,7 +506,7 @@ again:
 void param_lcd_update(int8_t page, int8_t subpage) 
 {
   int8_t v;
-  int8_t kpid, axis;
+  int8_t axis;
   struct _pid_param_array *ppid;
   int8_t *pvr_gain;
 
@@ -553,7 +555,7 @@ void param_lcd_update(int8_t page, int8_t subpage)
   case PARAM_VR_GAIN:
     pvr_gain = (int8_t *)param_pval[page];
     for (int8_t i=0; i<3; i++) {
-      bool sel = (i == kpid_map[subpage]);
+      bool sel = (i == subpage);
       if (sel) lcd.print('[');
       if (pvr_gain[i] == vr_gain_use_pot)
         lcd.print(F("POT"));
@@ -566,16 +568,15 @@ void param_lcd_update(int8_t page, int8_t subpage)
     break;
     
   case PARAM_PID:
-    axis = axis_map[subpage];
-    kpid = kpid_map[subpage];
     ppid = (struct _pid_param_array *)param_pval[page];
+    axis = axis_map[subpage];
     lcd.clear();
     lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][0]));
     lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][axis + 1]));
     lcd.print(F("P/I/D"));
     lcd.setCursor(0, 1);
     for (int8_t i=0; i<3; i++) {
-      bool sel = (i == kpid);
+      bool sel = (i == kpid_map[subpage]);
       if (sel) lcd.print('[');  
       lcd.print(ppid->param[i][axis]);
       if (sel) lcd.print(']');
@@ -687,25 +688,17 @@ again:
   if ((ow_state == OW_CONNECTED) && button_read()) {
     
     if (button_event[BUTTON_ID_LEFT] == BUTTON_PRESS) {
-      enum PARAM_TYPE ptype = param_type[page];
-      bool page_change = false;    
-
-      if ((ptype == PARAM_VR_GAIN || ptype == PARAM_PID) && subpage > 0) {
+      if (subpage > 0) {
         subpage--;
-      } else {
-        if (page > 0) {
-          page--;
-          if (param_type[page] == PARAM_VR_GAIN) 
-            subpage = 2;
-          else if (param_type[page] == PARAM_PID) 
-            subpage = 8;
-        }
-      }      
+      } else 
+      if (page > 0) {
+        page--;
+        subpage = subpage_max[param_type[page]];
+      }
     }
     
     if (button_event[BUTTON_ID_RIGHT] == BUTTON_PRESS) {
       enum PARAM_TYPE ptype = param_type[page];
-      bool page_change = false;    
     
       if (ptype == PARAM_EEPROM) {
         switch (param_val_eeprom) {
@@ -728,18 +721,17 @@ again:
           ow_send_len = sizeof(ow_msg.u.eeprom_stats);
           break;
         }
-      } else if ((ptype == PARAM_VR_GAIN && subpage < 2) || 
-                 (ptype == PARAM_PID && subpage < 8)) {
+      } else 
+      if (subpage < subpage_max[ptype]) {
         subpage++;
-      } else {
-        if (page < param_num_pages - 1) {
-          page++;
-          subpage = 0;
-          // reset to safe option (1=eeprom_instr) when paging into eeprom page.
-          // prevents user autorepeating right through it
-          if (param_type[page] == PARAM_EEPROM)
-            param_val_eeprom = 1;
-        }
+      } else 
+      if (page < param_num_pages - 1) {
+        page++;
+        subpage = 0;
+        // reset to safe option (1=eeprom_instr) when paging into eeprom page.
+        // prevents user autorepeating right through it
+        if (param_type[page] == PARAM_EEPROM)
+          param_val_eeprom = 1;
       }
     }
    
@@ -761,14 +753,13 @@ again:
       
       switch (param_type[page]) {
         case PARAM_VR_GAIN:
-          kpid = kpid_map[subpage];
           pv = (int8_t *)param_pval[page];
-          pv[kpid] = constrain(pv[kpid] + diff, -128, 127);
+          pv[subpage] = constrain(pv[subpage] + diff, -128, 127);
           break;
         case PARAM_PID:
-          axis = axis_map[subpage];
-          kpid = kpid_map[subpage];
           ppid = (struct _pid_param_array *)param_pval[page];
+          axis = axis_map[subpage]; // 0,0,0,1,1,1,2,2,2
+          kpid = kpid_map[subpage]; // 0,1,2,0,1,2,0,1,2
           ppid->param[kpid][axis] = constrain(ppid->param[kpid][axis] + diff, 0, 1000);
           break;
         default:
