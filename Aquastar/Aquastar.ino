@@ -7,6 +7,8 @@
 
 #include "FlightStab.h"
 
+#define USE_SERIAL_LIGHT // use lightweight serial routines (atmega8 115200 poll-based)
+
 /*
  Aquastar/DLUX pin mapping
  PB0  8 LCD_D4         PC0 14/A0               PD0 0 RXD
@@ -333,24 +335,63 @@ void button_init()
 }
 
 /***************************************************************************************************************
-* SERIAL
+* ATMEGA8 USART 115200 8N1 POLL-BASED
 ***************************************************************************************************************/
 
-void serial_write_byte(uint8_t b) {
+#if defined(USE_SERIAL_LIGHT)
+bool serial2_available()
+{
+  return UCSRA & (1 << RXC); // check for data
+}
+
+uint8_t serial2_read()
+{
+  while (!serial2_available());
+  return UDR;
+}
+
+void serial2_write(uint8_t b)
+{
+  while (!(UCSRA & (1 << UDRE))); // wait for ready
+  UDR = b;
+}
+
+void serial2_init()
+{
+//  PORTD |= 0x03; // enable pullup
+  UBRRH = 0; // 16 with U2X enabled means 115200 baud with 16MHz CPU: 16000000 / 115200 / 8 - 1 == 16
+  UBRRL = 16; // seems to have too much error without U2X.
+  UCSRA |= (1 << U2X);
+  UCSRB = (1 << RXEN) | (1 << TXEN);
+  UCSRC = (1 << URSEL) |(1 << UCSZ1) | (1 << UCSZ0); // 8N1
+}
+#endif
+
+/***************************************************************************************************************
+* MESSAGE TRANSPORT
+***************************************************************************************************************/
+
+void serial_write_byte(uint8_t b, bool last_byte) {
+#if defined(USE_SERIAL_LIGHT)
+  serial2_write(b);
+  serial2_read();
+#else
   Serial.write(b);
   Serial.read(); // drain the echo received due to loopback
-  delay(2); // delay for one-wire library on the target to ready the next receive
+#endif
+  if (!last_byte)
+    delay(2); // delay for one-wire library on the target to ready the next receive
 }
 
 bool send_msg(void *buf, int8_t buf_len) {
   uint8_t chksum = buf_len;
-  serial_write_byte('$');
-  serial_write_byte(buf_len);
+  serial_write_byte('$', false);
+  serial_write_byte(buf_len, false);
   for (int8_t i=0; i<buf_len; i++) {
     chksum += ((uint8_t *)buf)[i];
-    serial_write_byte(((uint8_t *)buf)[i]);
+    serial_write_byte(((uint8_t *)buf)[i], false);
   }
-  serial_write_byte((chksum ^ 0xff) + 1);
+  serial_write_byte((chksum ^ 0xff) + 1, true);
 }
 
 bool recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
@@ -360,10 +401,15 @@ bool recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
   while ((int32_t)(micros() - t) < (int32_t)timeout_ms * 1000L) {
     uint8_t ch, len, chksum, i;
 
+#if defined(USE_SERIAL_LIGHT)
+    if (!serial2_available())
+      continue;
+    ch = serial2_read();    
+#else
     if (!Serial.available())
       continue;
-        
     ch = Serial.read();    
+#endif
     switch (state) {
     case IDLE: 
       if (ch == '$') {
@@ -411,8 +457,11 @@ void setup()
   // clear wd reset bit and disable wdt in case avrootloader enabled it
   MCUSR &= ~(1 << WDRF);
   wdt_disable();
-
+#if defined(USE_SERIAL_LIGHT)
+  serial2_init();
+#else
   Serial.begin(115200L);  
+#endif
 
   // init buttons
   button_init();
