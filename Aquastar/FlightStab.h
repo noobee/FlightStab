@@ -14,12 +14,15 @@ enum DEVICE_IDS {DEVICE_UNDEF, DEVICE_RX3S_V1, DEVICE_RX3S_V2V3, DEVICE_NANOWII,
 
 enum WING_MODE {WING_USE_DIPSW=1, WING_SINGLE_AIL, WING_DELTA, WING_VTAIL, WING_DUAL_AIL};
 enum MIXER_EPA_MODE {MIXER_EPA_FULL=1, MIXER_EPA_NORM, MIXER_EPA_TRACK};
-enum SERIALRX_ORDER {SERIALRX_NONE=1, SERIALRX_RETA1a2F, SERIALRX_TAER1a2F, SERIALRX_AETR1a2F};
+enum SERIALRX_SPEKTRUM_LEVELS {SERIALRX_SPEKTRUM_LEVELS_1024=1, SERIALRX_SPEKTRUM_LEVELS_2048};
 enum MOUNT_ORIENT {MOUNT_NORMAL=1, MOUNT_ROLL_90_LEFT, MOUNT_ROLL_90_RIGHT};
 enum STICK_GAIN_THROW {STICK_GAIN_THROW_FULL=1, STICK_GAIN_THROW_HALF=2, STICK_GAIN_THROW_QUARTER=3}; // values are important
 enum MAX_ROTATE {MAX_ROTATE_VLOW=1, MAX_ROTATE_LOW=2, MAX_ROTATE_MED=3, MAX_ROTATE_HIGH=4, MAX_ROTATE_VHIGH=5}; // values are important
 enum RATE_MODE_STICK_ROTATE {RATE_MODE_STICK_ROTATE_DISABLE=1, RATE_MODE_STICK_ROTATE_ENABLE};
 enum INFLIGHT_CALIBRATE {INFLIGHT_CALIBRATE_DISABLE=1, INFLIGHT_CALIBRATE_ENABLE};
+
+enum SERIALRX_CHAN {SERIALRX_CHAN_R, SERIALRX_CHAN_E, SERIALRX_CHAN_T, SERIALRX_CHAN_A, // canonical serialrx channel order 
+                    SERIALRX_CHAN_1, SERIALRX_CHAN_a, SERIALRX_CHAN_2, SERIALRX_CHAN_F};
 
 struct _eeprom_stats {
   int8_t device_id;
@@ -40,7 +43,7 @@ struct _eeprom_cfg {
   uint8_t ver;
   enum WING_MODE wing_mode; // overridden by DIP switches if available
   enum MIXER_EPA_MODE mixer_epa_mode;
-  enum SERIALRX_ORDER serialrx_order; 
+  enum MIXER_EPA_MODE mixer_epa_modeXXX;  
   enum MOUNT_ORIENT mount_orient;
   enum STICK_GAIN_THROW stick_gain_throw;
   enum MAX_ROTATE max_rotate;
@@ -50,6 +53,9 @@ struct _eeprom_cfg {
   struct _pid_param pid_param_rate;
   struct _pid_param pid_param_hold;
   uint8_t chksum;
+  int8_t servo_frame_min;
+  int8_t serialrx_order[8];
+  enum SERIALRX_SPEKTRUM_LEVELS serialrx_spektrum_levels; 
 };
 
 const int8_t vr_gain_use_pot = -128;

@@ -109,11 +109,13 @@ prog_char mixer_epa_full[] PROGMEM = "Full 1000-2000";
 prog_char mixer_epa_norm[] PROGMEM = "Norm 1100-1900";
 prog_char mixer_epa_track[] PROGMEM = "Tracking";
 
+prog_char servo_frame_min[] PROGMEM = "SERVO FRAME MIN";
+
 prog_char serialrx_order[] PROGMEM = "SERIALRX ORDER";
-prog_char serialrx_none[] PROGMEM = "None";
-prog_char serialrx_RETA1a2f[] PROGMEM = "RETA1a2F";
-prog_char serialrx_TAER1a2F[] PROGMEM = "TAER1a2F";
-prog_char serialrx_AETR1a2F[] PROGMEM = "AETR1a2F";
+
+prog_char serialrx_spektrum_levels[] PROGMEM = "SPEKTRUM LEVELS";
+prog_char serialrx_spektrum_levels_1024[] PROGMEM = "1024";
+prog_char serialrx_spektrum_levels_2048[] PROGMEM = "2048";
 
 prog_char mount_orient[] PROGMEM = "MOUNT ORIENT";
 prog_char mount_normal[] PROGMEM = "Normal";
@@ -153,8 +155,12 @@ prog_char *param_text[][6] PROGMEM = {
    wing_use_dipsw, wing_single_ail, wing_delta, wing_vtail, wing_dual_ail},
   {mixer_epa_mode, 
    mixer_epa_full, mixer_epa_norm, mixer_epa_track},
+  {servo_frame_min, 
+   },   
   {serialrx_order, 
-   serialrx_none, serialrx_RETA1a2f, serialrx_TAER1a2F, serialrx_AETR1a2F},
+   },
+  {serialrx_spektrum_levels, 
+   serialrx_spektrum_levels_1024, serialrx_spektrum_levels_2048},
   {mount_orient, 
    mount_normal, mount_roll90left, mount_roll90right},
   {stick_gain_throw, 
@@ -175,38 +181,44 @@ prog_char *param_text[][6] PROGMEM = {
    eeprom_instr, eeprom_update_cfg, eeprom_erase_cfg, eeprom_erase_stats}
 };
 
-const int8_t param_min[] = {
+const int16_t param_min[] = {
   1, // status
   WING_USE_DIPSW, 
-  MIXER_EPA_FULL,  
-  SERIALRX_NONE,     
+  MIXER_EPA_FULL,
+  0, // servo_frame_min
+  0, // serialrx_order
+  SERIALRX_SPEKTRUM_LEVELS_1024,
   MOUNT_NORMAL,    
   STICK_GAIN_THROW_FULL,
   MAX_ROTATE_VLOW,
   RATE_MODE_STICK_ROTATE_DISABLE,
   INFLIGHT_CALIBRATE_DISABLE,
-  0, // vr_gain
+  -128, // vr_gain
   0, // pid_rate
   0, // pid_hold
   1 // eeprom
 };
 
-const int8_t param_max[] = {
+const int16_t param_max[] = {
   3, // status
   WING_DUAL_AIL, 
   MIXER_EPA_TRACK,  
-  SERIALRX_AETR1a2F,     
+  22, // servo_frame_min
+  7, // serialrx_order
+  SERIALRX_SPEKTRUM_LEVELS_2048,
   MOUNT_ROLL_90_RIGHT,    
   STICK_GAIN_THROW_QUARTER,
   MAX_ROTATE_VHIGH,
   RATE_MODE_STICK_ROTATE_ENABLE,
   INFLIGHT_CALIBRATE_ENABLE,
-  0, // vr_gain
-  0, // pid_rate
-  0, // pid_hold
+  127, // vr_gain
+  1000, // pid_rate
+  1000, // pid_hold
   4 // eeprom
 };
   
+const char serialrx_chan_str[] = "RETA1a2f"; // index = channel number = subpage. see enum SERIALRX_CHAN
+
 int8_t param_val_status = 1;
 int8_t param_val_eeprom = 1;
 
@@ -224,26 +236,36 @@ int8_t * const param_pval[] = {
   &param_val_status,
   (int8_t*) &cfg.wing_mode,
   (int8_t*) &cfg.mixer_epa_mode,
-  (int8_t*) &cfg.serialrx_order,
+  &cfg.servo_frame_min,
+  cfg.serialrx_order,
+  (int8_t*) &cfg.serialrx_spektrum_levels,  
   (int8_t*) &cfg.mount_orient,
   (int8_t*) &cfg.stick_gain_throw,
   (int8_t*) &cfg.max_rotate,
   (int8_t*) &cfg.rate_mode_stick_rotate,
   (int8_t*) &cfg.inflight_calibrate,
-  &cfg.vr_gain[0],
+  cfg.vr_gain,
   (int8_t*) &pid_param_array_rate,
   (int8_t*) &pid_param_array_hold,
   &param_val_eeprom,
 };
   
-enum PARAM_TYPE {PARAM_STATUS, PARAM_ENUM, PARAM_VR_GAIN, PARAM_PID, PARAM_EEPROM};
+enum PARAM_TYPE {PARAM_STATUS, PARAM_ENUM, PARAM_VAL, PARAM_SERIALRX_ORDER, PARAM_VR_GAIN, PARAM_PID, PARAM_EEPROM};
 
-const int8_t subpage_max[] = {0, 0, 2, 8, 0}; // index is PARAM_TYPE enum
+const int8_t subpage_max[] = {0, 
+  0, 
+  0, 
+  sizeof(cfg.serialrx_order)/sizeof(cfg.serialrx_order[0])-1, 
+  sizeof(cfg.vr_gain)/sizeof(cfg.vr_gain[0])-1, 
+  8, 
+  0}; // index = PARAM_TYPE enum
 
 enum PARAM_TYPE param_type[] = {
   PARAM_STATUS,
   PARAM_ENUM,
   PARAM_ENUM,
+  PARAM_VAL,
+  PARAM_SERIALRX_ORDER,
   PARAM_ENUM,
   PARAM_ENUM,
   PARAM_ENUM,
@@ -508,8 +530,8 @@ void param_lcd_update(int8_t page, int8_t subpage)
   int8_t v;
   int8_t axis;
   struct _pid_param_array *ppid;
-  int8_t *pvr_gain;
-
+  int8_t *pv;
+  
   // heading
   lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][0]));
 #if 0
@@ -544,23 +566,33 @@ void param_lcd_update(int8_t page, int8_t subpage)
   case PARAM_ENUM:
   case PARAM_EEPROM:
     v = *param_pval[page];
-    if ((v >= param_min[page]) && (v <= param_max[page])) {
-      lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][v]));
-    } else {
-      lcd.print(F("Inval ")); // out of range
-      lcd.print(v);
+    lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][v]));
+    break;
+
+  case PARAM_VAL:
+    v = *param_pval[page];
+    lcd.print(v);
+    break;
+    
+  case PARAM_SERIALRX_ORDER:
+    pv = (int8_t *)param_pval[page];
+    for (int8_t i=0; i<8; i++) {
+      bool sel = (i == subpage);
+      if (sel) lcd.print('[');
+      lcd.print(serialrx_chan_str[pv[i]]);      
+      if (sel) lcd.print(']');
     }
     break;
 
   case PARAM_VR_GAIN:
-    pvr_gain = (int8_t *)param_pval[page];
+    pv = (int8_t *)param_pval[page];
     for (int8_t i=0; i<3; i++) {
       bool sel = (i == subpage);
       if (sel) lcd.print('[');
-      if (pvr_gain[i] == vr_gain_use_pot)
+      if (pv[i] == vr_gain_use_pot)
         lcd.print(F("POT"));
       else 
-        lcd.print(pvr_gain[i]);      
+        lcd.print(pv[i]);      
       if (sel) lcd.print(']');
       if (i< 2)
         lcd.print('/');
@@ -634,6 +666,11 @@ again:
         }      
         cfg = ow_msg.u.eeprom_cfg;
         ow_state = OW_WAIT_STATS;
+        // TODO(debug)
+        cfg.servo_frame_min = 11;
+        for (int8_t i=0; i<8; i++) cfg.serialrx_order[i] = i;
+        cfg.serialrx_spektrum_levels = SERIALRX_SPEKTRUM_LEVELS_1024;
+        // TODO(debug)        
         break;
       case OW_WAIT_STATS:
         stats = ow_msg.u.eeprom_stats;
@@ -665,8 +702,8 @@ again:
       lcd.setCursor(0, 1);
       lcd.print(F("CfgVer="));
       lcd.print(eeprom_cfg_ver);
-//      lcd.print(F(" "));
-//      lcd.print(sizeof(cfg));
+      //lcd.print(' ');
+      //lcd.print(sizeof(cfg));
       break;
     case OW_CONNECTED:
       param_lcd_update(page, subpage);
@@ -751,19 +788,26 @@ again:
       int8_t *pv;
       struct _pid_param_array *ppid;
       
+      int16_t min_val = param_min[page];
+      int16_t max_val = param_max[page];
+      
       switch (param_type[page]) {
+        case PARAM_SERIALRX_ORDER:
+          pv = (int8_t *)param_pval[page];
+          pv[subpage] = constrain(pv[subpage] + diff, min_val, max_val);
+          break;
         case PARAM_VR_GAIN:
           pv = (int8_t *)param_pval[page];
-          pv[subpage] = constrain(pv[subpage] + diff, -128, 127);
+          pv[subpage] = constrain(pv[subpage] + diff, min_val, max_val);
           break;
         case PARAM_PID:
           ppid = (struct _pid_param_array *)param_pval[page];
           axis = axis_map[subpage]; // 0,0,0,1,1,1,2,2,2
           kpid = kpid_map[subpage]; // 0,1,2,0,1,2,0,1,2
-          ppid->param[kpid][axis] = constrain(ppid->param[kpid][axis] + diff, 0, 1000);
+          ppid->param[kpid][axis] = constrain(ppid->param[kpid][axis] + diff, min_val, max_val);
           break;
         default:
-          *param_pval[page] = constrain(*param_pval[page] + diff, param_min[page], param_max[page]);
+          *param_pval[page] = constrain(*param_pval[page] + diff, min_val, max_val);
           break;
       }
     }
