@@ -704,13 +704,19 @@ struct _eeprom_cfg cfg;
 // local copy of config
 enum WING_MODE wing_mode;
 
-// serialrx_* modes
-const int8_t rx_chan_list_size = 8;
-volatile int16_t *rx_chan[][rx_chan_list_size] = {
-  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // SERIALRX_RETA1a2F (FrSky)
-  {&thr_in, &ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in}, // SERIALRX_TAER1a2F (JR/Spektrum)
-  {&ail_in, &ele_in, &thr_in, &rud_in, &aux_in, &ailr_in, &aux2_in, &flp_in} // SERIALRX_AETR1a2F (Futaba)
-};
+// serialrx_* order
+const volatile int16_t *rx_chan_map[] = 
+  {&rud_in, &ele_in, &thr_in, &ail_in, &aux_in, &ailr_in, &aux2_in, &flp_in}; // see enum SERIALRX_CHAN  
+
+volatile int16_t *rx_chan[] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+const int8_t rx_chan_size = sizeof(rx_chan)/sizeof(rx_chan[0]);
+
+const int8_t serialrx_order_RETA1a2f[] = {
+  SERIALRX_R, SERIALRX_E, SERIALRX_T, SERIALRX_A, SERIALRX_1, SERIALRX_a, SERIALRX_2, SERIALRX_F};
+const int8_t serialrx_order_TAER1a2f[] = {
+  SERIALRX_T, SERIALRX_A, SERIALRX_E, SERIALRX_R, SERIALRX_1, SERIALRX_a, SERIALRX_2, SERIALRX_F};
+const int8_t serialrx_order_AETR1a2f[] = {
+  SERIALRX_A, SERIALRX_E, SERIALRX_T, SERIALRX_R, SERIALRX_1, SERIALRX_a, SERIALRX_2, SERIALRX_F};
 
 // stabilization mode
 enum STAB_MODE {STAB_RATE, STAB_HOLD};
@@ -719,12 +725,7 @@ enum STAB_MODE stab_mode = STAB_RATE;
 const int16_t stick_gain_max = 400; // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
 const int16_t master_gain_max = 400; // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
 
-#if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
-const int32_t minimum_servo_frame_time = 18000; // min time between servo updates in us, 
-                                                // serial bus updates are too fast for analog servos
-#else
-const int32_t minimum_servo_frame_time = 0; // no min time, so sync with the rx
-#endif
+int32_t minimum_servo_frame_time; // min time between servo updates in us. derived from cfg.servo_frame_rate 
 const int32_t maximum_rx_frame_time = 30000; // max time to wait for rx_frame_sync in us
 
 /***************************************************************************************************************
@@ -1126,7 +1127,7 @@ void read_switches()
  ***************************************************************************************************************/
 
 volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
-int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, rx_chan[cfg.serialrx_order-2][<n>] var for CPPM
+int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, *rx_chan[<n>] var for CPPM
 // non cppm mode
 volatile int16_t *rx_portb[] = RX_PORTB;
 volatile int16_t *rx_portd[] = RX_PORTD;
@@ -1191,8 +1192,8 @@ inline void non_icp_cppm_vect()
       rx_frame_sync_ref = ch - 1;
       ch = 0;
       ch0_synced = true;
-    } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-      *rx_chan[cfg.serialrx_order-2][ch] = width;
+    } else if (ch0_synced && ch < rx_chan_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+      *rx_chan[ch] = width;
       if (ch == rx_frame_sync_ref)
         rx_frame_sync = true;
       ch++;
@@ -1228,8 +1229,8 @@ ISR(TIMER1_CAPT_vect)
     rx_frame_sync_ref = ch - 1;
     ch = 0;
     ch0_synced = true;
-  } else if (ch0_synced && ch < rx_chan_list_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-    *rx_chan[cfg.serialrx_order-2][ch] = width;
+  } else if (ch0_synced && ch < rx_chan_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+    *rx_chan[ch] = width;
     if (ch == rx_frame_sync_ref)
       rx_frame_sync = true;
     ch++;
@@ -1343,7 +1344,7 @@ void init_digital_in_rx()
     TIMSK1 |= (1 << ICIE1); // enable interrupt on ICP
     TCCR1B |= (1 << ICNC1); // enable noise canceler and interrupt on falling edge
 #endif
-    rx_frame_sync_ref = 3; // sync on rx_chan[][3] first, but isr will track the sync gap
+    rx_frame_sync_ref = 3; // sync on *rx_chan[3] first, but isr will track the sync gap
     return;
 #endif // SERIALRX_CPPM
 
@@ -2051,20 +2052,18 @@ void stick_config(struct _stick_zone *psz)
 {
 // 1= wing_mode (see enum WING_MODE)
 // 2= mixer_epa_mode (see enum MIXER_EPA_MODE)
-// 3= serialrx_order (see enum SERIALRX_ORDER)
-// 4= mount_orient (see enum MOUNT_ORIENT)
-// 5= stick_gain_throw (see enum STICK_GAIN_THROW)
-// 6= max_rotate (see enum MAX_ROTATE)
-// 7= rate_mode_stick_rotate (see enum RATE_MODE_STICK_ROTATE)
-// 8= inflight_calibrate (see enum INFLIGHT_CALIBRATE)
-// 9= exit
+// 3= mount_orient (see enum MOUNT_ORIENT)
+// 4= stick_gain_throw (see enum STICK_GAIN_THROW)
+// 5= max_rotate (see enum MAX_ROTATE)
+// 6= rate_mode_stick_rotate (see enum RATE_MODE_STICK_ROTATE)
+// 7= inflight_calibrate (see enum INFLIGHT_CALIBRATE)
+// 8= exit
 
 // note: be careful about off-by-one errors in this function
 
   const int8_t param_ymin[] = {
     WING_USE_DIPSW, 
     MIXER_EPA_FULL, 
-    SERIALRX_NONE,     
     MOUNT_NORMAL, 
     STICK_GAIN_THROW_FULL,
     MAX_ROTATE_VLOW,
@@ -2075,10 +2074,9 @@ void stick_config(struct _stick_zone *psz)
   const int8_t param_ymax[] = {
     WING_DUAL_AIL,
     MIXER_EPA_TRACK, 
-    SERIALRX_AETR1a2F, 
     MOUNT_ROLL_90_RIGHT, 
     STICK_GAIN_THROW_QUARTER,
-    MAX_ROTATE_VHIGH,
+    MAX_ROTATE_HIGH,
     RATE_MODE_STICK_ROTATE_ENABLE,
     INFLIGHT_CALIBRATE_ENABLE,
     2 // exit_option
@@ -2097,13 +2095,12 @@ void stick_config(struct _stick_zone *psz)
   
   pparam_yval[0] = (int8_t *) &cfg.wing_mode;
   pparam_yval[1] = (int8_t *) &cfg.mixer_epa_mode;
-  pparam_yval[2] = (int8_t *) &cfg.serialrx_order;
-  pparam_yval[3] = (int8_t *) &cfg.mount_orient;
-  pparam_yval[4] = (int8_t *) &cfg.stick_gain_throw;
-  pparam_yval[5] = (int8_t *) &cfg.max_rotate;
-  pparam_yval[6] = (int8_t *) &cfg.rate_mode_stick_rotate;
-  pparam_yval[7] = (int8_t *) &cfg.inflight_calibrate;
-  pparam_yval[8] = &exit_option;
+  pparam_yval[2] = (int8_t *) &cfg.mount_orient;
+  pparam_yval[3] = (int8_t *) &cfg.stick_gain_throw;
+  pparam_yval[4] = (int8_t *) &cfg.max_rotate;
+  pparam_yval[5] = (int8_t *) &cfg.rate_mode_stick_rotate;
+  pparam_yval[6] = (int8_t *) &cfg.inflight_calibrate;
+  pparam_yval[7] = &exit_option;
   
   int8_t update_x = (x + 1) << 1;
   int8_t update_y = *pparam_yval[x] << 1;
@@ -2231,19 +2228,29 @@ void setup()
   }
 #endif
   cfg.mixer_epa_mode = MIXER_EPA_FULL;
+  
+#if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
+  cfg.servo_frame_rate = 20; // safe rate for analog servos
+#else
+  cfg.servo_frame_rate = 0; // no min interval, rx will drive the update rate
+#endif
+
+  const int8_t *pserialrx_order;
 #if defined(SERIALRX_CPPM)
-#if defined(MINI_MWC) && !defined(MINI_MWC_EXTERNAL_RX)
-  cfg.serialrx_order = SERIALRX_TAER1a2F; // mini mwc with spektrum rf plugin board that emits cppm TAER*
-#else
-  cfg.serialrx_order = SERIALRX_RETA1a2F;
-#endif
+  #if defined(MINI_MWC) && !defined(MINI_MWC_EXTERNAL_RX)
+  pserialrx_order = serialrx_order_TAER1a2f;
+  #else
+  pserialrx_order = serialrx_order_RETA1a2f;
+  #endif
 #elif defined(SERIALRX_SPEKTRUM)
-  cfg.serialrx_order = SERIALRX_TAER1a2F;
+  pserialrx_order = serialrx_order_TAER1a2f;
 #elif defined(SERIALRX_SBUS)
-  cfg.serialrx_order = SERIALRX_AETR1a2F;
+  pserialrx_order = serialrx_order_AETR1a2f;
 #else
-  cfg.serialrx_order = SERIALRX_NONE;
+  pserialrx_order = serialrx_order_RETA1a2f;
 #endif
+  for (i=0; i<rx_chan_size; i++) cfg.serialrx_order[i] = pserialrx_order[i];
+  cfg.serialrx_spektrum_levels = SERIALRX_SPEKTRUM_LEVELS_1024;
   cfg.mount_orient = MOUNT_NORMAL;
   cfg.stick_gain_throw = STICK_GAIN_THROW_FULL;
   cfg.max_rotate = MAX_ROTATE_MED;
@@ -2336,6 +2343,8 @@ void setup()
     }      
   }
 
+  // from this point on, we use cfg.* to obtain device operating parameters
+  
 #if !defined(NO_ONEWIRE)
   // check for program box, reboot on return if connected
   // cannot disable TIMER0 or init TIMER1 before this call
@@ -2374,6 +2383,13 @@ void setup()
     break;  
   }
 
+  minimum_servo_frame_time = cfg.servo_frame_rate * 1000; // ms to us  
+  
+  // set up serialrx order
+  for (i=0; i<rx_chan_size; i++) {
+    rx_chan[i] = (volatile int16_t *)rx_chan_map[cfg.serialrx_order[i]];
+  }
+  
   // init digital in for dip switches to read config settings
   init_digital_in_sw(); // sw
   read_switches();

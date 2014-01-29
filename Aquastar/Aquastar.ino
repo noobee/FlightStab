@@ -109,7 +109,7 @@ prog_char mixer_epa_full[] PROGMEM = "Full 1000-2000";
 prog_char mixer_epa_norm[] PROGMEM = "Norm 1100-1900";
 prog_char mixer_epa_track[] PROGMEM = "Tracking";
 
-prog_char servo_frame_min[] PROGMEM = "SERVO FRAME MIN";
+prog_char servo_frame_rate[] PROGMEM = "SERVO FRAME RATE";
 
 prog_char serialrx_order[] PROGMEM = "SERIALRX ORDER";
 
@@ -132,7 +132,6 @@ prog_char max_rotate_vlow[] PROGMEM = "Very Low 0.25x";
 prog_char max_rotate_low[] PROGMEM = "Low 0.5x";
 prog_char max_rotate_med[] PROGMEM = "Medium 1x";
 prog_char max_rotate_high[] PROGMEM = "High 2x";
-prog_char max_rotate_vhigh[] PROGMEM = "Very High 4x";
 
 prog_char rate_mode_stick_rotate[] PROGMEM = "RATE STK-ROTATE";
 prog_char disabled[] PROGMEM = "Disabled";
@@ -155,7 +154,7 @@ prog_char *param_text[][6] PROGMEM = {
    wing_use_dipsw, wing_single_ail, wing_delta, wing_vtail, wing_dual_ail},
   {mixer_epa_mode, 
    mixer_epa_full, mixer_epa_norm, mixer_epa_track},
-  {servo_frame_min, 
+  {servo_frame_rate, 
    },   
   {serialrx_order, 
    },
@@ -166,7 +165,7 @@ prog_char *param_text[][6] PROGMEM = {
   {stick_gain_throw, 
    stick_gain_throw_full, stick_gain_throw_half, stick_gain_throw_quarter},
   {max_rotate, 
-   max_rotate_vlow, max_rotate_low, max_rotate_med, max_rotate_high, max_rotate_vhigh},
+   max_rotate_vlow, max_rotate_low, max_rotate_med, max_rotate_high},
   {rate_mode_stick_rotate, 
    disabled, enabled},
   {inflight_calibrate, 
@@ -181,46 +180,19 @@ prog_char *param_text[][6] PROGMEM = {
    eeprom_instr, eeprom_update_cfg, eeprom_erase_cfg, eeprom_erase_stats}
 };
 
-const int16_t param_min[] = {
-  1, // status
-  WING_USE_DIPSW, 
-  MIXER_EPA_FULL,
-  0, // servo_frame_min
-  0, // serialrx_order
-  SERIALRX_SPEKTRUM_LEVELS_1024,
-  MOUNT_NORMAL,    
-  STICK_GAIN_THROW_FULL,
-  MAX_ROTATE_VLOW,
-  RATE_MODE_STICK_ROTATE_DISABLE,
-  INFLIGHT_CALIBRATE_DISABLE,
-  -128, // vr_gain
-  0, // pid_rate
-  0, // pid_hold
-  1 // eeprom
-};
+enum PARAM_TYPE {PARAM_STATUS, PARAM_ENUM, PARAM_VAL, PARAM_SERIALRX_ORDER, PARAM_VR_GAIN, PARAM_PID, PARAM_EEPROM};
 
-const int16_t param_max[] = {
-  3, // status
-  WING_DUAL_AIL, 
-  MIXER_EPA_TRACK,  
-  22, // servo_frame_min
-  7, // serialrx_order
-  SERIALRX_SPEKTRUM_LEVELS_2048,
-  MOUNT_ROLL_90_RIGHT,    
-  STICK_GAIN_THROW_QUARTER,
-  MAX_ROTATE_VHIGH,
-  RATE_MODE_STICK_ROTATE_ENABLE,
-  INFLIGHT_CALIBRATE_ENABLE,
-  127, // vr_gain
-  1000, // pid_rate
-  1000, // pid_hold
-  4 // eeprom
-};
-  
+const int8_t subpage_max[] = { // index = PARAM_TYPE enum
+  0, // PARAM_STATUS
+  0, // PARAM_ENUM
+  0, // PARAM_VAL
+  serialrx_num_chan-1, // PARAM_SERIALRX_ORDER
+  sizeof(cfg.vr_gain)/sizeof(cfg.vr_gain[0])-1, // PARAM_VR_GAIN
+  9, // PARAM_PID: [kp/ki/kd=3][axis=3]
+  0  // PARAM_EEPROM
+}; 
+
 const char serialrx_chan_str[] = "RETA1a2f"; // index = channel number = subpage. see enum SERIALRX_CHAN
-
-int8_t param_val_status = 1;
-int8_t param_val_eeprom = 1;
 
 const int8_t kpid_map[] = {0, 1, 2, 0, 1, 2, 0, 1, 2}; // index = subpage
 const int8_t axis_map[] = {0, 0, 0, 1, 1, 1, 2, 2, 2}; // index = subpage
@@ -232,34 +204,27 @@ struct _pid_param_array {
 struct _pid_param_array pid_param_array_rate = {{cfg.pid_param_rate.kp, cfg.pid_param_rate.ki, cfg.pid_param_rate.kd}};
 struct _pid_param_array pid_param_array_hold = {{cfg.pid_param_hold.kp, cfg.pid_param_hold.ki, cfg.pid_param_hold.kd}};  
 
+int8_t param_val_status = 1;
+int8_t param_val_eeprom = 1;
+
 int8_t * const param_pval[] = {
   &param_val_status,
   (int8_t*) &cfg.wing_mode,
   (int8_t*) &cfg.mixer_epa_mode,
-  &cfg.servo_frame_min,
-  cfg.serialrx_order,
+  &cfg.servo_frame_rate,
+  &cfg.serialrx_order[0],
   (int8_t*) &cfg.serialrx_spektrum_levels,  
   (int8_t*) &cfg.mount_orient,
   (int8_t*) &cfg.stick_gain_throw,
   (int8_t*) &cfg.max_rotate,
   (int8_t*) &cfg.rate_mode_stick_rotate,
   (int8_t*) &cfg.inflight_calibrate,
-  cfg.vr_gain,
+  &cfg.vr_gain[0],
   (int8_t*) &pid_param_array_rate,
   (int8_t*) &pid_param_array_hold,
   &param_val_eeprom,
 };
   
-enum PARAM_TYPE {PARAM_STATUS, PARAM_ENUM, PARAM_VAL, PARAM_SERIALRX_ORDER, PARAM_VR_GAIN, PARAM_PID, PARAM_EEPROM};
-
-const int8_t subpage_max[] = {0, 
-  0, 
-  0, 
-  sizeof(cfg.serialrx_order)/sizeof(cfg.serialrx_order[0])-1, 
-  sizeof(cfg.vr_gain)/sizeof(cfg.vr_gain[0])-1, 
-  8, 
-  0}; // index = PARAM_TYPE enum
-
 enum PARAM_TYPE param_type[] = {
   PARAM_STATUS,
   PARAM_ENUM,
@@ -278,6 +243,42 @@ enum PARAM_TYPE param_type[] = {
   PARAM_EEPROM,
 };
 
+const int16_t param_min[] = {
+  1, // status
+  WING_USE_DIPSW, 
+  MIXER_EPA_FULL,
+  0, // servo_frame_rate
+  0, // serialrx_order
+  SERIALRX_SPEKTRUM_LEVELS_1024,
+  MOUNT_NORMAL,    
+  STICK_GAIN_THROW_FULL,
+  MAX_ROTATE_VLOW,
+  RATE_MODE_STICK_ROTATE_DISABLE,
+  INFLIGHT_CALIBRATE_DISABLE,
+  -128, // vr_gain
+  0, // pid_rate
+  0, // pid_hold
+  1 // eeprom
+};
+
+const int16_t param_max[] = {
+  3, // status
+  WING_DUAL_AIL, 
+  MIXER_EPA_TRACK,  
+  20, // servo_frame_rate
+  serialrx_num_chan-1, // serialrx_order max chan
+  SERIALRX_SPEKTRUM_LEVELS_2048,
+  MOUNT_ROLL_90_RIGHT,    
+  STICK_GAIN_THROW_QUARTER,
+  MAX_ROTATE_HIGH,
+  RATE_MODE_STICK_ROTATE_ENABLE,
+  INFLIGHT_CALIBRATE_ENABLE,
+  127, // vr_gain
+  1000, // pid_rate
+  1000, // pid_hold
+  4 // eeprom
+};
+  
 const int8_t param_num_pages = sizeof(param_type)/sizeof(param_type[0]);
 
 
@@ -382,12 +383,11 @@ void serial2_write(uint8_t b)
 
 void serial2_init()
 {
-//  PORTD |= 0x03; // enable pullup
   UBRRH = 0; // 16 with U2X enabled means 115200 baud with 16MHz CPU: 16000000 / 115200 / 8 - 1 == 16
   UBRRL = 16; // seems to have too much error without U2X.
   UCSRA |= (1 << U2X);
   UCSRB = (1 << RXEN) | (1 << TXEN);
-  UCSRC = (1 << URSEL) |(1 << UCSZ1) | (1 << UCSZ0); // 8N1
+  UCSRC = (1 << URSEL) | (1 << UCSZ1) | (1 << UCSZ0); // 8N1
 }
 #endif
 
@@ -576,7 +576,7 @@ void param_lcd_update(int8_t page, int8_t subpage)
     
   case PARAM_SERIALRX_ORDER:
     pv = (int8_t *)param_pval[page];
-    for (int8_t i=0; i<8; i++) {
+    for (int8_t i=0; i<serialrx_num_chan; i++) {
       bool sel = (i == subpage);
       if (sel) lcd.print('[');
       lcd.print(serialrx_chan_str[pv[i]]);      
@@ -594,7 +594,7 @@ void param_lcd_update(int8_t page, int8_t subpage)
       else 
         lcd.print(pv[i]);      
       if (sel) lcd.print(']');
-      if (i< 2)
+      if (i < 3-1)
         lcd.print('/');
     }
     break;
@@ -666,11 +666,6 @@ again:
         }      
         cfg = ow_msg.u.eeprom_cfg;
         ow_state = OW_WAIT_STATS;
-        // TODO(debug)
-        cfg.servo_frame_min = 11;
-        for (int8_t i=0; i<8; i++) cfg.serialrx_order[i] = i;
-        cfg.serialrx_spektrum_levels = SERIALRX_SPEKTRUM_LEVELS_1024;
-        // TODO(debug)        
         break;
       case OW_WAIT_STATS:
         stats = ow_msg.u.eeprom_stats;
