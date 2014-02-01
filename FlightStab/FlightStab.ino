@@ -2675,7 +2675,8 @@ again:
     
     // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
     master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, master_gain_max);     
-        
+    if (master_gain < 25) master_gain = 0; // deadband
+  
     // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
     if (stab_mode == STAB_HOLD || 
        (stab_mode == STAB_RATE && cfg.rate_mode_stick_rotate == RATE_MODE_STICK_ROTATE_ENABLE)) {
