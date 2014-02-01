@@ -344,10 +344,10 @@ bool ow_loop(); // OneWireSerial.ino
 #define DIN_PORTD {&ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL, NULL}
 
 // <SERVO>
-#define AIL_OUT_PIN  4
-#define ELE_OUT_PIN  5
-#define RUD_OUT_PIN  6
-#define AILR_OUT_PIN 7 // dual aileron mode only
+#define AILR_OUT_PIN 4 // dual aileron mode only
+#define AIL_OUT_PIN  5
+#define ELE_OUT_PIN  6
+#define RUD_OUT_PIN  7
 
 #define PWM_OUT_VAR {&ailr_out, &ail_out, &ele_out, &rud_out, NULL /*&thr_out*/, NULL /*&flp_out*/, NULL, NULL}
 #define PWM_OUT_PIN {AILR_OUT_PIN, AIL_OUT_PIN, ELE_OUT_PIN, RUD_OUT_PIN, -1, -1, -1, -1}
