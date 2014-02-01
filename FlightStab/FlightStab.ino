@@ -414,10 +414,10 @@ bool ow_loop(); // OneWireSerial.ino
 #define DIN_PORTD {&ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL, NULL}
 
 // <SERVO>
-#define AIL_OUT_PIN  4
-#define ELE_OUT_PIN  5
-#define RUD_OUT_PIN  6
-#define AILR_OUT_PIN 7  // dual aileron mode only
+#define AILR_OUT_PIN 4 // dual aileron mode only
+#define AIL_OUT_PIN  5
+#define ELE_OUT_PIN  6
+#define RUD_OUT_PIN  7
 #define FLP_OUT_PIN 9   // when SERIALRX_* defined
 #define THR_OUT_PIN 10  // when SERIALRX_* defined
 #define AUX2_OUT_PIN 11 // when SERIALRX_* defined
