@@ -41,6 +41,10 @@ bool ow_loop(); // OneWireSerial.ino
 #define USE_I2CLIGHT // default
 #endif
 
+#if defined(SERIALRX_CPPM) || defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS)
+#define USE_SERIALRX
+#endif
+
 /* RX3S_V1 *****************************************************************************************************/
 #if defined(RX3S_V1)
 #warning RX3S_V1 defined // emit device name
@@ -669,6 +673,8 @@ int16_t ele_in2_mid = RX_WIDTH_MID; //
 int16_t rud_in2_mid = RX_WIDTH_MID; //
 int16_t ailr_in2_mid = RX_WIDTH_MID; //
 
+int16_t ail_in2_offset, ele_in2_offset, rud_in2_offset; // difference from *_in2_mid (stick position)
+
 // switch
 int8_t ail_sw = false;
 int8_t ele_sw = false;
@@ -721,6 +727,10 @@ const int8_t serialrx_order_AETR1a2f[] = {
 // stabilization mode
 enum STAB_MODE {STAB_RATE, STAB_HOLD};
 enum STAB_MODE stab_mode = STAB_RATE;
+
+// DELTA DUAL_AIL mode
+enum LINKED_MODE {LINKED_SLOW, LINKED_NORMAL, LINKED_AGGRESSIVE};
+enum LINKED_MODE linked_mode = LINKED_NORMAL;
 
 const int16_t stick_gain_max = 400; // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
 const int16_t master_gain_max = 400; // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
@@ -1756,7 +1766,7 @@ void copy_rx_in()
   thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
   flp_in2 = (tmp = flp_in) == flp_in ? tmp : flp_in2;
   
-  if (wing_mode == WING_SINGLE_AIL)
+  if (wing_mode == WING_RUDELE_1AIL)
     ailr_in2 = ail_in2;
 }
 
@@ -1770,14 +1780,14 @@ void apply_mixer_change(int16_t *change)
   // mixer
   int16_t tmp0, tmp1, tmp2;
   switch (wing_mode) {
-  case WING_SINGLE_AIL:
-  case WING_DUAL_AIL:
+  case WING_RUDELE_1AIL:
+  case WING_RUDELE_2AIL:
     ail_out2 = ail_in2 + change[0];
     ailr_out2 = ailr_in2 + change[0];
     ele_out2 = ele_in2 + change[1];
     rud_out2 = rud_in2 + change[2];
     break;
-  case WING_DELTA:
+  case WING_DELTA_1AIL:
     tmp0 =  ail_in2 + change[0];
     tmp1 =  ele_in2 + change[1];
     // apply 100% (1/1)
@@ -1795,7 +1805,7 @@ void apply_mixer_change(int16_t *change)
     //ele_out2 = tmp2 - (tmp2 >> 2) + RX_WIDTH_MID;
     rud_out2 = rud_in2 + change[2];
     break;
-  case WING_VTAIL:
+  case WING_VTAIL_1AIL:
     ail_out2 = ail_in2 + change[0];
     ailr_out2 = ailr_in2 + change[0];
     tmp1 =  ele_in2 + change[1];
@@ -1808,6 +1818,37 @@ void apply_mixer_change(int16_t *change)
     break;
   }
 
+#if 0 ///////////////////////////////////////////////////////////////////////////
+     if (wing_mode == WING_DELTA_1AIL_SINGLE_AIL) {
+      // regular rudder and single aileron
+      rud_out2 = rud_in2 + change[2];
+      ailr_out2 = ailr_in2 + change[0];
+    } else {
+
+      // rud_in2 == LINKED
+      linked_mode = rud_in2 > 1400 && rud_in2 < 1600 ? LINKED_NORMAL : 
+        rud_in2 < 1250 ? LINKED_SLOW : 
+        rud_in2 > 1750 ? LINKED_AGGRESSIVE :
+        linked_mode;
+
+      switch (linked_mode) {
+      case LINKED_SLOW: // flaps
+        tmp0 = ((ail_in2 - ail_in2_mid) - (ailr_in2 - ailr_in2_mid)) >> 1; // flapperon_offset
+        rud_out2 = ail_in2_mid + tmp0; // rud_out2 == left aileron
+        ailr_out2 = ailr_in2_mid - tmp0;
+        break;
+      case LINKED_NORMAL: // ail and flaps
+        rud_out2 = ail_in2 + change[0]; // rud_out2 == ail_out2 (left aileron)
+        ailr_out2 = ailr_in2 + change[0];
+        break;
+      case LINKED_AGGRESSIVE: // ele, ail and flaps 
+        rud_out2 = (ail_in2 + change[0]) + (ele_in2_offset + change[1]);
+        ailr_out2 = (ailr_in2 + change[0]) - (ele_in2_offset + change[1]);
+        break;
+      }
+ #endif ///////////////////////////////////////////////////////////////////////////
+
+  
   // throttle, flap and aux2 pass through
   thr_out2 = thr_in2;  
   flp_out2 = flp_in2;  
@@ -2072,7 +2113,7 @@ void stick_config(struct _stick_zone *psz)
     1 // exit_option
   };
   const int8_t param_ymax[] = {
-    WING_DUAL_AIL,
+    WING_RUDELE_2AIL,
     MIXER_EPA_TRACK, 
     MOUNT_ROLL_90_RIGHT, 
     STICK_GAIN_THROW_QUARTER,
@@ -2216,7 +2257,7 @@ void setup()
 
 #if defined(NANO_WII) || defined(MINI_MWC)
   // set up default parameters for No DIPSW and No POT
-  cfg.wing_mode = WING_DUAL_AIL;
+  cfg.wing_mode = WING_RUDELE_2AIL;
   for (i=0; i<3; i++) {
     cfg.vr_gain[i] = 60;  
   }
@@ -2397,10 +2438,10 @@ void setup()
   // device-specific modes and pin assignment differences
   
   const enum WING_MODE dip_sw_to_wing_mode_map[] = {
-    WING_DUAL_AIL, // 0=rev / 0=rev
-    WING_VTAIL, // 0=rev / 1=norm
-    WING_DELTA, // 1=norm / 0=rev
-    WING_SINGLE_AIL // 1=norm / 1=norm
+    WING_RUDELE_2AIL, // 0=rev / 0=rev
+    WING_VTAIL_1AIL, // 0=rev / 1=norm
+    WING_DELTA_1AIL, // 1=norm / 0=rev
+    WING_RUDELE_1AIL // 1=norm / 1=norm
   };
   
   wing_mode = cfg.wing_mode;
@@ -2410,15 +2451,15 @@ void setup()
   wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
 
   switch (wing_mode) {
-  case WING_SINGLE_AIL:
-  case WING_DELTA:
-  case WING_VTAIL:
+  case WING_RUDELE_1AIL:
+  case WING_DELTA_1AIL:
+  case WING_VTAIL_1AIL:
     // PD7 7 AUX_IN instead of AILR_OUT
     pwm_out_var[3] = NULL; // disable ailr_out
     pwm_out_pin[3] = -1; //
     rx_portd[7] = &aux_in; // enable aux_in
     break;
-  case WING_DUAL_AIL:
+  case WING_RUDELE_2AIL:
     // PB3 11 AUX_IN instead of MOSI
     // PB4 12 AILR_IN instead of MISO
     rx_portb[3] = &aux_in; // enable aux_in
@@ -2445,13 +2486,13 @@ void setup()
 
   wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)] : cfg.wing_mode;
   
-  if (wing_mode == WING_DUAL_AIL) {
+  if (wing_mode == WING_RUDELE_2AIL) {
     if (ele_sw) {
-      // WING_DUAL_AIL mode A
+      // WING_RUDELE_2AIL mode A
       // PB3 11 AILR_IN instead of AUX_IN
       rx_portb[3] = &ailr_in; // replace aux_in
     } else {
-      // WING_DUAL_AIL mode B
+      // WING_RUDELE_2AIL mode B
       // PD1 1 AILR_IN instead of AIL_SW
       din_portd[1] = NULL; // disable ail_sw
       rx_portd[1] = &ailr_in; // enable ailr_in
@@ -2495,7 +2536,7 @@ void setup()
   wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
 
   switch (wing_mode) {
-  case WING_DUAL_AIL:
+  case WING_RUDELE_2AIL:
     // PB3 11 AUX_IN instead of MOSI
     // PB4 12 AILR_IN instead of MISO
     rx_portb[3] = &aux_in; // enable aux_in
@@ -2675,9 +2716,9 @@ again:
     }
   
     // determine how much sticks are off center (from neutral)
-    int16_t ail_stick_pos = abs(((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1);
-    int16_t ele_stick_pos = abs(ele_in2 - ele_in2_mid);
-    int16_t rud_stick_pos = abs(rud_in2 - rud_in2_mid);
+    ail_in2_offset = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) >> 1;
+    ele_in2_offset = ele_in2 - ele_in2_mid;
+    rud_in2_offset = rud_in2 - rud_in2_mid;
 
     // vr_gain[] [-128, 128] from VRs or config
     
@@ -2685,9 +2726,9 @@ again:
     int8_t shift = cfg.stick_gain_throw - 1;
     
     // stick_gain[] [1100, <ail*|ele|rud>_in2_mid, 1900] => [0%, 100%, 0%] = [0, STICK_GAIN_MAX, 0]
-    stick_gain[0] = stick_gain_max - min(ail_stick_pos << shift, stick_gain_max);
-    stick_gain[1] = stick_gain_max - min(ele_stick_pos << shift, stick_gain_max);
-    stick_gain[2] = stick_gain_max - min(rud_stick_pos << shift, stick_gain_max);    
+    stick_gain[0] = stick_gain_max - min(abs(ail_in2_offset) << shift, stick_gain_max);
+    stick_gain[1] = stick_gain_max - min(abs(ele_in2_offset) << shift, stick_gain_max);
+    stick_gain[2] = stick_gain_max - min(abs(rud_in2_offset) << shift, stick_gain_max);    
     
     // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
     master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, master_gain_max);     
@@ -2699,9 +2740,9 @@ again:
       // cfg.max_rotate shift = [1, 5]
       // eg. max stick == 400, cfg.max_rotate == 4. then 400 << 4 = 6400 => 6400/32768*2000 = 391deg/s (32768 == 2000deg/s)
       int16_t sp[3];
-      sp[0] = ((ail_in2 - ail_in2_mid) + (ailr_in2 - ailr_in2_mid)) << (cfg.max_rotate - 1);
-      sp[1] = (ele_in2 - ele_in2_mid) << cfg.max_rotate;
-      sp[2] = (rud_in2 - rud_in2_mid) << cfg.max_rotate;
+      sp[0] = ail_in2_offset << cfg.max_rotate;
+      sp[1] = ele_in2_offset << cfg.max_rotate;
+      sp[2] = rud_in2_offset << cfg.max_rotate;
       for (i=0; i<3; i++)
         pid_state.setpoint[i] = vr_gain[i] < 0 ? sp[i] : -sp[i];      
     } else {

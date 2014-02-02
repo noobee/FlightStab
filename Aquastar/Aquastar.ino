@@ -99,10 +99,13 @@ prog_char eeprom_erase_stats[] PROGMEM = "Erase Stats " XSTR(CHAR_RIGHT_ARROW);
 // config modes
 prog_char wing_mode[] PROGMEM = "WING MODE";
 prog_char wing_use_dipsw[] PROGMEM = "DIP SW";
-prog_char wing_single_ail[] PROGMEM = "Single Ail";
-prog_char wing_delta[] PROGMEM = "Delta";
-prog_char wing_vtail[] PROGMEM = "V-Tail";
-prog_char wing_dual_ail[] PROGMEM = "Dual Ail";
+prog_char wing_rudele_1ail[] PROGMEM = "RudEle 1-Ail";
+prog_char wing_delta_1ail[] PROGMEM = "Delta 1-Ail";
+prog_char wing_vtail_1ail[] PROGMEM = "VTail 1-Ail";
+prog_char wing_rudele_2ail[] PROGMEM = "RudEle 2-Ail";
+prog_char wing_delta_2ail[] PROGMEM = "Delta 2-Ail";
+prog_char wing_vtail_2ail[] PROGMEM = "VTail 2-Ail";
+prog_char wing_duckeron[] PROGMEM = "Duckeron";
 
 prog_char mixer_epa_mode[] PROGMEM = "EPA MODE";
 prog_char mixer_epa_full[] PROGMEM = "Full 1000-2000";
@@ -147,38 +150,71 @@ prog_char pid_roll[] PROGMEM = "Ail ";
 prog_char pid_pitch[] PROGMEM = "Ele ";
 prog_char pid_yaw[] PROGMEM = "Rud ";
 
-prog_char *param_text[][6] PROGMEM = {
-  {status, 
-   status_device_id, status_device_ver, status_device_eeprom},
-  {wing_mode, 
-   wing_use_dipsw, wing_single_ail, wing_delta, wing_vtail, wing_dual_ail},
-  {mixer_epa_mode, 
-   mixer_epa_full, mixer_epa_norm, mixer_epa_track},
-  {servo_frame_rate, 
-   },   
-  {serialrx_order, 
-   },
-  {serialrx_spektrum_levels, 
-   serialrx_spektrum_levels_1024, serialrx_spektrum_levels_2048},
-  {mount_orient, 
-   mount_normal, mount_roll90left, mount_roll90right},
-  {stick_gain_throw, 
-   stick_gain_throw_full, stick_gain_throw_half, stick_gain_throw_quarter},
-  {max_rotate, 
-   max_rotate_vlow, max_rotate_low, max_rotate_med, max_rotate_high},
-  {rate_mode_stick_rotate, 
-   disabled, enabled},
-  {inflight_calibrate, 
-   disabled, enabled},
-  {vr_gain,
-   },
-  {pid_rate,
-   pid_roll, pid_pitch, pid_yaw},
-  {pid_hold,
-   pid_roll, pid_pitch, pid_yaw},
-  {eeprom, 
-   eeprom_instr, eeprom_update_cfg, eeprom_erase_cfg, eeprom_erase_stats}
+prog_char *param_text0[] PROGMEM = 
+{status, 
+  status_device_id, status_device_ver, status_device_eeprom};
+   
+prog_char *param_text1[] PROGMEM = {wing_mode, 
+  wing_use_dipsw, wing_rudele_1ail, wing_delta_1ail, wing_vtail_1ail, wing_rudele_2ail, wing_delta_2ail, wing_vtail_2ail, wing_duckeron};
+
+prog_char *param_text2[] PROGMEM = {mixer_epa_mode, 
+  mixer_epa_full, mixer_epa_norm, mixer_epa_track};
+  
+prog_char *param_text3[] PROGMEM = {servo_frame_rate, 
+   };
+  
+prog_char *param_text4[] PROGMEM = {serialrx_order, 
+   };
+  
+prog_char *param_text5[] PROGMEM = {serialrx_spektrum_levels, 
+  serialrx_spektrum_levels_1024, serialrx_spektrum_levels_2048};
+  
+prog_char *param_text6[] PROGMEM = {mount_orient, 
+  mount_normal, mount_roll90left, mount_roll90right};
+  
+prog_char *param_text7[] PROGMEM = {stick_gain_throw, 
+  stick_gain_throw_full, stick_gain_throw_half, stick_gain_throw_quarter};
+
+prog_char *param_text8[] PROGMEM = {max_rotate, 
+  max_rotate_vlow, max_rotate_low, max_rotate_med, max_rotate_high};
+   
+prog_char *param_text9[] PROGMEM = {rate_mode_stick_rotate, 
+  disabled, enabled};
+   
+prog_char *param_text10[] PROGMEM = {inflight_calibrate, 
+  disabled, enabled};
+   
+prog_char *param_text11[] PROGMEM = {vr_gain,
+   };
+   
+prog_char *param_text12[] PROGMEM = {pid_rate,
+  pid_roll, pid_pitch, pid_yaw};
+
+prog_char *param_text13[] PROGMEM = {pid_hold,
+  pid_roll, pid_pitch, pid_yaw};
+   
+prog_char *param_text14[] PROGMEM = {eeprom, 
+  eeprom_instr, eeprom_update_cfg, eeprom_erase_cfg, eeprom_erase_stats};
+
+prog_char **param_textB[] = {
+  param_text0,
+  param_text1,
+  param_text2,
+  param_text3,
+  param_text4,
+  param_text5,
+  param_text6,
+  param_text7,
+  param_text8,
+  param_text9,
+  param_text10,
+  param_text11,
+  param_text12,
+  param_text13,
+  param_text14
 };
+  
+#define PARAM_TEXT(i, j) (const __FlashStringHelper*) pgm_read_word(&((param_textB[i])[j]))
 
 enum PARAM_TYPE {PARAM_STATUS, PARAM_ENUM, PARAM_VAL, PARAM_SERIALRX_ORDER, PARAM_VR_GAIN, PARAM_PID, PARAM_EEPROM};
 
@@ -263,7 +299,7 @@ const int16_t param_min[] = {
 
 const int16_t param_max[] = {
   3, // status
-  WING_DUAL_AIL, 
+  WING_DUCKERON, 
   MIXER_EPA_TRACK,  
   20, // servo_frame_rate
   serialrx_num_chan-1, // serialrx_order max chan
@@ -476,6 +512,24 @@ bool recv_msg(void *buf, int8_t buf_len, int16_t timeout_ms) {
 * SETUP/LOOP
 ***************************************************************************************************************/
 
+void test_display()
+{
+again:
+  for (int8_t i=0; i<param_num_pages; i++) {
+    enum PARAM_TYPE ptype = param_type[i];
+    if (ptype == PARAM_STATUS || ptype == PARAM_ENUM || ptype == PARAM_EEPROM) {
+      for (int8_t j=param_min[i]; j<=param_max[i]; j++) {
+        lcd.clear();
+        lcd.print(PARAM_TEXT(i, 0));
+        lcd.setCursor(0, 1);
+        lcd.print(PARAM_TEXT(i, j));
+        delay(1000);
+      }
+    }    
+  }  
+  goto again;
+}
+
 void setup()
 {
   // clear wd reset bit and disable wdt in case avrootloader enabled it
@@ -498,30 +552,8 @@ void setup()
   lcd.createChar(1, down_arrow);
 #endif
 
-#if 0  
-  for (int8_t i=0; i<3; i++) {
-    cfg.pid_param_rate.kp[i] = 500;
-    cfg.pid_param_rate.ki[i] = 500;
-    cfg.pid_param_rate.kd[i] = 500;
-    cfg.pid_param_hold.kp[i] = 1000;
-    cfg.pid_param_hold.ki[i] = 1000;
-    cfg.pid_param_hold.kd[i] = 1000;
-    cfg.vr_gain[i] = -127;
-  }  
-  return;
-  
-again:
-  for (int8_t i=0; i<param_num_pages; i++) {
-    for (int8_t j=param_min[i]; j<=param_max[i]; j++) {
-      lcd.clear();
-      lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[i][0]));
-      lcd.setCursor(0, 1);
-      lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[i][j]));
-      delay(1000);
-    }
-  }
-  
-  goto again;
+#if 0
+  test_display();
 #endif
 }
 
@@ -533,7 +565,7 @@ void param_lcd_update(int8_t page, int8_t subpage)
   int8_t *pv;
   
   // heading
-  lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][0]));
+  lcd.print(PARAM_TEXT(page, 0));
 #if 0
   lcd.setCursor(14, 0);
   lcd.write(*param_pval[page] > param_min[page] ? byte(0) : ' '); // up arrow
@@ -544,7 +576,7 @@ void param_lcd_update(int8_t page, int8_t subpage)
   switch (param_type[page]) {
   case PARAM_STATUS:
     v = *param_pval[page];
-    lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][v]));
+    lcd.print(PARAM_TEXT(page, v));
     switch (v) {
     case 1: // device_id
       lcd.print(stats.device_id);
@@ -566,7 +598,7 @@ void param_lcd_update(int8_t page, int8_t subpage)
   case PARAM_ENUM:
   case PARAM_EEPROM:
     v = *param_pval[page];
-    lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][v]));
+    lcd.print(PARAM_TEXT(page, v));
     break;
 
   case PARAM_VAL:
@@ -603,8 +635,8 @@ void param_lcd_update(int8_t page, int8_t subpage)
     ppid = (struct _pid_param_array *)param_pval[page];
     axis = axis_map[subpage];
     lcd.clear();
-    lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][0]));
-    lcd.print((const __FlashStringHelper*) pgm_read_word(&param_text[page][axis + 1]));
+    lcd.print(PARAM_TEXT(page, 0));
+    lcd.print(PARAM_TEXT(page, axis + 1));
     lcd.print(F("P/I/D"));
     lcd.setCursor(0, 1);
     for (int8_t i=0; i<3; i++) {
@@ -618,7 +650,6 @@ void param_lcd_update(int8_t page, int8_t subpage)
     break;
   }
 }
-
 
 void loop()
 {
