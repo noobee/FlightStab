@@ -282,6 +282,7 @@ bool ow_loop(); // OneWireSerial.ino
 
 // <SERVO>
 #define PWM_CHAN_PIN {11, 10, 5, 9, -1, 13, -1, 6} // RETA1a2F TODO(noobee): add AUX2_OUT?
+#define PWM_CHAN_PIN_SERIALRX PWM_CHAN_PIN // same pwm output list
 
 // <IMU>
 #define USE_MPU6050
@@ -385,7 +386,7 @@ bool ow_loop(); // OneWireSerial.ino
  PB6 14/D14 (XTAL1)         PC6 (RESET)              PD6 6/D6 RUD_OUT (PWM)
  PB7 15/D15 (XTAL2)                                  PD7 7/D7 spare/pad
  
- PC1 A1 is external facing and reserved for CPPM_EXT use. needs to connect to PB0 D8 
+ PC1 A1 is external facing and reserved for CPPM_EXT use. needs to short with PB0 D8 
  CPPM enabled
  PD2 D2 CPPM_IN for onboard RX 
  PB0 D8 CPPM_IN External RX
@@ -407,6 +408,7 @@ bool ow_loop(); // OneWireSerial.ino
 
 // <SERVO>
 #define PWM_CHAN_PIN {6, 5, 3, 10, -1, 11, -1, 9} // RETA1a2F TODO(noobee): add AUX2_OUT pin
+#define PWM_CHAN_PIN_SERIALRX PWM_CHAN_PIN // same pwm output list
 
 // <IMU>
 #define USE_MPU6050
@@ -668,7 +670,6 @@ const int8_t serialrx_order_AETR1a2f[rx_chan_size] = {
 volatile int16_t *rx_chan[rx_chan_size] = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
   
 // pwm chan order
-
 const int8_t pwm_chan_size = 8;
 const volatile int16_t *pwm_chan_map[pwm_chan_size] = 
   {&rud_out, &ele_out, &thr_out, &ail_out, NULL, &ailr_out, &aux2_out, &flp_out}; // see enum SERIALRX_CHAN  
@@ -1095,47 +1096,36 @@ void read_switches()
 volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
 int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, *rx_chan[<n>] var for CPPM
 
-#if !defined(SERIALRX_ENABLED)
-// non cppm mode
-volatile int16_t *rx_portb[] = RX_PORTB;
-volatile int16_t *rx_portd[] = RX_PORTD;
-
-// PORTB PCINT0-PCINT7
-inline void pcint0_vect()
+#if defined(SERIALRX_CPPM)
+#if CPPM_PROFILE == CPPM_PROFILE_PB0
+// cppm stream on ICP pin
+ISR(TIMER1_CAPT_vect)
 {
-  static uint16_t rise_time[8];
-  static uint8_t last_pin;
+  static int8_t ch0_synced = false;
+  static uint16_t fall_time;
+  static uint8_t ch;
   uint16_t now;
-  uint8_t pin, last_pin2, diff, rise;
+  uint16_t width;
 
-  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
-  last_pin2 = last_pin;
-  pin = PINB;
-  last_pin = pin;
+  now = ICR1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
   sei();
 
-  diff = pin ^ last_pin2;
-  rise = pin & ~last_pin2;
-
-  for (int8_t i = PCINT0; i <= PCINT7; i++) {
-    if (rx_portb[i] && diff & (1 << i)) {
-      if (rise & (1 << i)) {
-        rise_time[i] = now;
-      } else {
-        uint16_t width = (now - rise_time[i]) >> (F_CPU == F_16MHZ ? 1 : 0);
-        if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-          *rx_portb[i] = width;
-          if (i == rx_frame_sync_ref)
-            rx_frame_sync = true;
-        }
-      }
-    }
+  width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+  fall_time = now;
+  if (width > 3000) {
+    rx_frame_sync_ref = ch - 1;
+    ch = 0;
+    ch0_synced = true;
+  } else if (ch0_synced && ch < rx_chan_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+    *rx_chan[ch] = width;
+    if (ch == rx_frame_sync_ref)
+      rx_frame_sync = true;
+    ch++;
   }
 }
-#endif // !SERIALRX_ENABLED
+#endif // CPPM_PROFILE_PB0
 
-#if defined(SERIALRX_CPPM)
-// interrupt handler for CPPM stream on non-ICP pin
+// interrupt handler for CPPM stream on non-ICP pin (eg. CPPM_PROFILE_PD2 and CPPM_PROFILE_PE6)
 // CPPM_PINREG and CPPM_PINBIT must be defined
 // port/pin must be set up for interrupt on edge change and input mode in init_digital_in_rx()
 inline void non_icp_cppm_vect()
@@ -1170,53 +1160,61 @@ inline void non_icp_cppm_vect()
     }
   }
 }
-#endif // SERIALRX_CPPM
 
-#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
-#if defined(SERIALRX_CPPM)
-
-#if defined(MINI_MWC) && !defined(MINI_MWC_EXTERNAL_RX)
-// cppm stream on non-ICP pin, must be in PORT D (PCINT2)
+#if CPPM_PROFILE == CPPM_PROFILE_PD2
 ISR(PCINT2_vect)
 {
   non_icp_cppm_vect();
 }
-#else
-// cppm stream on ICP pin
-ISR(TIMER1_CAPT_vect)
+#endif // CPPM_PROFILE_PD2
+
+#if CPPM_PROFILE == CPPM_PROFILE_PE6
+ISR(INT6_vect) 
 {
-  static int8_t ch0_synced = false;
-  static uint16_t fall_time;
-  static uint8_t ch;
-  uint16_t now;
-  uint16_t width;
-
-  now = ICR1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
-  sei();
-
-  width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
-  fall_time = now;
-  if (width > 3000) {
-    rx_frame_sync_ref = ch - 1;
-    ch = 0;
-    ch0_synced = true;
-  } else if (ch0_synced && ch < rx_chan_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-    *rx_chan[ch] = width;
-    if (ch == rx_frame_sync_ref)
-      rx_frame_sync = true;
-    ch++;
-  }
+  non_icp_cppm_vect();
 }
-#endif // MINI_MWC && !MINI_MWC_EXTERNAL_RX
+#endif // CPPM_PROFILE_PE6
 #endif // SERIALRX_CPPM
 
 #if !defined(SERIALRX_ENABLED)
+// regular NON-CPPM RX handling
+volatile int16_t *rx_portb[] = RX_PORTB;
+volatile int16_t *rx_portd[] = RX_PORTD;
+
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect) 
 {
-  pcint0_vect();
+  static uint16_t rise_time[8];
+  static uint8_t last_pin;
+  uint16_t now;
+  uint8_t pin, last_pin2, diff, rise;
+
+  now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
+  last_pin2 = last_pin;
+  pin = PINB;
+  last_pin = pin;
+  sei();
+
+  diff = pin ^ last_pin2;
+  rise = pin & ~last_pin2;
+
+  for (int8_t i = PCINT0; i <= PCINT7; i++) {
+    if (rx_portb[i] && diff & (1 << i)) {
+      if (rise & (1 << i)) {
+        rise_time[i] = now;
+      } else {
+        uint16_t width = (now - rise_time[i]) >> (F_CPU == F_16MHZ ? 1 : 0);
+        if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+          *rx_portb[i] = width;
+          if (i == rx_frame_sync_ref)
+            rx_frame_sync = true;
+        }
+      }
+    }
+  }
 }
 
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
@@ -1247,27 +1245,10 @@ ISR(PCINT2_vect)
     }
   }
 }
-#endif // !SERIALRX_ENABLED
-#endif //__AVR_ATmega168__ || __AVR_ATmega328__
+#endif // __AVR_ATmega168__ || __AVR_ATmega328__
 
-#if defined(NANOWII)
-#if defined(SERIALRX_CPPM)
-// PE6 = cppm_in
-ISR(INT6_vect) 
-{
-  // cppm stream on non-icp pin
-  non_icp_cppm_vect();
-}
-#endif // SERIALRX_CPPM
-
-#if !defined(SERIALRX_ENABLED)
-// PORTB PCINT0-PCINT7
-ISR(PCINT0_vect) 
-{
-  pcint0_vect();
-}
-
-// PE6 = aux2_in
+#if defined(__AVR_ATmega32U4__) // nanowii only
+// PE6 MUST BE aux2_in
 ISR(INT6_vect)
 {
   static uint16_t rise_time;
@@ -1291,30 +1272,28 @@ ISR(INT6_vect)
     }
   }
 }
+#endif // __AVR_ATmega32U4__
 #endif // !SERIALRX_ENABLED
-#endif // NANOWII
 
 void init_digital_in_rx()
 {
-#if defined(SERIALRX_ENABLED)
-
 #if defined(SERIALRX_CPPM)
-#if CPPM_PROFILE == CPPM_PROFILE_PE6 // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
-    // eg. NANOWII CPPM
-    EICRB |= (1 << ISC60); // interrupt on pin change
-    EIMSK |= (1 << INT6);
-    DDRE &= ~(1 << CPPM_PINBIT);
-    PORTE |= (1 << CPPM_PINBIT);
+#if CPPM_PROFILE == CPPM_PROFILE_PB0 // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINB, 0)
+    // eg. atmega168/328 ICP
+    TIMSK1 |= (1 << ICIE1); // enable interrupt on ICP
+    TCCR1B |= (1 << ICNC1); // enable noise canceler and interrupt on falling edge
 #elif CPPM_PROFILE == CPPM_PROFILE_PD2 // (CPPM_PINREG, CPPM_PINBIT) MUST be (PIND, 2)
 	  // eg. MINI_MWC CPPM is on D2 (INTERNAL RX)
 	  PCICR |= (1 << PCIE2); // interrupt on pin change
 	  PCMSK2 |= (1 << CPPM_PINBIT);
 	  DDRD &= ~(1 << CPPM_PINBIT); // set input mode
     PORTD |= (1 << CPPM_PINBIT); // enable internal pullup
-#elif CPPM_PROFILE == CPPM_PROFILE_PB0 // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINB, 0)
-    // eg. atmega168/328 ICP
-    TIMSK1 |= (1 << ICIE1); // enable interrupt on ICP
-    TCCR1B |= (1 << ICNC1); // enable noise canceler and interrupt on falling edge
+#elif CPPM_PROFILE == CPPM_PROFILE_PE6 // (CPPM_PINREG, CPPM_PINBIT) MUST be (PINE, 6)
+    // eg. NANOWII CPPM
+    EICRB |= (1 << ISC60); // interrupt on pin change
+    EIMSK |= (1 << INT6);
+    DDRE &= ~(1 << CPPM_PINBIT);
+    PORTE |= (1 << CPPM_PINBIT);
 #else
 #error Unknown CPPM_PROFILE
 #endif
@@ -1322,8 +1301,9 @@ void init_digital_in_rx()
     return;
 #endif // SERIALRX_CPPM
 
-#else 
-  // standard non-CPPM RX input: rx_portb and rx_portd (and PE6 for nanowii)
+#if !defined(SERIALRX_ENABLED)
+  // standard non-CPPM RX input
+  // rx_portb for all, rx_portd for atmega168/328, PE6 for atmega32u4
 
   // PORTB RX
   PCICR |= (1 << PCIE0); // interrupt on pin change
@@ -1334,19 +1314,14 @@ void init_digital_in_rx()
       PORTB |= (1 << i); // enable internal pullup
     }
   }
+
 #if defined(NANOWII)
   rx_frame_sync_ref = 3; // use ELE_IN (PB3) as ref channel. TODO: fix this hardcoding
 #else
   rx_frame_sync_ref = 1; // use ELE_IN (PB1) as ref channel. TODO: fix this hardcoding
 #endif
 
-#if defined(NANOWII)
-  // PE6
-  EICRB |= (1 << ISC60); // interrupt on pin change
-  EIMSK |= (1 << INT6);
-  DDRE &= ~(1 << 6);
-  PORTE |= (1 << 6);
-#else
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
   // PORTD RX
   PCICR |= (1 << PCIE2); // interrupt on pin change
   for (int8_t i=0; i<8; i++) {
@@ -1356,8 +1331,16 @@ void init_digital_in_rx()
       PORTD |= (1 << i); // enable internal pullup
     }
   }
-#endif // NANOWII
-#endif // SERIALRX_ENABLED
+#endif // __AVR_ATmega168__ || __AVR_ATmega328__
+
+#if defined(__AVR_ATmega32U4__) // nanowii only
+  // PE6
+  EICRB |= (1 << ISC60); // interrupt on pin change
+  EIMSK |= (1 << INT6);
+  DDRE &= ~(1 << 6);
+  PORTE |= (1 << 6);
+#endif // __AVR_ATmega32U4__
+#endif // !SERIALRX_ENABLED
 }
 
 /***************************************************************************************************************
@@ -2376,14 +2359,23 @@ void setup()
 
   minimum_servo_frame_time = cfg.servo_frame_rate * 1000; // ms to us  
   
+#if defined(SERIALRX_ENABLED)
   // set up serialrx order
   for (i=0; i<rx_chan_size; i++) {
     rx_chan[i] = (volatile int16_t *)rx_chan_map[cfg.serialrx_order[i]];
   }
   
+  // update pwm output list if needed
+  const volatile int8_t ppwm_chan_pin[pwm_chan_size] = PWM_CHAN_PIN_SERIALRX;
+  for (i=0; i<pwm_chan_size; i++) pwm_chan_pin[i] = ppwm_chan_pin[i];
+#endif
+
   // init digital in for dip switches to read config settings
   init_digital_in_sw(); // sw
   read_switches();
+
+
+  wing_mode = cfg.wing_mode;
   
   // device-specific modes and pin assignment differences
   
@@ -2393,18 +2385,22 @@ void setup()
     WING_DELTA_1AIL, // 1=norm / 0=rev
     WING_RUDELE_1AIL // 1=norm / 1=norm
   };
-  
-  wing_mode = cfg.wing_mode;
-  
+
+  const enum WING_MODE dip_sw_to_wing_mode_map2[] = {
+    WING_RUDELE_1AIL,
+    WING_DELTA_1AIL,
+    WING_VTAIL_1AIL,
+    WING_RUDELE_2AIL,
+    WING_DELTA_2AIL,
+    WING_VTAIL_2AIL,
+    WING_DUCKERON
+  };
+
 #if defined(RX3S_V1)
 
   wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
 
-#if defined(SERIALRX_ENABLED)
-  const volatile int8_t ppwm_chan_pin[pwm_chan_size] = PWM_CHAN_PIN_SERIALRX;
-  for (i=0; i<pwm_chan_size; i++) pwm_chan_pin[i] = ppwm_chan_pin[i];
-#else
-
+#if !defined(SERIALRX_ENABLED)
   switch (wing_mode) {
   case WING_RUDELE_1AIL:
   case WING_DELTA_1AIL:
@@ -2420,19 +2416,14 @@ void setup()
     rx_portb[4] = &ailr_in; // enable ailr_in
     break;
   }  
-  
-#endif // SERIALRX_ENABLED
+#endif // !SERIALRX_ENABLED
 #endif // RX3S_V1
 
 #if defined(RX3S_V2) || defined(RX3SM)
 
   wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)] : cfg.wing_mode;
   
-#if defined(SERIALRX_ENABLED)
-  const volatile int8_t ppwm_chan_pin[pwm_chan_size] = PWM_CHAN_PIN_SERIALRX;
-  for (i=0; i<pwm_chan_size; i++) pwm_chan_pin[i] = ppwm_chan_pin[i];  
-#else  
-  
+#if !defined(SERIALRX_ENABLED)
   if (wing_mode == WING_RUDELE_2AIL) {
     if (ele_sw) {
       // WING_RUDELE_2AIL mode A
@@ -2445,26 +2436,14 @@ void setup()
       rx_portd[1] = &ailr_in; // enable ailr_in
     }
   }
-
-#endif // SERIALRX_ENABLED
+#endif // !SERIALRX_ENABLED
 #endif // RX3S_V2  || RX3SM
-
-#if defined(NANOWII)
-#if defined(SERIALRX_ENABLED)
-  // PE6 7 CPPM_IN instead of THR/AUX2_IN for SERIALRX_CPPM
-  // PE6 7 UNUSED instead of THR/AUX2_IN for SERIALRX_SPEKTRUM/SERIALRX_SBUS
-#endif // SERIALRX_ENABLED
-#endif // NANOWII
 
 #if defined(EAGLE_A3PRO) // TODO(noobee): can be folded into rx3s v1?
 
   wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
 
-#if defined(SERIALRX_ENABLED)
-  const volatile int8_t ppwm_chan_pin[pwm_chan_size] = PWM_CHAN_PIN_SERIALRX;
-  for (i=0; i<pwm_chan_size; i++) pwm_chan_pin[i] = ppwm_chan_pin[i];
-#else  
-
+#if !defined(SERIALRX_ENABLED)
   switch (wing_mode) {
   case WING_RUDELE_2AIL:
     // PB3 11 AUX_IN instead of MOSI
@@ -2473,8 +2452,7 @@ void setup()
     rx_portb[4] = &ailr_in; // enable ailr_in
     break;
   }
-  
-#endif // SERIALRX_ENABLED
+#endif // !SERIALRX_ENABLED
 #endif // EAGLE_A3PRO
 
   set_led_msg(0, wing_mode, LED_LONG);
