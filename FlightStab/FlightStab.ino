@@ -1178,7 +1178,7 @@ volatile int16_t *rx_portd[rx_port_size] = RX_PORTD;
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect) 
 {
-  static uint16_t rise_time[8];
+  static uint16_t rise_time[rx_port_size];
   static uint8_t last_pin;
   uint16_t now;
   uint8_t pin, last_pin2, diff, rise;
@@ -1192,7 +1192,7 @@ ISR(PCINT0_vect)
   diff = pin ^ last_pin2;
   rise = pin & ~last_pin2;
 
-  for (int8_t i = PCINT0; i <= PCINT7; i++) {
+  for (int8_t i=0; i<rx_port_size; i++) {
     if (rx_portb[i] && diff & (1 << i)) {
       if (rise & (1 << i)) {
         rise_time[i] = now;
