@@ -1171,8 +1171,9 @@ ISR(INT6_vect)
 
 #if !defined(SERIALRX_ENABLED)
 // regular NON-CPPM RX handling
-volatile int16_t *rx_portb[] = RX_PORTB;
-volatile int16_t *rx_portd[] = RX_PORTD;
+const int8_t rx_port_size = 8;
+volatile int16_t *rx_portb[rx_port_size] = RX_PORTB;
+volatile int16_t *rx_portd[rx_port_size] = RX_PORTD;
 
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect) 
