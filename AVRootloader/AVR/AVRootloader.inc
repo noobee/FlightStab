@@ -285,7 +285,7 @@
 
 .macro	jmpapp
 .if BLS
-#if defined(AQUASTAR)
+#if defined(AQUASTAR) || defined(DLUX)
 		rjmp	FLASHEND +1							; run application
 #else
 		jmp	FLASHEND +1							; run application
