@@ -62,28 +62,26 @@ bool ow_loop(); // OneWireSerial.ino
 #warning RX3S_V1 defined // emit device name
 /*
  OrangeRx Stabilizer RX3S V1
- PB0  8 AIL_IN            PC0 14/A0 AIL_GAIN       PD0 0 (RXD)
- PB1  9 ELE_IN (PWM)      PC1 15/A1 ELE_GAIN       PD1 1 AIL_SW (TXD)
- PB2 10 RUD_IN (PWM)      PC2 16/A2 RUD_GAIN       PD2 2 ELE_SW
- PB3 11 (MOSI) (PWM)      PC3 17/A3 PAD            PD3 3 RUD_SW (PWM)
- PB4 12 (MISO)            PC4 18/A4 (SDA)          PD4 4 AILL_OUT
- PB5 13 LED (SCK)         PC5 19/A5 (SCL)          PD5 5 ELE_OUT (PWM)
- PB6 14 (XTAL1)           PC6 (RESET)              PD6 6 RUD_OUT (PWM)
- PB7 15 (XTAL2)                                    PD7 7 AILR_OUT
+ PB0  8 AIL_IN              PC0 14/A0 AIL_GAIN       PD0 0 (RXD)
+ PB1  9 ELE_IN (PWM)        PC1 15/A1 ELE_GAIN       PD1 1 AIL_SW (TXD)
+ PB2 10 RUD_IN (PWM)        PC2 16/A2 RUD_GAIN       PD2 2 ELE_SW
+ PB3 11 AUX_IN (MOSI) (PWM) PC3 17/A3 PAD            PD3 3 RUD_SW (PWM)
+ PB4 12 AILR_IN (MISO)      PC4 18/A4 (SDA)          PD4 4 AILL_OUT
+ PB5 13 LED (SCK)           PC5 19/A5 (SCL)          PD5 5 ELE_OUT (PWM)
+ PB6 14 (XTAL1)             PC6 (RESET)              PD6 6 RUD_OUT (PWM)
+ PB7 15 (XTAL2)                                      PD7 7 AILR_OUT
  
- AIL_SINGLE mode (DEFAULT SETTING)
- DELTA mode
- VTAIL mode
+ WING_RUDELE_1AIL
+ WING_DELTA_1AIL
+ WING_VTAIL_1AIL
+ PB3 11 NONE instead of AUX_IN
+ PB4 12 NONE instead of AILR_IN
  PD7 7 AUX_IN instead of AILR_OUT
- 
- AIL_DUAL mode
- PB3 11 AUX_IN instead of MOSI
- PB4 12 AILR_IN instead of MISO
- 
- CPPM enabled
- PB0 8 CPPM_IN instead of AIL_IN
- PB1 9 FLP_OUT instead of ELE_IN
- PB2 10 THR_OUT instead of RUD_IN
+
+ SERIALRX
+ PB0 8 CPPM_IN
+ PB1 9 FLP_OUT
+ PB2 10 THR_OUT
 */
 
 #define DEVICE_ID DEVICE_RX3S_V1
@@ -92,7 +90,7 @@ bool ow_loop(); // OneWireSerial.ino
 #define AIN_PORTC {&ail_vr, &ele_vr, &rud_vr, NULL, NULL, NULL}
 
 // <RX> (must in PORT B/D due to ISR)
-#define RX_PORTB {&ail_in, &ele_in, &rud_in, NULL, NULL, NULL, NULL, NULL}
+#define RX_PORTB {&ail_in, &ele_in, &rud_in, &aux_in, &ailr_in, NULL, NULL, NULL}
 #define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SWITCH>
@@ -102,7 +100,7 @@ bool ow_loop(); // OneWireSerial.ino
 
 // <SERVO>
 #define PWM_CHAN_PIN {6, 5, -1, 4, -1, 7, -1, -1} // RETA1a2F
-#define PWM_CHAN_PIN_SERIALRX {6, 5, 10, 4, -1, 7, -1, 9} // RETA1a2F TODO(noobee): add AUX2_OUT
+#define PWM_CHAN_PIN_SERIALRX {6, 5, 10, 4, -1, 7, -1, 9} // RETA1a2F
 
 // <IMU>
 #define USE_ITG3200
@@ -138,20 +136,17 @@ bool ow_loop(); // OneWireSerial.ino
  PB6 14 (XTAL1)           PC6 (RESET)              PD6 6 RUD_OUT (PWM)
  PB7 15 (XTAL2)                                    PD7 7 AILR_OUT
  
- AIL_SINGLE mode (DEFAULT SETTING)
- (no change)
- 
- AIL_DUAL mode A
- PB3 11 AILR_IN instead of AUX_IN (no remote gain)
-
- AIL_DUAL mode B
+ WING_RUDELE_2AIL
+ WING_DELTA_2AIL
+ WING_VTAIL_2AIL
+ WING_DUCKERON
  PD1 1 AILR_IN instead of AIL_SW
  
- CPPM enabled
- PB0 8 CPPM_IN instead of AIL_IN
- PB1 9 FLP_OUT instead of ELE_IN
- PB2 10 THR_OUT instead of RUD_IN
- PB3 11 AUX2_OUT instead of AUX_IN
+ SERIALRX
+ PB0 8 CPPM_IN
+ PB1 9 FLP_OUT
+ PB2 10 THR_OUT
+ PB3 11 AUX2_OUT
 */
 
 #define DEVICE_ID DEVICE_RX3S_V2V3
@@ -205,9 +200,6 @@ bool ow_loop(); // OneWireSerial.ino
  PB5 13 LED (SCK)         PC5 19/A5 (SCL)          PD5 5 AILL_OUT (PWM) V2=ELE_OUT
  PB6 14 (XTAL1)           PC6 (RESET)              PD6 6 ELE_OUT (PWM)  V2=RUD_OUT
  PB7 15 (XTAL2)                                    PD7 7 RUD_OUT        V2=AILR_OUT
- 
- AIL_SINGLE mode (DEFAULT SETTING)
- (no change)
 */
 
 #define DEVICE_ID DEVICE_RX3SM
@@ -262,8 +254,8 @@ bool ow_loop(); // OneWireSerial.ino
  PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5  THR_OUT (OC3A/OC4A_) | PD6 12         (OC4D_)     | PE6 7 THR/AUX2_IN (INT6) | PF6 19/A1 SV (ADC6)
  PB7 11 RUD_OUT (PCINT7/OC0A/OC1C)  | PC7 13 AILR_OUT (OC4A/ICP3)  | PD7  6 FLP_OUT (OC4D)      |                          | PF7 18/A0 SV (ADC7)
  
- CPPM enabled
- PE6 7 CPPM_IN instead of THR/AUX2_IN
+ SERIALRX
+ PE6 7 CPPM_IN
 */
 
 #define DEVICE_ID DEVICE_NANOWII
@@ -379,17 +371,16 @@ bool ow_loop(); // OneWireSerial.ino
  HK MINI MWC with DSM2 RX
  PB0 8/D8   CPPM_EXT/pad    PC0 14/A0 One-Wire       PD0 0/D0 (RXD)
  PB1 9/D9   THR_OUT (PWM)   PC1 15/A1 rsvd/CPPM_EXT  PD1 1/D1 (TXD)
- PB2 10/D10 FLP_OUT (PWM)   PC2 16/A2 Voltage Mon    PD2 2/D2 CPPM_INT
+ PB2 10/D10 FLP_OUT (PWM)   PC2 16/A2 AUX2_OUT       PD2 2/D2 CPPM_INT
  PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 AIL_OUT (PWM)
  PB4 12/D12 no connection   PC4 18/A4 (SDA)          PD4 4/D4 spare/conn
  PB5 13/D13 LED (SCK)       PC5 19/A5 (SCL)          PD5 5/D5 ELE_OUT (PWM)
  PB6 14/D14 (XTAL1)         PC6 (RESET)              PD6 6/D6 RUD_OUT (PWM)
  PB7 15/D15 (XTAL2)                                  PD7 7/D7 spare/pad
  
- PC1 A1 is external facing and reserved for CPPM_EXT use. needs to short with PB0 D8 
- CPPM enabled
- PD2 D2 CPPM_IN for onboard RX 
- PB0 D8 CPPM_IN External RX
+ SERIALRX
+ PD2 D2 CPPM_IN internal RX 
+ PB0 D8 CPPM_IN external RX. PC1 A1 is external facing, short this with PB0 D8.
 */
 
 #define DEVICE_ID DEVICE_MINI_MWC
@@ -407,7 +398,7 @@ bool ow_loop(); // OneWireSerial.ino
 #define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SERVO>
-#define PWM_CHAN_PIN {6, 5, 3, 10, -1, 11, -1, 9} // RETA1a2F TODO(noobee): add AUX2_OUT pin
+#define PWM_CHAN_PIN {6, 5, 3, 10, -1, 11, 16, 9} // RETA1a2F
 #define PWM_CHAN_PIN_SERIALRX PWM_CHAN_PIN // same pwm output list
 
 // <IMU>
@@ -679,8 +670,8 @@ enum STAB_MODE {STAB_RATE, STAB_HOLD};
 enum STAB_MODE stab_mode = STAB_RATE;
 
 // DELTA DUAL_AIL mode
-enum LINKED_MODE {LINKED_SLOW, LINKED_NORMAL, LINKED_AGGRESSIVE};
-enum LINKED_MODE linked_mode = LINKED_NORMAL;
+enum LINKED_MODE {LINKED_FLAPONLY, LINKED_FLAPPERON, LINKED_FLAPPERONEVATOR};
+enum LINKED_MODE linked_mode = LINKED_FLAPPERON;
 
 const int16_t stick_gain_max = 400; // [1100-1500] or [1900-1500] => [0-STICK_GAIN_MAX]
 const int16_t master_gain_max = 400; // [1500-1100] or [1500-1900] => [0-MASTER_GAIN_MAX]
@@ -1685,14 +1676,16 @@ void copy_rx_in()
   ail_in2 = (tmp = ail_in) == ail_in ? tmp : ail_in2;
   ele_in2 = (tmp = ele_in) == ele_in ? tmp : ele_in2;
   rud_in2 = (tmp = rud_in) == rud_in ? tmp : rud_in2;
-  ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
   aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
   aux2_in2 = (tmp = aux2_in) == aux2_in ? tmp : aux2_in2;
   thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
   flp_in2 = (tmp = flp_in) == flp_in ? tmp : flp_in2;
   
-  if (wing_mode == WING_RUDELE_1AIL)
+  if (wing_mode <= WING_VTAIL_1AIL) 
+    // WING_RUDELE_1AIL, WING_DELTA_1AIL, WING_VTAIL_1AIL
     ailr_in2 = ail_in2;
+  else
+    ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
 }
 
 void apply_mixer_change(int16_t *change) 
@@ -1703,7 +1696,7 @@ void apply_mixer_change(int16_t *change)
   // tx = MID + (stick[x] + change[x]) * mult, where mult = 1/1, 3/2, 5/4
   
   // mixer
-  int16_t tmp0, tmp1, tmp2;
+  int16_t tmp0, tmp1, tmp2, tmp3;
   switch (wing_mode) {
   case WING_RUDELE_1AIL:
   case WING_RUDELE_2AIL:
@@ -1712,25 +1705,67 @@ void apply_mixer_change(int16_t *change)
     ele_out2 = ele_in2 + change[1];
     rud_out2 = rud_in2 + change[2];
     break;
+    
   case WING_DELTA_1AIL:
-    tmp0 =  ail_in2 + change[0];
+    // input: ail=ailr=ail, ele=ele, rud=rud
+    // output: ail=delta2, ailr=ail, ele=delta1, rud=rud
+  case WING_DELTA_2AIL:
+    // input: ail=ail, ailr=ailr ele=ele, rud=linked 
+    // output: ail=ail, ailr=ailr, ele=delta1, rud=delta2
+
+    // set up for WING_DELTA_2AIL pin mapping first
+    ail_out2 = ail_in2 + change[0];
+    ailr_out2 = ailr_in2 + change[0];
+    tmp0 =  ail_in2_offset + RX_WIDTH_MID + change[0];
     tmp1 =  ele_in2 + change[1];
+    
     // apply 100% (1/1)
-    //ail_out2 = ((tmp0 + tmp1) >> 1);
-    //ele_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
+    //ele_out2 = ((tmp0 + tmp1) >> 1);
+    //rud_out2 = ((tmp0 - tmp1) >> 1) + RX_WIDTH_MID;
+
     // apply 125% (5/4)
     tmp2 = tmp0 + tmp1;
-    ail_out2 = (tmp2 >> 1) + (tmp2 >> 3) - (RX_WIDTH_MID >> 2);
+    ele_out2 = (tmp2 >> 1) + (tmp2 >> 3) - (RX_WIDTH_MID >> 2);
     tmp2 = tmp0 - tmp1;
-    ele_out2 = (tmp2 >> 1) + (tmp2 >> 3) + RX_WIDTH_MID;
+    rud_out2 = (tmp2 >> 1) + (tmp2 >> 3) + RX_WIDTH_MID;
+
     // apply 150% (3/2)
     //tmp2 = tmp0 + tmp1;
-    //ail_out2 = tmp2 - (tmp2 >> 2) - (RX_WIDTH_MID >> 1);
+    //ele_out2 = tmp2 - (tmp2 >> 2) - (RX_WIDTH_MID >> 1);
     //tmp2 = tmp0 - tmp1;
-    //ele_out2 = tmp2 - (tmp2 >> 2) + RX_WIDTH_MID;
-    rud_out2 = rud_in2 + change[2];
+    //rud_out2 = tmp2 - (tmp2 >> 2) + RX_WIDTH_MID;
+    
+    if (wing_mode == WING_DELTA_2AIL) {
+      // rud_in2 == LINKED mode input
+      enum LINKED_MODE linked_mode = rud_in2 < 1250 ? LINKED_FLAPONLY : 
+                                     rud_in2 > 1400 && rud_in2 < 1600 ? LINKED_FLAPPERON : 
+                                     rud_in2 > 1750 ? LINKED_FLAPPERONEVATOR :
+                                     linked_mode;
+
+      switch (linked_mode) {
+        case LINKED_FLAPONLY: // flaps only
+          tmp0 = ((ail_in2 - ail_in2_mid) - (ailr_in2 - ailr_in2_mid)) >> 1; // flap-only offset
+          ail_out2 = RX_WIDTH_MID + tmp0;
+          ailr_out2 = RX_WIDTH_MID - tmp0;
+        break;
+        case LINKED_FLAPPERON: // flaps and roll
+          // ail_out2 and ailr_out2 are already regular flapperons
+        break;
+        case LINKED_FLAPPERONEVATOR: // flaps, roll and pitch
+          tmp0 = (ele_in2_offset + change[1]) >> 1; // TODO(noobee): apply scaling to tmp0?
+          ail_out2 += tmp0;
+          ailr_out2 -= tmp0;
+        break;
+      }
+    } else {
+      // shuffle outputs for WING_DELTA_1AIL pin mapping
+      ail_out2 = rud_out2;  // ail_out=delta2, ele_out=delta1
+      rud_out2 = rud_in2 + change[2]; // rud_out
+    }
     break;
+    
   case WING_VTAIL_1AIL:
+  case WING_VTAIL_2AIL:
     ail_out2 = ail_in2 + change[0];
     ailr_out2 = ailr_in2 + change[0];
     tmp1 =  ele_in2 + change[1];
@@ -1741,39 +1776,22 @@ void apply_mixer_change(int16_t *change)
     tmp0 = tmp2 - tmp1;
     rud_out2 = (tmp0 >> 1) + (tmp0 >> 3) + RX_WIDTH_MID;    
     break;
+    
+  case WING_DUCKERON:
+    // input: ail=ail, ele=ele, rud=rud, ailr_in=brake
+    // output: ail=top1, ailr=top2, ele=bot1, rud=bot2
+		// TODO(noobee): apply scaling to tmp*?
+    tmp0 = ail_in2_offset + change[0]; // roll
+    tmp1 = ele_in2_offset + change[1]; // pitch
+    tmp2 = rud_in2_offset + change[2]; // yaw
+    tmp3 = constrain((ailr_in - RX_WIDTH_LOW_FULL) >> 1, 0, 500); // brake from 0-500
+    ail_out2  = RX_WIDTH_MID + tmp0 + tmp1 + tmp2 + tmp3;
+    ailr_out2 = RX_WIDTH_MID + tmp0 - tmp1 - tmp2 + tmp3;
+    ele_out2  = RX_WIDTH_MID + tmp0 + tmp1 - tmp2 - tmp3;
+    rud_out2  = RX_WIDTH_MID + tmp0 - tmp1 + tmp2 - tmp3;
+    break;
   }
 
-#if 0 ///////////////////////////////////////////////////////////////////////////
-     if (wing_mode == WING_DELTA_1AIL_SINGLE_AIL) {
-      // regular rudder and single aileron
-      rud_out2 = rud_in2 + change[2];
-      ailr_out2 = ailr_in2 + change[0];
-    } else {
-
-      // rud_in2 == LINKED
-      linked_mode = rud_in2 > 1400 && rud_in2 < 1600 ? LINKED_NORMAL : 
-        rud_in2 < 1250 ? LINKED_SLOW : 
-        rud_in2 > 1750 ? LINKED_AGGRESSIVE :
-        linked_mode;
-
-      switch (linked_mode) {
-      case LINKED_SLOW: // flaps
-        tmp0 = ((ail_in2 - ail_in2_mid) - (ailr_in2 - ailr_in2_mid)) >> 1; // flapperon_offset
-        rud_out2 = ail_in2_mid + tmp0; // rud_out2 == left aileron
-        ailr_out2 = ailr_in2_mid - tmp0;
-        break;
-      case LINKED_NORMAL: // ail and flaps
-        rud_out2 = ail_in2 + change[0]; // rud_out2 == ail_out2 (left aileron)
-        ailr_out2 = ailr_in2 + change[0];
-        break;
-      case LINKED_AGGRESSIVE: // ele, ail and flaps 
-        rud_out2 = (ail_in2 + change[0]) + (ele_in2_offset + change[1]);
-        ailr_out2 = (ailr_in2 + change[0]) - (ele_in2_offset + change[1]);
-        break;
-      }
- #endif ///////////////////////////////////////////////////////////////////////////
-
-  
   // throttle, flap and aux2 pass through
   thr_out2 = thr_in2;  
   flp_out2 = flp_in2;  
@@ -2224,7 +2242,7 @@ void setup()
   pserialrx_order = serialrx_order_RETA1a2f;
 #endif
   for (i=0; i<rx_chan_size; i++) cfg.serialrx_order[i] = pserialrx_order[i];
-  cfg.serialrx_spektrum_levels = SERIALRX_SPEKTRUM_LEVELS_1024;
+  cfg.serialrx_spektrum_levels = SERIALRX_SPEKTRUM_LEVELS_2048;
   cfg.mount_orient = MOUNT_NORMAL;
   cfg.stick_gain_throw = STICK_GAIN_THROW_FULL;
   cfg.max_rotate = MAX_ROTATE_MED;
@@ -2374,74 +2392,65 @@ void setup()
   init_digital_in_sw(); // sw
   read_switches();
 
-
   wing_mode = cfg.wing_mode;
   
   // device-specific modes and pin assignment differences
-  
   const enum WING_MODE dip_sw_to_wing_mode_map[] = {
-    WING_RUDELE_2AIL, // 0=rev / 0=rev
-    WING_VTAIL_1AIL, // 0=rev / 1=norm
-    WING_DELTA_1AIL, // 1=norm / 0=rev
-    WING_RUDELE_1AIL // 1=norm / 1=norm
-  };
-
-  const enum WING_MODE dip_sw_to_wing_mode_map2[] = {
-    WING_RUDELE_1AIL,
-    WING_DELTA_1AIL,
-    WING_VTAIL_1AIL,
-    WING_RUDELE_2AIL,
-    WING_DELTA_2AIL,
-    WING_VTAIL_2AIL,
-    WING_DUCKERON
+    WING_RUDELE_1AIL, // 000
+    WING_DELTA_1AIL,  // 001
+    WING_VTAIL_1AIL,  // 010
+    WING_RUDELE_2AIL, // 011
+    WING_DUCKERON,    // 100
+    WING_DELTA_2AIL,  // 101
+    WING_VTAIL_2AIL,  // 110
+    WING_RUDELE_1AIL  // 111 unused, set to WING_RUDELE_1AIL
   };
 
 #if defined(RX3S_V1)
-
-  wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
+  wing_mode = (cfg.wing_mode == WING_USE_DIPSW) ? 
+    dip_sw_to_wing_mode_map[(rud_sw ? 0 : 2) | (ele_sw ? 0 : 1)] : 
+    cfg.wing_mode;
 
 #if !defined(SERIALRX_ENABLED)
-  switch (wing_mode) {
-  case WING_RUDELE_1AIL:
-  case WING_DELTA_1AIL:
-  case WING_VTAIL_1AIL:
+  if (wing_mode >= WING_RUDELE_1AIL && wing_mode <= WING_VTAIL_1AIL) {
+    // PB3 11 NONE instead of AUX_IN
+    // PB4 12 NONE instead of AILR_IN
     // PD7 7 AUX_IN instead of AILR_OUT
+    rx_portb[3] = NULL; // disable aux_in at PB3
+    rx_portb[4] = NULL; // disable ailr_in
     pwm_chan_pin[SERIALRX_a] = -1; // disable ailr_out
-    rx_portd[7] = &aux_in; // enable aux_in
-    break;
-  case WING_RUDELE_2AIL:
-    // PB3 11 AUX_IN instead of MOSI
-    // PB4 12 AILR_IN instead of MISO
-    rx_portb[3] = &aux_in; // enable aux_in
-    rx_portb[4] = &ailr_in; // enable ailr_in
-    break;
-  }  
+    rx_portd[7] = &aux_in; // enable aux_in at PD7
+  }
 #endif // !SERIALRX_ENABLED
 #endif // RX3S_V1
 
-#if defined(RX3S_V2) || defined(RX3SM)
+#if defined(RX3S_V2)
+  wing_mode = (cfg.wing_mode == WING_USE_DIPSW) ? 
+    dip_sw_to_wing_mode_map[(ele_sw ? 0 : 4) | (vtail_sw ? 0 : 2) | (delta_sw ? 0 : 1)] : 
+    cfg.wing_mode;
 
-  wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(vtail_sw ? 2 : 0) | (delta_sw ? 1 : 0)] : cfg.wing_mode;
-  
 #if !defined(SERIALRX_ENABLED)
-  if (wing_mode == WING_RUDELE_2AIL) {
-    if (ele_sw) {
-      // WING_RUDELE_2AIL mode A
-      // PB3 11 AILR_IN instead of AUX_IN
-      rx_portb[3] = &ailr_in; // replace aux_in
-    } else {
-      // WING_RUDELE_2AIL mode B
-      // PD1 1 AILR_IN instead of AIL_SW
-      din_portd[1] = NULL; // disable ail_sw
-      rx_portd[1] = &ailr_in; // enable ailr_in
-    }
+  if (wing_mode >= WING_RUDELE_2AIL && wing_mode <= WING_DUCKERON) {
+    // PD1 1 AILR_IN instead of AIL_SW
+    din_portd[1] = NULL; // disable ail_sw, must be set to NOR
+    rx_portd[1] = &ailr_in; // enable ailr_in
   }
 #endif // !SERIALRX_ENABLED
-#endif // RX3S_V2  || RX3SM
+#endif // RX3S_V2
+
+#if defined(RX3SM)
+  wing_mode = (cfg.wing_mode == WING_USE_DIPSW) ? 
+    dip_sw_to_wing_mode_map[(vtail_sw ? 0 : 2) | (delta_sw ? 0 : 1)] : 
+    cfg.wing_mode;
+
+  if (wing_mode > WING_VTAIL_1AIL) // constrain to supported modes
+    wing_mode = WING_RUDELE_1AIL;
+#endif // RX3SM
 
 #if defined(EAGLE_A3PRO) // TODO(noobee): can be folded into rx3s v1?
-
-  wing_mode = cfg.wing_mode == WING_USE_DIPSW ? dip_sw_to_wing_mode_map[(ele_sw ? 2 : 0) | (rud_sw ? 1 : 0)] : cfg.wing_mode;
+  wing_mode = (cfg.wing_mode == WING_USE_DIPSW) ? 
+    dip_sw_to_wing_mode_map[(ele_sw ? 0 : 2) | (rud_sw ? 0 : 1)] : 
+    cfg.wing_mode;
 
 #if !defined(SERIALRX_ENABLED)
   switch (wing_mode) {
