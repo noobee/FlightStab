@@ -75,8 +75,9 @@ endif (NOT TODAY)
 # defines = semicolon-separated list of key-value pairs "RX3S_V1;DEF=VAL;DEF2=VAL2"
 
 # AQUASTAR/DLUX Programming Box
-add_arduino_firmware(${TODAY}_AQUASTAR Aquastar atmega8 "AQUASTAR")
-add_arduino_firmware(${TODAY}_DLUX Aquastar atmega8 "DLUX")
+add_arduino_firmware(${TODAY}_AQUASTAR Aquastar atmega8 "USE_SERIAL_LIGHT;AQUASTAR")
+add_arduino_firmware(${TODAY}_DLUX Aquastar atmega8 "USE_SERIAL_LIGHT;DLUX")
+add_arduino_firmware(${TODAY}_TGY160A Aquastar pro5v "TGY160A")
 
 # NANOWII
 add_arduino_firmware(${TODAY}_NANOWII FlightStab leonardo "NANOWII")
@@ -115,4 +116,3 @@ add_arduino_firmware(TEST_RX3S_V2_I2CDEVLIB FlightStab pro5v "RX3S_V2;USE_I2CDEV
 add_arduino_firmware(TEST_RX3S_V2_NO_ONEWIRE FlightStab pro5v "RX3S_V2;NO_ONEWIRE")
 add_arduino_firmware(TEST_RX3S_V2_NO_STICKCONFIG FlightStab pro5v "RX3S_V2;NO_STICKCONFIG")
 
-        

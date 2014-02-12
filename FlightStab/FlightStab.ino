@@ -958,7 +958,7 @@ int8_t mpu6050_init()
 void mpu6050_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
 {
   uint8_t buf[6];
-  i2c_read_buf_reg(MPU6050_ADDR, 0x43, buf, 6);
+  i2c_read_buf_reg(MPU6050_ADDR, 0x43, buf, sizeof(buf));
   *gx = (buf[0] << 8) | (buf[1]);
   *gy = (buf[2] << 8) | (buf[3]);
   *gz = (buf[4] << 8) | (buf[5]);
@@ -967,7 +967,7 @@ void mpu6050_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
 void mpu6050_read_accel(int16_t *ax, int16_t *ay, int16_t *az)
 {
   uint8_t buf[6];
-  i2c_read_buf_reg(MPU6050_ADDR, 0x3B, buf, 6);
+  i2c_read_buf_reg(MPU6050_ADDR, 0x3B, buf, sizeof(buf));
   *ax = (buf[0] << 8) | (buf[1]);
   *ay = (buf[2] << 8) | (buf[3]);
   *az = (buf[4] << 8) | (buf[5]);
@@ -990,7 +990,7 @@ int8_t itg3205_init()
 void itg3205_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
 {
   uint8_t buf[6];
-  i2c_read_buf_reg(ITG3205_ADDR, 0x1D, buf, 6);
+  i2c_read_buf_reg(ITG3205_ADDR, 0x1D, buf, sizeof(buf));
   *gx = (buf[0] << 8) | (buf[1]);
   *gy = (buf[2] << 8) | (buf[3]);
   *gz = (buf[4] << 8) | (buf[5]);
@@ -1000,7 +1000,8 @@ void itg3205_read_gyro(int16_t *gx, int16_t *gy, int16_t *gz)
  * ANALOG IN (VR)
  ***************************************************************************************************************/
 
-volatile uint8_t *adc_portc[] = AIN_PORTC;
+const int8_t adc_portc_size = 6;
+volatile uint8_t *adc_portc[adc_portc_size] = AIN_PORTC;
 
 void start_adc(uint8_t ch)
 {
@@ -1010,7 +1011,7 @@ void start_adc(uint8_t ch)
 
 void start_next_adc(uint8_t ch)
 {
-  while (ch < 8) { // start next adc channel that has a valid mapping
+  while (ch < adc_portc_size) { // start next adc channel that has a valid mapping
     if (adc_portc[ch]) {
       start_adc(ch);
       break;
@@ -1029,7 +1030,7 @@ ISR(ADC_vect)
 void init_analog_in()
 {
   int8_t i;
-  for (i=0; i<6; i++) {
+  for (i=0; i<adc_portc_size; i++) {
     if (adc_portc[i]) {
       DDRC &= ~(1 << i); // set to input mode
       PORTC &= ~(1 << i); // do not enable internal pullup
@@ -1046,13 +1047,14 @@ void init_analog_in()
  * DIGITAL IN (DIP SW)
  ***************************************************************************************************************/
 
-int8_t *din_portb[] = DIN_PORTB;
-int8_t *din_portc[] = DIN_PORTC;
-int8_t *din_portd[] = DIN_PORTD;
+const int8_t din_port_size = 8;
+int8_t *din_portb[din_port_size] = DIN_PORTB;
+int8_t *din_portc[din_port_size] = DIN_PORTC;
+int8_t *din_portd[din_port_size] = DIN_PORTD;
 
 void init_digital_in_port_list(int8_t **pport_list, volatile uint8_t *pDDR, volatile uint8_t *pPORT)
 {
-  for (int8_t i=0; i<8; i++) {
+  for (int8_t i=0; i<din_port_size; i++) {
     if (pport_list[i]) {
       *pDDR &= ~(1 << i); // set to input mode
       *pPORT |= (1 << i); // enable internal pullup
@@ -1069,7 +1071,7 @@ void init_digital_in_sw()
 
 void read_switches()
 {
-  for (int8_t i=0; i<8; i++) {
+  for (int8_t i=0; i<din_port_size; i++) {
     if (din_portb[i])
      *din_portb[i] = PINB & (1 << i);
     if (din_portc[i])
@@ -1209,7 +1211,7 @@ ISR(PCINT0_vect)
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
-  static uint16_t rise_time[8];
+  static uint16_t rise_time[rx_port_size];
   static uint8_t last_pin;
   uint16_t now;
   uint8_t pin, last_pin2, diff, rise;
@@ -1223,7 +1225,7 @@ ISR(PCINT2_vect)
   diff = pin ^ last_pin2;
   rise = pin & ~last_pin2;
 
-  for (int8_t i = 0; i < 8; i++) {
+  for (int8_t i=0; i<rx_port_size; i++) {
     if (rx_portd[i] && diff & (1 << i)) {
       if (rise & (1 << i)) {
         rise_time[i] = now;
@@ -1298,7 +1300,7 @@ void init_digital_in_rx()
 
   // PORTB RX
   PCICR |= (1 << PCIE0); // interrupt on pin change
-  for (int8_t i=0; i<8; i++) {
+  for (int8_t i=0; i<rx_port_size; i++) {
     if (rx_portb[i]) {
       PCMSK0 |= 1 << (PCINT0 + i);
       DDRB &= ~(1 << i); // set input mode
@@ -1315,7 +1317,7 @@ void init_digital_in_rx()
 #if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
   // PORTD RX
   PCICR |= (1 << PCIE2); // interrupt on pin change
-  for (int8_t i=0; i<8; i++) {
+  for (int8_t i=0; i<rx_port_size; i++) {
     if (rx_portd[i]) {
       PCMSK2 |= 1 << i;
       DDRD &= ~(1 << i); // set to input mode
@@ -2633,7 +2635,8 @@ again:
     
     // master gain [1500-1100] or [1500-1900] => [0, MASTER_GAIN_MAX] 
     master_gain = constrain(abs(aux_in2 - RX_WIDTH_MID), 0, master_gain_max);     
-        
+    if (master_gain < 25) master_gain = 0; // deadband
+  
     // commanded angular rate (could be from [ail|ele|rud]_in2, note direction/sign)
     if (stab_mode == STAB_HOLD || 
        (stab_mode == STAB_RATE && cfg.rate_mode_stick_rotate == RATE_MODE_STICK_ROTATE_ENABLE)) {

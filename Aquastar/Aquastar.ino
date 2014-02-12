@@ -7,7 +7,7 @@
 
 #include "FlightStab.h"
 
-#define USE_SERIAL_LIGHT // use lightweight serial routines (atmega8 115200 poll-based)
+//#define USE_SERIAL_LIGHT // use lightweight serial routines (atmega8 115200 poll-based)
 
 /*
  Aquastar/DLUX pin mapping
@@ -25,7 +25,7 @@
 #if defined(AQUASTAR)
 const uint8_t button_pin[] = {2, 3, 4, 5}; // up, left, right, down
 #endif 
-#if defined(DLUX)
+#if defined(DLUX) || defined(TGY160A)
 const uint8_t button_pin[] = {2, 3, 5, 4}; // up, left, right, down
 #endif 
 

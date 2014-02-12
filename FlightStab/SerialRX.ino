@@ -49,7 +49,7 @@ int8_t rshift;
     static uint8_t buf[25];
     static int8_t index = 0;
     #if defined (SERIALRX_SBUS)
-      static bool sbus_return = false;
+      bool sbus_return = false;
     #endif // SERIALRX_SBUS  
     
   #if defined (SERIALRX_SPEKTRUM) 	// Used only for Spektrum    
@@ -98,7 +98,7 @@ jrb*/
           for (int8_t i=2; i<2+2*7; i+=2) {
             uint16_t w = ((uint16_t)buf[i] << 8) | (uint16_t)buf[i+1];
             int8_t chan = (w >> rshift) & 0xf;
-            if (chan < 8) {
+            if (chan < rx_chan_size) {
               *rx_chan[chan] = ((w << (11 - rshift) & 0x7ff) - 1024 + 1500); // scale to 11 bits 1024 +/- 684;
             }          
           }

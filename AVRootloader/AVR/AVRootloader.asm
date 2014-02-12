@@ -2,8 +2,16 @@
 
 .nolist
 
-#if defined(AQUASTAR)
+#if defined(AQUASTAR) || defined(DLUX)
 .include "m8def.inc"				; ATmega8    
+.equ	RX_PORT			= PORTD		; Receive port and pin
+.equ	RX					= PD0
+.equ	TX_PORT			= PORTD		; Transmit port and pin
+.equ	TX					= PD0
+#endif
+
+#if defined(TGY160A)
+.include "m168PAdef.inc"		; ATmega168PA
 .equ	RX_PORT			= PORTD		; Receive port and pin
 .equ	RX					= PD0
 .equ	TX_PORT			= PORTD		; Transmit port and pin

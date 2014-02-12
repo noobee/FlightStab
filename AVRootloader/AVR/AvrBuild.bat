@@ -2,6 +2,8 @@
 set AVRASM2PATH=c:\Program Files (x86)\Atmel\Atmel Toolchain\AVR Assembler\Native\2.1.39.1005\avrassembler
 
 call :buildhex AQUASTAR
+call :buildhex DLUX
+call :buildhex TGY160A
 call :buildhex RX3S_V1V2V3_AILR_OUT
 call :buildhex MINI_MWC_A0
 goto :eof
