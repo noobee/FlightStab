@@ -163,7 +163,11 @@ bool ow_loop(); // OneWireSerial.ino
 #define AIN_PORTC {NULL, &ail_vr, &ele_vr, &rud_vr, NULL, NULL}
 
 // <RX> (must in PORT B/D due to ISR)
+#if defined(AILR_IN_ON_RUD_IN) // Use RUD_IN input for AILR_IN - no rudder control
+#define RX_PORTB {&ail_in, &ele_in, &ailr_in, &aux_in, NULL, NULL, NULL, NULL}
+#else
 #define RX_PORTB {&ail_in, &ele_in, &rud_in, &aux_in, NULL, NULL, NULL, NULL}
+#endif
 #define RX_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SWITCH>
