@@ -1699,7 +1699,7 @@ void apply_mixer_change(int16_t *change)
   // tx = MID + (stick[x] + change[x]) * mult, where mult = 1/1, 3/2, 5/4
   
   // mixer
-  int16_t tmp0, tmp1, tmp2;
+  int16_t tmp0, tmp1, tmp2, tmp3;
   switch (wing_mode) {
   case WING_RUDELE_1AIL:
   case WING_RUDELE_2AIL:
@@ -1755,7 +1755,7 @@ void apply_mixer_change(int16_t *change)
           // ail_out2 and ailr_out2 are already regular flapperons
         break;
         case LINKED_FLAPPERONEVATOR: // flaps, roll and pitch
-          tmp0 = (ele_in2_offset + change[1]) >> 1; // TODO(noobee): use rud_vr to apply scaling to tmp0?
+          tmp0 = (int32_t)((ele_in2_offset + change[1])) * ((int16_t)rud_vr - 128) >> 7; // rud_vr scales -1.0 to +1.0
           ail_out2 += tmp0;
           ailr_out2 -= tmp0;
         break;
@@ -1783,22 +1783,14 @@ void apply_mixer_change(int16_t *change)
   case WING_DUCKERON:
     // input: ail=ail, ele=ele, rud=rud, ailr_in=brake
     // output: ail=top1, ailr=top2, ele=bot1, rud=bot2
-		// TODO(noobee): apply scaling to tmp*?
     tmp0 = (ail_in2 - ail_in2_mid) + change[0]; // roll
     tmp1 = ele_in2_offset + change[1]; // pitch
-    tmp2 = constrain((ailr_in - RX_WIDTH_LOW_FULL) >> 1, 0, 500); // brake from 0-500
-    ail_out2  = RX_WIDTH_MID + tmp0 + tmp1 - tmp2; // top1
-    ailr_out2 = RX_WIDTH_MID + tmp0 - tmp1 + tmp2; // top2
-    ele_out2  = RX_WIDTH_MID + tmp0 + tmp1 + tmp2; // bot1
-    rud_out2  = RX_WIDTH_MID + tmp0 - tmp1 - tmp2; // bot2
     tmp2 = rud_in2_offset + change[2]; // yaw
-    if (tmp2 > 0) {
-      ailr_out2 += tmp2; // top2
-      rud_out2  -= tmp2; // bot2
-    } else {
-      ail_out2 += tmp2; // top1
-      ele_out2 -= tmp2; // bot1
-    }
+    tmp3 = constrain((ailr_in - RX_WIDTH_LOW_FULL) >> 1, 0, 500); // brake from 0-500
+    ail_out2  = RX_WIDTH_MID + tmp0 + tmp1 - max(0, -tmp2 + tmp3); // top1
+    ailr_out2 = RX_WIDTH_MID + tmp0 - tmp1 + max(0,  tmp2 + tmp3); // top2
+    ele_out2  = RX_WIDTH_MID + tmp0 + tmp1 + max(0, -tmp2 + tmp3); // bot1
+    rud_out2  = RX_WIDTH_MID + tmp0 - tmp1 - max(0,  tmp2 + tmp3); // bot2
     break;
   }
 
