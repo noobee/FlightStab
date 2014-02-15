@@ -1676,19 +1676,19 @@ void copy_rx_in()
 {
   // lock-free method to copy isr-owned *_in vars to *_in2 vars
   int16_t tmp;
-  ail_in2 = (tmp = ail_in) == ail_in ? tmp : ail_in2;
-  ele_in2 = (tmp = ele_in) == ele_in ? tmp : ele_in2;
-  rud_in2 = (tmp = rud_in) == rud_in ? tmp : rud_in2;
-  aux_in2 = (tmp = aux_in) == aux_in ? tmp : aux_in2;
-  aux2_in2 = (tmp = aux2_in) == aux2_in ? tmp : aux2_in2;
-  thr_in2 = (tmp = thr_in) == thr_in ? tmp : thr_in2;
-  flp_in2 = (tmp = flp_in) == flp_in ? tmp : flp_in2;
-  
+  if ((tmp = ail_in) == ail_in) ail_in2 = tmp;
+  if ((tmp = ele_in) == ele_in) ele_in2 = tmp;
+  if ((tmp = rud_in) == rud_in) rud_in2 = tmp;
+  if ((tmp = aux_in) == aux_in) aux_in2 = tmp;
+  if ((tmp = aux2_in) == aux2_in) aux2_in2 = tmp;
+  if ((tmp = thr_in) == thr_in) thr_in2 = tmp;
+  if ((tmp = flp_in) == flp_in) flp_in2 = tmp;
+
   if (wing_mode <= WING_VTAIL_1AIL) 
     // WING_RUDELE_1AIL, WING_DELTA_1AIL, WING_VTAIL_1AIL
     ailr_in2 = ail_in2;
   else
-    ailr_in2 = (tmp = ailr_in) == ailr_in ? tmp : ailr_in2;
+    if ((tmp = ailr_in) == ailr_in) ailr_in2 = tmp;
 }
 
 void apply_mixer_change(int16_t *change) 
@@ -1710,10 +1710,10 @@ void apply_mixer_change(int16_t *change)
     break;
     
   case WING_DELTA_1AIL:
-    // input: ail=ailr=ail, ele=ele, rud=rud
+    // input: ail=ailr=roll, ele=pitch, rud=yaw
     // output: ail=delta2, ailr=ail, ele=delta1, rud=rud
   case WING_DELTA_2AIL:
-    // input: ail=ail, ailr=ailr ele=ele, rud=linked 
+    // input: ail=ail, ailr=ailr ele=pitch, rud=linked 
     // output: ail=ail, ailr=ailr, ele=delta1, rud=delta2
 
     // set up for WING_DELTA_2AIL pin mapping first
@@ -1755,7 +1755,8 @@ void apply_mixer_change(int16_t *change)
           // ail_out2 and ailr_out2 are already regular flapperons
         break;
         case LINKED_FLAPPERONEVATOR: // flaps, roll and pitch
-          tmp0 = (int32_t)((ele_in2_offset + change[1])) * ((int16_t)rud_vr - 128) >> 7; // rud_vr scales -1.0 to +1.0
+          // rud_vr scales tmp0 by -1.0 to +1.0
+          tmp0 = (int32_t)((ele_in2_offset + change[1])) * ((int16_t)rud_vr - 128) >> 7; 
           ail_out2 += tmp0;
           ailr_out2 -= tmp0;
         break;
@@ -1781,16 +1782,16 @@ void apply_mixer_change(int16_t *change)
     break;
     
   case WING_DUCKERON:
-    // input: ail=ail, ele=ele, rud=rud, ailr_in=brake
-    // output: ail=top1, ailr=top2, ele=bot1, rud=bot2
+    // input: ail=roll, ele=pitch, rud=yaw, ailr_in=brake
+    // output: ail=left1, ele=left2, ailr=right1, rud=right2
     tmp0 = (ail_in2 - ail_in2_mid) + change[0]; // roll
     tmp1 = ele_in2_offset + change[1]; // pitch
     tmp2 = rud_in2_offset + change[2]; // yaw
     tmp3 = constrain((ailr_in - RX_WIDTH_LOW_FULL) >> 1, 0, 500); // brake from 0-500
-    ail_out2  = RX_WIDTH_MID + tmp0 + tmp1 - max(0, -tmp2 + tmp3); // top1
-    ailr_out2 = RX_WIDTH_MID + tmp0 - tmp1 + max(0,  tmp2 + tmp3); // top2
-    ele_out2  = RX_WIDTH_MID + tmp0 + tmp1 + max(0, -tmp2 + tmp3); // bot1
-    rud_out2  = RX_WIDTH_MID + tmp0 - tmp1 - max(0,  tmp2 + tmp3); // bot2
+    ail_out2  = RX_WIDTH_MID + tmp0 + tmp1 - max(0, -tmp2 + tmp3); // left1
+    ele_out2  = RX_WIDTH_MID + tmp0 + tmp1 + max(0, -tmp2 + tmp3); // left2
+    ailr_out2 = RX_WIDTH_MID + tmp0 - tmp1 + max(0,  tmp2 + tmp3); // right1
+    rud_out2  = RX_WIDTH_MID + tmp0 - tmp1 - max(0,  tmp2 + tmp3); // right2
     break;
   }
 
@@ -2000,9 +2001,9 @@ bool stick_zone_update(struct _stick_zone *psz)
   bool moved;
 
   psz->prev = psz->curr;
-  psz->zx = (tmp = stick_zone(ail_in2, psz->zx_rev)) >= 0 ? tmp : psz->zx; // hysteresis
-  psz->zy = (tmp = stick_zone(ele_in2, psz->zy_rev)) >= 0 ? tmp : psz->zy;
-    
+  if ((tmp = stick_zone(ail_in2, psz->zx_rev)) >= 0) psz->zx = tmp; // hysteresis
+  if ((tmp = stick_zone(ele_in2, psz->zy_rev)) >= 0) psz->zy = tmp;
+  
   // we assume that the first corner visited bottom left (position 7)
   // so stick on the left if the AIL pulse is at either horizontal end
   if (!psz->zx_sided && (psz->zx == 0 || psz->zx == 2)) {
