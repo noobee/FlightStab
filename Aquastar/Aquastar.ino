@@ -224,7 +224,7 @@ const int8_t subpage_max[] = { // index = PARAM_TYPE enum
   0, // PARAM_VAL
   serialrx_num_chan-1, // PARAM_SERIALRX_ORDER
   sizeof(cfg.vr_gain)/sizeof(cfg.vr_gain[0])-1, // PARAM_VR_GAIN
-  9, // PARAM_PID: [kp/ki/kd=3][axis=3]
+  9-1, // PARAM_PID: [kp/ki/kd=3][axis=3]
   0  // PARAM_EEPROM
 }; 
 
