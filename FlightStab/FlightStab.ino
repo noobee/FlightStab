@@ -2399,7 +2399,6 @@ void setup()
   init_digital_in_sw(); // sw
   read_switches();
 
-  // device-specific modes and pin assignment differences
   const enum WING_MODE dip_sw_to_wing_mode_map[] = {
     WING_RUDELE_1AIL, // 000
     WING_DELTA_1AIL,  // 001
@@ -2412,6 +2411,10 @@ void setup()
   };
 
   wing_mode = cfg.wing_mode; // assume cfg.wing_mode first
+  
+  //
+  // device-specific modes and pin assignment differences
+  //
   
 #if defined(RX3S_V1)
   if (cfg.wing_mode == WING_USE_DIPSW)
@@ -2452,7 +2455,7 @@ void setup()
 #endif // RX3SM
 
 #if defined(EAGLE_A3PRO) // TODO(noobee): need to verify functions
-#if defined(SERIALRX_SBUS) || defined(SERIALRX_SPEKTRUM)
+#if !(defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
   if (cfg.wing_mode == WING_USE_DIPSW)
     wing_mode = dip_sw_to_wing_mode_map[(ele_sw ? 0 : 2) | (rud_sw ? 0 : 1)];
 #endif
