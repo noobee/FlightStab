@@ -255,7 +255,7 @@ bool ow_loop(); // OneWireSerial.ino
  PB3 14  ELE_IN (MISO/PCINT3)       |                              | PD3  1     TXD (TXD)       |                          |
  PB4  8  AUX_IN (PCINT4)            |                              | PD4  4      SV (ADC8/ICP1) |                          | PF4 21/A3 SV (ADC4)
  PB5  9 AIL_OUT (PCINT5/OC1A/OC4B_) |                              | PD5            (TXLED)     |                          | PF5 20/A2 SV (ADC5)
- PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5  THR_OUT (OC3A/OC4A_) | PD6 12         (OC4D_)     | PE6 7 THR/AUX2_IN (INT6) | PF6 19/A1 SV (ADC6)
+ PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5  THR_OUT (OC3A/OC4A_) | PD6 12         (OC4D_)     | PE6 7 THR/AILR_IN (INT6) | PF6 19/A1 SV (ADC6)
  PB7 11 RUD_OUT (PCINT7/OC0A/OC1C)  | PC7 13 AILR_OUT (OC4A/ICP3)  | PD7  6 FLP_OUT (OC4D)      |                          | PF7 18/A0 SV (ADC7)
  
  SERIALRX
@@ -344,8 +344,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define DIN_PORTD {&ail_sw, &ele_sw, &rud_sw, NULL, NULL, NULL, NULL, NULL}
 
 // <SERVO>
-#define PWM_CHAN_PIN {6, 5, -1, 4, -1, 7, -1, -1} // RETA1a2F
-#define PWM_CHAN_PIN_SERIALRX {6, 5, 10, 4, -1, 7, 11, 9} // RETA1a2F
+#define PWM_CHAN_PIN {7, 6, -1, 5, -1, 4, -1, -1} // RETA1a2F
+#define PWM_CHAN_PIN_SERIALRX {7, 6, 10, 4, -1, 4, 11, 9} // RETA1a2F
 
 // <IMU>
 #define USE_ITG3200
@@ -1246,7 +1246,7 @@ ISR(PCINT2_vect)
 #endif // __AVR_ATmega168__ || __AVR_ATmega328__
 
 #if defined(__AVR_ATmega32U4__) // nanowii only
-// PE6 MUST BE aux2_in
+// PE6 MUST BE ailr_in
 ISR(INT6_vect)
 {
   static uint16_t rise_time;
@@ -1266,7 +1266,7 @@ ISR(INT6_vect)
   } else {
     uint16_t width = (now - rise_time) >> (F_CPU == F_16MHZ ? 1 : 0);
     if (width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-      aux2_in = width;
+      ailr_in = width;
     }
   }
 }
@@ -1791,7 +1791,7 @@ void apply_mixer_change(int16_t *change)
     tmp0 = (ail_in2 - ail_in2_mid) + change[0]; // roll
     tmp1 = ele_in2_offset + change[1]; // pitch
     tmp2 = rud_in2_offset + change[2]; // yaw
-    tmp3 = constrain((ailr_in - RX_WIDTH_LOW_FULL) >> 1, 0, 500); // brake from 0-500
+    tmp3 = constrain((ailr_in - RX_WIDTH_LOW_NORM) >> 1, 0, 500); // brake from 0-500
     ail_out2  = RX_WIDTH_MID + tmp0 + tmp1 - max(0, -tmp2 + tmp3); // left1
     ele_out2  = RX_WIDTH_MID + tmp0 + tmp1 + max(0, -tmp2 + tmp3); // left2
     ailr_out2 = RX_WIDTH_MID + tmp0 - tmp1 + max(0,  tmp2 + tmp3); // right1
@@ -2399,8 +2399,6 @@ void setup()
   init_digital_in_sw(); // sw
   read_switches();
 
-  wing_mode = cfg.wing_mode;
-  
   // device-specific modes and pin assignment differences
   const enum WING_MODE dip_sw_to_wing_mode_map[] = {
     WING_RUDELE_1AIL, // 000
@@ -2413,28 +2411,28 @@ void setup()
     WING_RUDELE_1AIL  // 111 unused, set to WING_RUDELE_1AIL
   };
 
+  wing_mode = cfg.wing_mode; // assume cfg.wing_mode first
+  
 #if defined(RX3S_V1)
-  wing_mode = (cfg.wing_mode == WING_USE_DIPSW) ? 
-    dip_sw_to_wing_mode_map[(rud_sw ? 0 : 2) | (ele_sw ? 0 : 1)] : 
-    cfg.wing_mode;
+  if (cfg.wing_mode == WING_USE_DIPSW)
+    wing_mode = dip_sw_to_wing_mode_map[(rud_sw ? 0 : 2) | (ele_sw ? 0 : 1)];
 
 #if !defined(SERIALRX_ENABLED)
   if (wing_mode >= WING_RUDELE_1AIL && wing_mode <= WING_VTAIL_1AIL) {
-    // PB3 11 NONE instead of AUX_IN
-    // PB4 12 NONE instead of AILR_IN
-    // PD7 7 AUX_IN instead of AILR_OUT
-    rx_portb[3] = NULL; // disable aux_in at PB3
+    // disable AILR_OUT (was at PD7)
+    // disable AILR_IN at PB4
+    // move AUX_IN from PB3 to PD7
+    pwm_chan_pin[SERIALRX_a] = -1; // disable ailr_out    
     rx_portb[4] = NULL; // disable ailr_in
-    pwm_chan_pin[SERIALRX_a] = -1; // disable ailr_out
+    rx_portb[3] = NULL; // disable aux_in at PB3
     rx_portd[7] = &aux_in; // enable aux_in at PD7
   }
 #endif // !SERIALRX_ENABLED
 #endif // RX3S_V1
 
 #if defined(RX3S_V2)
-  wing_mode = (cfg.wing_mode == WING_USE_DIPSW) ? 
-    dip_sw_to_wing_mode_map[(ele_sw ? 0 : 4) | (vtail_sw ? 0 : 2) | (delta_sw ? 0 : 1)] : 
-    cfg.wing_mode;
+  if (cfg.wing_mode == WING_USE_DIPSW)
+    wing_mode = dip_sw_to_wing_mode_map[(ele_sw ? 0 : 4) | (vtail_sw ? 0 : 2) | (delta_sw ? 0 : 1)];
 
 #if !defined(SERIALRX_ENABLED)
   if (wing_mode >= WING_RUDELE_2AIL && wing_mode <= WING_DUCKERON) {
@@ -2446,30 +2444,22 @@ void setup()
 #endif // RX3S_V2
 
 #if defined(RX3SM)
-  wing_mode = (cfg.wing_mode == WING_USE_DIPSW) ? 
-    dip_sw_to_wing_mode_map[(vtail_sw ? 0 : 2) | (delta_sw ? 0 : 1)] : 
-    cfg.wing_mode;
+  if (cfg.wing_mode == WING_USE_DIPSW)
+    wing_mode = dip_sw_to_wing_mode_map[(vtail_sw ? 0 : 2) | (delta_sw ? 0 : 1)];
 
   if (wing_mode > WING_VTAIL_1AIL) // constrain to supported modes
     wing_mode = WING_RUDELE_1AIL;
 #endif // RX3SM
 
-#if defined(EAGLE_A3PRO) // TODO(noobee): can be folded into rx3s v1?
-  wing_mode = (cfg.wing_mode == WING_USE_DIPSW) ? 
-    dip_sw_to_wing_mode_map[(ele_sw ? 0 : 2) | (rud_sw ? 0 : 1)] : 
-    cfg.wing_mode;
-
-#if !defined(SERIALRX_ENABLED)
-  switch (wing_mode) {
-  case WING_RUDELE_2AIL:
-    // PB3 11 AUX_IN instead of MOSI
-    // PB4 12 AILR_IN instead of MISO
-    rx_portb[3] = &aux_in; // enable aux_in
-    rx_portb[4] = &ailr_in; // enable ailr_in
-    break;
-  }
-#endif // !SERIALRX_ENABLED
+#if defined(EAGLE_A3PRO) // TODO(noobee): need to verify functions
+#if defined(SERIALRX_SBUS) || defined(SERIALRX_SPEKTRUM)
+  if (cfg.wing_mode == WING_USE_DIPSW)
+    wing_mode = dip_sw_to_wing_mode_map[(ele_sw ? 0 : 2) | (rud_sw ? 0 : 1)];
+#endif
 #endif // EAGLE_A3PRO
+
+  if (wing_mode == WING_USE_DIPSW) // set to valid mode if needed
+    wing_mode = WING_RUDELE_1AIL;
 
   set_led_msg(0, wing_mode, LED_LONG);
 
