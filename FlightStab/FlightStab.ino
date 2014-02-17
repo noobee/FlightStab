@@ -249,14 +249,14 @@ bool ow_loop(); // OneWireSerial.ino
 #warning NANOWII defined // emit device name
 /*
  NanoWii
- PB0 17         (PCINT0)            |                              | PD0  3     SCL (SCL)       |                          | PF0 23/A5    (ADC0)
- PB1 15  RUD_IN (SCK/PCINT1)        |                              | PD1  2     SDA (SDA)       |                          | PF1 22/A4    (ADC1)
- PB2 16  AIL_IN (MOSI/PCINT2)       |                              | PD2  0     RXD (RXD)       | PE2               (HWB_) |
- PB3 14  ELE_IN (MISO/PCINT3)       |                              | PD3  1     TXD (TXD)       |                          |
- PB4  8  AUX_IN (PCINT4)            |                              | PD4  4      SV (ADC8/ICP1) |                          | PF4 21/A3 SV (ADC4)
- PB5  9 AIL_OUT (PCINT5/OC1A/OC4B_) |                              | PD5            (TXLED)     |                          | PF5 20/A2 SV (ADC5)
- PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5  THR_OUT (OC3A/OC4A_) | PD6 12         (OC4D_)     | PE6 7 THR/AILR_IN (INT6) | PF6 19/A1 SV (ADC6)
- PB7 11 RUD_OUT (PCINT7/OC0A/OC1C)  | PC7 13 AILR_OUT (OC4A/ICP3)  | PD7  6 FLP_OUT (OC4D)      |                          | PF7 18/A0 SV (ADC7)
+ PB0 17         (PCINT0)            |                              | PD0  3     SCL (SCL)       |                      | PF0 23/A5    (ADC0)
+ PB1 15  RUD_IN (SCK/PCINT1)        |                              | PD1  2     SDA (SDA)       |                      | PF1 22/A4    (ADC1)
+ PB2 16  AIL_IN (MOSI/PCINT2)       |                              | PD2  0     RXD (RXD)       | PE2           (HWB_) |
+ PB3 14  ELE_IN (MISO/PCINT3)       |                              | PD3  1     TXD (TXD)       |                      |
+ PB4  8  AUX_IN (PCINT4)            |                              | PD4  4      SV (ADC8/ICP1) |                      | PF4 21/A3 SV (ADC4)
+ PB5  9 AIL_OUT (PCINT5/OC1A/OC4B_) |                              | PD5            (TXLED)     |                      | PF5 20/A2 SV (ADC5)
+ PB6 10 ELE_OUT (PCINT6/OC1B/OC4B)  | PC6  5  THR_OUT (OC3A/OC4A_) | PD6 12         (OC4D_)     | PE6 7 AILR_IN (INT6) | PF6 19/A1 SV (ADC6)
+ PB7 11 RUD_OUT (PCINT7/OC0A/OC1C)  | PC7 13 AILR_OUT (OC4A/ICP3)  | PD7  6 FLP_OUT (OC4D)      |                      | PF7 18/A0 SV (ADC7)
  
  SERIALRX
  PE6 7 CPPM_IN
@@ -277,8 +277,8 @@ bool ow_loop(); // OneWireSerial.ino
 #define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
 
 // <SERVO>
-#define PWM_CHAN_PIN {11, 10, 5, 9, -1, 13, -1, 6} // RETA1a2F TODO(noobee): add AUX2_OUT?
-#define PWM_CHAN_PIN_SERIALRX PWM_CHAN_PIN // same pwm output list
+#define PWM_CHAN_PIN {11, 10, -1, 9, -1, 13, -1, -1} // RETA1a2F
+#define PWM_CHAN_PIN_SERIALRX {11, 10, 5, 9, -1, 13, -1, 6} // RETA1a2F
 
 // <IMU>
 #define USE_MPU6050

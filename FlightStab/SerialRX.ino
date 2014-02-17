@@ -15,7 +15,7 @@ int8_t rshift;
 // The following value is added to the received pulse count
 // to make the center pulse width = 1500 when the TX output is 1500
 // TODO(noobee): i guess we would need to make this configurable..
-#define SBUS_OFFSET 1003 // 1003 for Taranis FRSKY X8R, 984 for Orange R800x
+#define SBUS_OFFSET 1009 // 1009 for Futaba X8R, 1003 for Taranis FRSKY X8R, 984 for Orange R800x
 #endif
       
 #if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
@@ -156,6 +156,9 @@ jrb*/
       buf[index++] = ch;
       if (index >= 25) {
         volatile int16_t **p = rx_chan;
+        uint8_t adj_index;
+        
+        // Only process first 8 channels
         *p[0] = (((((uint16_t)buf[1]  >> 0) | ((uint16_t)buf[2]  << 8)) & 0x7ff) >> 1) + SBUS_OFFSET;
         *p[1] = (((((uint16_t)buf[2]  >> 3) | ((uint16_t)buf[3]  << 5)) & 0x7ff) >> 1) + SBUS_OFFSET; 
         *p[2] = (((((uint16_t)buf[3]  >> 6) | ((uint16_t)buf[4]  << 2) | ((uint16_t)buf[5] << 10)) & 0x7ff) >> 1) + SBUS_OFFSET; 
@@ -164,7 +167,16 @@ jrb*/
         *p[5] = (((((uint16_t)buf[7]  >> 7) | ((uint16_t)buf[8]  << 1) | ((uint16_t)buf[9] << 9)) & 0x7ff) >> 1) + SBUS_OFFSET;
         *p[6] = (((((uint16_t)buf[9]  >> 2) | ((uint16_t)buf[10] << 6)) & 0x7ff) >> 1) + SBUS_OFFSET; 
         *p[7] = (((((uint16_t)buf[10] >> 5) | ((uint16_t)buf[11] << 3)) & 0x7ff) >> 1) + SBUS_OFFSET;
-        
+       
+       // For some reason the SBUS data provides only about 75% of the actual RX output pulse width
+       // Adjust the actual value by +/-25%.  Sign determined by pulse width above or below center of 1520us 
+       for(adj_index=0; adj_index<rx_chan_size; adj_index++)
+       {
+       	if (*p[adj_index] < 1520)
+       	  *p[adj_index] -= (1520 - *p[adj_index]) >> 2;		
+       	else	
+       	  *p[adj_index] += (*p[adj_index] - 1520) >> 2;
+       }	 
         index = 0;
         sbus_return = true;
       }
