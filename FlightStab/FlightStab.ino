@@ -1098,25 +1098,26 @@ int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, *rx_chan[<n>] var for CPPM
 // cppm stream on ICP pin
 ISR(TIMER1_CAPT_vect)
 {
-  static int8_t ch0_synced = false;
+  static int8_t last_ch_found = -1;
+  static int8_t ch;
   static uint16_t fall_time;
-  static uint8_t ch;
   uint16_t now;
   uint16_t width;
 
   now = ICR1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
-  sei();
-
+  //sei();
+  
   width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
   fall_time = now;
   if (width > 3000) {
-    rx_frame_sync_ref = ch - 1;
+    last_ch_found = ch - 1; // track last channel found before sync gap
     ch = 0;
-    ch0_synced = true;
-  } else if (ch0_synced && ch < rx_chan_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
-    *rx_chan[ch] = width;
-    if (ch == rx_frame_sync_ref)
-      rx_frame_sync = true;
+  } else {
+    if (ch < rx_chan_size) {
+      *rx_chan[ch] = width;
+      if (ch == last_ch_found) 
+        rx_frame_sync = true; // mark as synced on last channel before sync gap
+    } 
     ch++;
   }
 }
@@ -1127,34 +1128,32 @@ ISR(TIMER1_CAPT_vect)
 // port/pin must be set up for interrupt on edge change and input mode in init_digital_in_rx()
 inline void non_icp_cppm_vect()
 {
-  static int8_t ch0_synced = false;
+  static int8_t last_ch_found = -1;
+  static int8_t ch;
   static uint16_t fall_time;
   static uint8_t last_pin;
-  static uint8_t ch;
   uint16_t now;
-  uint8_t pin, last_pin2, fall;
-
+  uint8_t last_pin2;
+  
   now = TCNT1; // tick=0.5us if F_CPU=16M, tick=1.0us if F_CPU=8M 
   last_pin2 = last_pin;
-  pin = CPPM_PINREG;
-  last_pin = pin;
+  last_pin = CPPM_PINREG;
+  if (((last_pin2 & ~last_pin) & (1 << CPPM_PINBIT)) == 0)
+    return; // return if NOT falling edge on CPPM_PINREG/CPPM_PINBIT
   sei();
-
-  fall = ~pin & last_pin2; // falling edge as reference
-
-  if (fall & (1 << CPPM_PINBIT)) {
-    uint16_t width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
-    fall_time = now;
-    if (width > 3000) {
-      rx_frame_sync_ref = ch - 1;
-      ch = 0;
-      ch0_synced = true;
-    } else if (ch0_synced && ch < rx_chan_size && width >= RX_WIDTH_MIN && width <= RX_WIDTH_MAX) {
+    
+  uint16_t width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
+  fall_time = now;
+  if (width > 3000) {
+    last_ch_found = ch - 1; // track last channel found before sync gap
+    ch = 0;
+  } else {
+    if (ch < rx_chan_size) {
       *rx_chan[ch] = width;
-      if (ch == rx_frame_sync_ref)
-        rx_frame_sync = true;
-      ch++;
-    }
+      if (ch == last_ch_found) 
+        rx_frame_sync = true; // mark as synced on last channel before sync gap
+    } 
+    ch++;
   }
 }
 
@@ -2485,8 +2484,9 @@ void setup()
  * LOOP
  ***************************************************************************************************************/
 
- void loop() 
+void loop() 
 { 
+#if !defined(DUMP_SENSORS)
   int8_t i;
   uint32_t t = micros1();
   uint32_t last_rx_frame_time = t;
@@ -2716,4 +2716,5 @@ again:
   }
 
   goto again; // the dreaded "goto" statement :O
+#endif // DUMP_SENSORS
 }
