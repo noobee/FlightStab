@@ -1091,7 +1091,6 @@ void read_switches()
  ***************************************************************************************************************/
 
 volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
-int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM, *rx_chan[<n>] var for CPPM
 
 #if defined(SERIALRX_CPPM)
 #if CPPM_PROFILE == CPPM_PROFILE_PB0
@@ -1114,6 +1113,8 @@ ISR(TIMER1_CAPT_vect)
     ch = 0;
   } else {
     if (ch < rx_chan_size) {
+      if (width < RX_WIDTH_MIN) width = RX_WIDTH_MIN;
+      if (width > RX_WIDTH_MAX) width = RX_WIDTH_MAX;
       *rx_chan[ch] = width;
       if (ch == last_ch_found) 
         rx_frame_sync = true; // mark as synced on last channel before sync gap
@@ -1149,6 +1150,8 @@ inline void non_icp_cppm_vect()
     ch = 0;
   } else {
     if (ch < rx_chan_size) {
+      if (width < RX_WIDTH_MIN) width = RX_WIDTH_MIN;
+      if (width > RX_WIDTH_MAX) width = RX_WIDTH_MAX;
       *rx_chan[ch] = width;
       if (ch == last_ch_found) 
         rx_frame_sync = true; // mark as synced on last channel before sync gap
@@ -1177,6 +1180,7 @@ ISR(INT6_vect)
 const int8_t rx_port_size = 8;
 volatile int16_t *rx_portb[rx_port_size] = RX_PORTB;
 volatile int16_t *rx_portd[rx_port_size] = RX_PORTD;
+int8_t rx_frame_sync_ref; // PB<n> bit for non-CPPM
 
 // PORTB PCINT0-PCINT7
 ISR(PCINT0_vect) 
@@ -1289,12 +1293,11 @@ void init_digital_in_rx()
     // eg. NANOWII CPPM
     EICRB |= (1 << ISC60); // interrupt on pin change
     EIMSK |= (1 << INT6);
-    DDRE &= ~(1 << CPPM_PINBIT);
-    PORTE |= (1 << CPPM_PINBIT);
+    DDRE &= ~(1 << CPPM_PINBIT); // set input mode
+    PORTE |= (1 << CPPM_PINBIT); // enable internal pullup
 #else
 #error Unknown CPPM_PROFILE
 #endif
-    rx_frame_sync_ref = 3; // sync on *rx_chan[3] first, but isr will track the sync gap
     return;
 #endif // SERIALRX_CPPM
 
@@ -1334,8 +1337,8 @@ void init_digital_in_rx()
   // PE6
   EICRB |= (1 << ISC60); // interrupt on pin change
   EIMSK |= (1 << INT6);
-  DDRE &= ~(1 << 6);
-  PORTE |= (1 << 6);
+  DDRE &= ~(1 << 6); // set input mode
+  PORTE |= (1 << 6); // enable internal pullup
 #endif // __AVR_ATmega32U4__
 #endif // !SERIALRX_ENABLED
 }
