@@ -374,9 +374,9 @@ bool ow_loop(); // OneWireSerial.ino
 /*
  HK MINI MWC with DSM2 RX
  PB0 8/D8   CPPM_EXT/pad    PC0 14/A0 One-Wire       PD0 0/D0 (RXD)
- PB1 9/D9   THR_OUT (PWM)   PC1 15/A1 rsvd/CPPM_EXT  PD1 1/D1 (TXD)
- PB2 10/D10 FLP_OUT (PWM)   PC2 16/A2 AUX2_OUT       PD2 2/D2 CPPM_INT
- PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 AIL_OUT (PWM)
+ PB1 9/D9   FLP_OUT (PWM)   PC1 15/A1 rsvd/CPPM_EXT  PD1 1/D1 (TXD)
+ PB2 10/D10 AIL_OUT (PWM)   PC2 16/A2 AUX2_OUT       PD2 2/D2 CPPM_INT
+ PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 THR_OUT (PWM)
  PB4 12/D12 no connection   PC4 18/A4 (SDA)          PD4 4/D4 spare/conn
  PB5 13/D13 LED (SCK)       PC5 19/A5 (SCL)          PD5 5/D5 ELE_OUT (PWM)
  PB6 14/D14 (XTAL1)         PC6 (RESET)              PD6 6/D6 RUD_OUT (PWM)
@@ -857,7 +857,7 @@ uint16_t i2c_errors = 0;
 void i2c_init(int8_t pullup, uint32_t freq)
 {
   if (pullup) {
-#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328P__)
     PORTC |= 1 << 5; // scl PC5
     PORTC |= 1 << 4; // sda PC4
 #elif defined(__AVR_ATmega32U4__) // nanowii only
@@ -1097,7 +1097,7 @@ volatile int8_t rx_frame_sync; // true if rx_frame_sync_ref pulse has occurred
 // cppm stream on ICP pin
 ISR(TIMER1_CAPT_vect)
 {
-  static int8_t last_ch_found = -1;
+  static int8_t ch_count;
   static int8_t ch;
   static uint16_t fall_time;
   uint16_t now;
@@ -1109,17 +1109,17 @@ ISR(TIMER1_CAPT_vect)
   width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
   fall_time = now;
   if (width > 3000) {
-    last_ch_found = ch - 1; // track last channel found before sync gap
+    ch_count = ch; // track total channels found before sync gap
     ch = 0;
   } else {
     if (ch < rx_chan_size) {
       if (width < RX_WIDTH_MIN) width = RX_WIDTH_MIN;
       if (width > RX_WIDTH_MAX) width = RX_WIDTH_MAX;
       *rx_chan[ch] = width;
-      if (ch == last_ch_found) 
-        rx_frame_sync = true; // mark as synced on last channel before sync gap
     } 
     ch++;
+    if (ch == ch_count) 
+      rx_frame_sync = true; // mark as synced on last channel before sync gap
   }
 }
 #endif // CPPM_PROFILE_PB0
@@ -1129,7 +1129,7 @@ ISR(TIMER1_CAPT_vect)
 // port/pin must be set up for interrupt on edge change and input mode in init_digital_in_rx()
 inline void non_icp_cppm_vect()
 {
-  static int8_t last_ch_found = -1;
+  static int8_t ch_count;
   static int8_t ch;
   static uint16_t fall_time;
   static uint8_t last_pin;
@@ -1146,17 +1146,17 @@ inline void non_icp_cppm_vect()
   uint16_t width = (now - fall_time) >> (F_CPU == F_16MHZ ? 1 : 0);
   fall_time = now;
   if (width > 3000) {
-    last_ch_found = ch - 1; // track last channel found before sync gap
+    ch_count = ch; // track total channels found before sync gap
     ch = 0;
   } else {
     if (ch < rx_chan_size) {
       if (width < RX_WIDTH_MIN) width = RX_WIDTH_MIN;
       if (width > RX_WIDTH_MAX) width = RX_WIDTH_MAX;
       *rx_chan[ch] = width;
-      if (ch == last_ch_found) 
-        rx_frame_sync = true; // mark as synced on last channel before sync gap
     } 
     ch++;
+    if (ch == ch_count) 
+      rx_frame_sync = true; // mark as synced on last channel before sync gap
   }
 }
 
@@ -1215,7 +1215,7 @@ ISR(PCINT0_vect)
   }
 }
 
-#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328P__)
 // PORTD PCINT16-PCINT23
 ISR(PCINT2_vect)
 {
@@ -1246,7 +1246,7 @@ ISR(PCINT2_vect)
     }
   }
 }
-#endif // __AVR_ATmega168__ || __AVR_ATmega328__
+#endif // __AVR_ATmega168__ || __AVR_ATmega328P__
 
 #if defined(__AVR_ATmega32U4__) // nanowii only
 // PE6 MUST BE ailr_in
@@ -1321,7 +1321,7 @@ void init_digital_in_rx()
   rx_frame_sync_ref = 1; // use ELE_IN (PB1) as ref channel. TODO: fix this hardcoding
 #endif
 
-#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328P__)
   // PORTD RX
   PCICR |= (1 << PCIE2); // interrupt on pin change
   for (int8_t i=0; i<rx_port_size; i++) {
@@ -1331,7 +1331,7 @@ void init_digital_in_rx()
       PORTD |= (1 << i); // enable internal pullup
     }
   }
-#endif // __AVR_ATmega168__ || __AVR_ATmega328__
+#endif // __AVR_ATmega168__ || __AVR_ATmega328P__
 
 #if defined(__AVR_ATmega32U4__) // nanowii only
   // PE6
@@ -2209,11 +2209,11 @@ void setup()
 #endif
   
   
-#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328__)
+#if defined(__AVR_ATmega168__) || defined(__AVR_ATmega328P__)
   // clear wd reset bit and disable wdt in case it was enabled due to stick config reboot
   MCUSR &= ~(1 << WDRF);
   wdt_disable();
-#endif // __AVR_ATmega168__ || __AVR_ATmega328__
+#endif // __AVR_ATmega168__ || __AVR_ATmega328P__
 
 #if defined(NANO_WII) || defined(MINI_MWC)
   // set up default parameters for No DIPSW and No POT

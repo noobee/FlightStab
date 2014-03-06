@@ -86,10 +86,10 @@ add_arduino_firmware(${TODAY}_NANOWII_SPEKTRUM FlightStab leonardo "NANOWII;SERI
 add_arduino_firmware(${TODAY}_NANOWII_SBUS FlightStab leonardo "NANOWII;SERIALRX_SBUS")
 
 # MINI MWC
-add_arduino_firmware(${TODAY}_MINI_MWC_CPPM FlightStab pro5v "MINI_MWC;SERIALRX_CPPM")
-add_arduino_firmware(${TODAY}_MINI_MWC_CPPM_EXTERNAL_RX FlightStab pro5v "MINI_MWC;SERIALRX_CPPM;MINI_MWC_EXTERNAL_RX")
-add_arduino_firmware(${TODAY}_MINI_MWC_SPEKTRUM FlightStab pro5v "MINI_MWC;SERIALRX_SPEKTRUM")
-add_arduino_firmware(${TODAY}_MINI_MWC_SBUS FlightStab pro5v "MINI_MWC;SERIALRX_SBUS")
+add_arduino_firmware(${TODAY}_MINI_MWC_CPPM FlightStab pro5v328 "MINI_MWC;SERIALRX_CPPM")
+add_arduino_firmware(${TODAY}_MINI_MWC_CPPM_EXTERNAL_RX FlightStab pro5v328 "MINI_MWC;SERIALRX_CPPM;MINI_MWC_EXTERNAL_RX")
+add_arduino_firmware(${TODAY}_MINI_MWC_SPEKTRUM FlightStab pro5v328 "MINI_MWC;SERIALRX_SPEKTRUM")
+add_arduino_firmware(${TODAY}_MINI_MWC_SBUS FlightStab pro5v328 "MINI_MWC;SERIALRX_SBUS")
 
 # RX3S V1/V2V3/RX3SM 16MHz
 add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")
