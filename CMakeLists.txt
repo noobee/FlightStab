@@ -90,6 +90,11 @@ add_arduino_firmware(${TODAY}_MINI_MWC_CPPM FlightStab pro5v328 "MINI_MWC;SERIAL
 add_arduino_firmware(${TODAY}_MINI_MWC_CPPM_EXTERNAL_RX FlightStab pro5v328 "MINI_MWC;SERIALRX_CPPM;MINI_MWC_EXTERNAL_RX")
 add_arduino_firmware(${TODAY}_MINI_MWC_SPEKTRUM FlightStab pro5v328 "MINI_MWC;SERIALRX_SPEKTRUM")
 add_arduino_firmware(${TODAY}_MINI_MWC_SBUS FlightStab pro5v328 "MINI_MWC;SERIALRX_SBUS")
+# FLIP 1.5
+add_arduino_firmware(${TODAY}_FLIP_1_5 FlightStab pro5v328 "FLIP_1_5")
+add_arduino_firmware(${TODAY}_FLIP_1_5_CPPM FlightStab pro5v328 "FLIP_1_5;SERIALRX_CPPM")
+add_arduino_firmware(${TODAY}_FLIP_1_5_SPEKTRUM FlightStab pro5v328 "FLIP_1_5;SERIALRX_SPEKTRUM")
+add_arduino_firmware(${TODAY}_FLIP_1_5_SBUS FlightStab pro5v328 "FLIP_1_5;SERIALRX_SBUS")
 
 # RX3S V1/V2V3/RX3SM 16MHz
 add_arduino_firmware(${TODAY}_RX3S_V1 FlightStab pro5v "RX3S_V1")
