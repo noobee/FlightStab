@@ -72,6 +72,7 @@ prog_char nanowii[] PROGMEM = " NanoWii";
 prog_char eagle_a3pro[] PROGMEM = " Eagle A3Pro";
 prog_char rx3sm[] PROGMEM = " RX3SM";
 prog_char mini_mwc[] PROGMEM = " Mini MWC";
+prog_char flip_1_5[] PROGMEM = " FLIP 1.5";
 
 prog_char *device_name[] PROGMEM = { // must match enum DEVICE_IDS in eeprom_stats.device_id
   undef_device,
@@ -80,7 +81,8 @@ prog_char *device_name[] PROGMEM = { // must match enum DEVICE_IDS in eeprom_sta
   nanowii,
   eagle_a3pro,
   rx3sm,
-  mini_mwc
+  mini_mwc,
+  flip_1_5
 };
 
 // status

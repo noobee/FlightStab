@@ -28,6 +28,7 @@ bool ow_loop(); // OneWireSerial.ino
 //#define EAGLE_A3PRO
 //#define MINI_MWC
 //#define MINI_MWC_EXTERNAL_RX  //Define this if using an External RX with MINI_MWC
+//#define FLIP_1_5
 //#define NANO_MPU6050
 
 //#define SERIALRX_CPPM // over a digital-in pin (preferably ICP)
@@ -433,6 +434,62 @@ bool ow_loop(); // OneWireSerial.ino
 
 #endif // defined(MINI_MWC)
 /* MINI_MWC ****************************************************************************************************/
+
+/* FLIP_1_5 ****************************************************************************************************/
+#if defined(FLIP_1_5)
+#warning FLIP_1_5 defined // emit device name
+/*
+ FLIP 1.5
+ PB0 8/D8   no connection   PC0 14/A0 One-Wire       PD0 0/D0 (RXD)
+ PB1 9/D9   ELE_OUT (PWM)   PC1 15/A1 THR_OUT 	     PD1 1/D1 (TXD)
+ PB2 10/D10 AIL_OUT (PWM)   PC2 16/A2 FLP_OUT        PD2 2/D2 CPPM_IN
+ PB3 11/D11 AILR_OUT (PWM)  PC3 17/A3 no connection  PD3 3/D3 RUD_OUT (PWM)
+ PB4 12/D12 AUX_IN				  PC4 18/A4 (SDA)          PD4 4/D4 AIL_IN
+ PB5 13/D13 LED (SCK)       PC5 19/A5 (SCL)          PD5 5/D5 RUD_IN (PWM)
+ PB6 14/D14 (XTAL1)         PC6 (RESET)              PD6 6/D6 ELE_IN (PWM)
+ PB7 15/D15 (XTAL2)                                  PD7 7/D7 AILR_IN
+ 
+ SERIALRX
+ PD2 D2 CPPM_IN 
+*/
+
+#define DEVICE_ID DEVICE_FLIP_1_5
+
+// <VR>
+#define AIN_PORTC {NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <RX> (must in PORT B/D due to ISR)
+#define RX_PORTB {NULL, NULL, NULL, NULL, &aux_in, NULL, NULL, NULL}
+#define RX_PORTD {NULL, NULL, NULL, NULL, &ail_in, &rud_in, &ele_in, &ailr_in}
+
+// <SWITCH>
+#define DIN_PORTB {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTC {NULL, &dummy_sw, NULL, NULL, NULL, NULL, NULL, NULL}
+#define DIN_PORTD {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL}
+
+// <SERVO>
+#define PWM_CHAN_PIN {3, 9, 15, 10, -1, 11, -1, 16} // RETA1a2F
+#define PWM_CHAN_PIN_SERIALRX PWM_CHAN_PIN // same pwm output list
+
+// <IMU>
+#define USE_MPU6050
+#define GYRO_ORIENTATION(x, y, z) {gyro[0] = (-y); gyro[1] = (-x); gyro[2] = (z);}
+
+#define CPPM_PROFILE CPPM_PROFILE_PD2 // internal RX
+
+
+// LED
+#define LED_PROFILE LED_PROFILE_PB5
+
+// one-wire port
+#define OW_PROFILE OW_PROFILE_PC0
+
+// eeprom clear pins. shorted on init means to clear eeprom
+#define EEPROM_RESET_OUT_PIN 6
+#define EEPROM_RESET_IN_PIN 5
+
+#endif // defined(FLIP_1_5)
+/* FLIP_1_5 ****************************************************************************************************/
 
 /* NANO_MPU6050 ************************************************************************************************/
 #if defined(NANO_MPU6050)
