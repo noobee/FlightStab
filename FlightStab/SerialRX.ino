@@ -8,14 +8,14 @@
 ***************************************************************************************************************/
 
 #if defined(SERIALRX_SPEKTRUM)
-#define SERIALRX_SPEKTRUM_RESOLUTION 11 // 10 for 1024 levels, 11 for 2048 levels
+int8_t rshift;
 #endif
 
 #if defined(SERIALRX_SBUS)
 // The following value is added to the received pulse count
 // to make the center pulse width = 1500 when the TX output is 1500
 // TODO(noobee): i guess we would need to make this configurable..
-#define SBUS_OFFSET 1003 // 1003 for Taranis FRSKY X8R, 984 for Orange R800x
+#define SBUS_OFFSET 1009 // 1009 for Futaba X8R, 1003 for Taranis FRSKY X8R, 984 for Orange R800x
 #endif
       
 #if (defined(SERIALRX_SPEKTRUM) || defined(SERIALRX_SBUS))
@@ -35,11 +35,13 @@
 
   void serialrx_init()
   {
-    #if defined (SERIALRX_SBUS)
-      pSerial->begin(100000L,SERIAL_8E2);
-    #else
+    #if defined (SERIALRX_SPEKTRUM)
       pSerial->begin(115200L);
-    #endif // SERIALRX_SBUS
+      rshift = cfg.serialrx_spektrum_levels == SERIALRX_SPEKTRUM_LEVELS_1024 ? 10 : 11; // 1024->10, 2048->11
+    #endif
+    #if defined (SERIALRX_SBUS)
+      pSerial->begin(100000L, SERIAL_8E2);
+    #endif
   }
 
   bool serialrx_update()
@@ -52,8 +54,6 @@
     
   #if defined (SERIALRX_SPEKTRUM) 	// Used only for Spektrum    
     static uint32_t last_rx_time;
-//jrb SerialRX    
-    static int8_t rshift = SERIALRX_SPEKTRUM_RESOLUTION;  
     uint32_t t;
   #endif  
 
@@ -99,7 +99,7 @@ jrb*/
             uint16_t w = ((uint16_t)buf[i] << 8) | (uint16_t)buf[i+1];
             int8_t chan = (w >> rshift) & 0xf;
             if (chan < rx_chan_size) {
-              *rx_chan[cfg.serialrx_order-2][chan] = ((w << (11 - rshift) & 0x7ff) - 1024 + 1500); // scale to 11 bits 1024 +/- 684;
+              *rx_chan[chan] = ((w << (11 - rshift) & 0x7ff) - 1024 + 1500); // scale to 11 bits 1024 +/- 684;
             }          
           }
         }  
@@ -155,7 +155,10 @@ jrb*/
       }
       buf[index++] = ch;
       if (index >= 25) {
-        volatile int16_t **p = rx_chan[cfg.serialrx_order-2];
+        volatile int16_t **p = rx_chan;
+        uint8_t adj_index;
+        
+        // Only process first 8 channels
         *p[0] = (((((uint16_t)buf[1]  >> 0) | ((uint16_t)buf[2]  << 8)) & 0x7ff) >> 1) + SBUS_OFFSET;
         *p[1] = (((((uint16_t)buf[2]  >> 3) | ((uint16_t)buf[3]  << 5)) & 0x7ff) >> 1) + SBUS_OFFSET; 
         *p[2] = (((((uint16_t)buf[3]  >> 6) | ((uint16_t)buf[4]  << 2) | ((uint16_t)buf[5] << 10)) & 0x7ff) >> 1) + SBUS_OFFSET; 
@@ -164,7 +167,16 @@ jrb*/
         *p[5] = (((((uint16_t)buf[7]  >> 7) | ((uint16_t)buf[8]  << 1) | ((uint16_t)buf[9] << 9)) & 0x7ff) >> 1) + SBUS_OFFSET;
         *p[6] = (((((uint16_t)buf[9]  >> 2) | ((uint16_t)buf[10] << 6)) & 0x7ff) >> 1) + SBUS_OFFSET; 
         *p[7] = (((((uint16_t)buf[10] >> 5) | ((uint16_t)buf[11] << 3)) & 0x7ff) >> 1) + SBUS_OFFSET;
-        
+       
+       // For some reason the SBUS data provides only about 75% of the actual RX output pulse width
+       // Adjust the actual value by +/-25%.  Sign determined by pulse width above or below center of 1520us 
+       for(adj_index=0; adj_index<rx_chan_size; adj_index++)
+       {
+       	if (*p[adj_index] < 1520)
+       	  *p[adj_index] -= (1520 - *p[adj_index]) >> 2;		
+       	else	
+       	  *p[adj_index] += (*p[adj_index] - 1520) >> 2;
+       }	 
         index = 0;
         sbus_return = true;
       }
